@@ -404,50 +404,38 @@ def compare():
     if not user:
         return redirect('/login')
     
-    # Проверяем, может ли пользователь сравнивать
-    can, msg = can_compare(user)
-    if not can:
-        return f'''
-        <h2>⛔ Доступ запрещён</h2>
-        <p>{msg}</p>
-        <p><a href="/payment">Оплатить сравнение</a> или <a href="/">На главную</a></p>
-        '''
-    
     if request.method == 'POST':
         main_company = request.form.get('main_company')
-        company1 = request.form.get('company1')
         company2 = request.form.get('company2')
         
-        if not main_company or not company1 or not company2:
+        # Исправление: если company1 не пришла, используем main_company
+        company1 = request.form.get('company1')
+        if not company1:
+            company1 = main_company
+        
+        if not main_company or not company2:
             return "Выберите все компании", 400
         
-        data1 = INSURANCE_DATA.get(company1, {})
-        data2 = INSURANCE_DATA.get(company2, {})
+        data_main = INSURANCE_DATA.get(main_company, {})
+        data_comp = INSURANCE_DATA.get(company2, {})
         
-        # Определяем основную компанию
-        if main_company == company1:
-            main_data = data1
-            other_data = data2
-        else:
-            main_data = data2
-            other_data = data1
+        advantages = []
+        total_main = data_main.get("total_loss", "0%").replace("%", "")
+        total_comp = data_comp.get("total_loss", "0%").replace("%", "")
+        if total_main.isdigit() and total_comp.isdigit():
+            if int(total_main) > int(total_comp):
+                advantages.append(f"✅ {main_company} лучше по порогу тотала: {total_main}% vs {total_comp}%")
         
-        comparison = get_highlighted_comparison(main_data, other_data, main_company)
-        
-        return render_template('result.html', 
+        return render_template('result.html',
                              company1=company1,
                              company2=company2,
                              main_company=main_company,
-                             data1=data1,
-                             data2=data2,
-                             comparison=comparison,
+                             data1=data_main,
+                             data2=data_comp,
+                             advantages=advantages,
                              timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
-    # GET — показываем форму
-    return render_template('compare_form.html', 
-                         companies=ALL_COMPANIES,
-                         user=user)
-
+    return render_template('compare.html', companies=ALL_COMPANIES)
 # ==================== ШАБЛОНЫ ====================
 
 # Создаём папку templates
