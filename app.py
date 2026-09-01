@@ -134,11 +134,20 @@ def compare():
         return redirect('/login')
     
     if request.method == 'POST':
+        # ВСЕ ДАННЫЕ ИЗ ФОРМЫ
         main_company = request.form.get('main_company')
         company2 = request.form.get('company2')
         
+        # ОТЛАДКА — покажем, что пришло
+        debug_info = f"""
+        <h3>Отладка:</h3>
+        <p>main_company = {main_company}</p>
+        <p>company2 = {company2}</p>
+        <p><a href="/compare">Назад</a></p>
+        """
+        
         if not main_company or not company2:
-            return "Выберите все компании", 400
+            return debug_info + "<p>❌ Одна из компаний не выбрана!</p>"
         
         data1 = INSURANCE_DATA.get(main_company, {})
         data2 = INSURANCE_DATA.get(company2, {})
@@ -160,10 +169,6 @@ def compare():
                              timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
     return render_template('compare_form.html', companies=ALL_COMPANIES)
-
-@app.route('/payment')
-def payment():
-    return render_template('payment.html', user=session.get('user'))
 
 # ==================== СОЗДАНИЕ ШАБЛОНОВ ====================
 os.makedirs('templates', exist_ok=True)
