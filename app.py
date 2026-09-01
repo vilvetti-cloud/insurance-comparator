@@ -209,6 +209,7 @@ def compare():
         main_company = request.form.get('main_company')
         company2 = request.form.get('company2')
         
+        # Проверяем, что обе компании выбраны
         if not main_company or not company2:
             return "Выберите все компании", 400
         
@@ -222,6 +223,7 @@ def compare():
             if int(total_main) > int(total_comp):
                 advantages.append(f"✅ {main_company} лучше по порогу тотала: {total_main}% vs {total_comp}%")
         
+        # Передаём все нужные данные в result.html
         return render_template('result.html',
                              company1=main_company,
                              company2=company2,
@@ -229,9 +231,10 @@ def compare():
                              data1=data_main,
                              data2=data_comp,
                              advantages=advantages,
+                             disadvantages=[],  # пока пустой список
                              timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
+    # GET-запрос — показываем форму сравнения
     return render_template('compare_form.html', companies=ALL_COMPANIES)
-
 # ==================== ЗАПУСК ====================
 # НЕ ДОБАВЛЯЙ app.run() — Render запускает сам!
