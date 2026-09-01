@@ -233,27 +233,5 @@ def compare():
     
     return render_template('compare_form.html', companies=ALL_COMPANIES)
 
-@app.route('/payment')
-def payment():
-    user = session.get('user')
-    if not user:
-        return redirect('/login')
-    
-    return render_template('payment.html', user=user)
-
-@app.route('/pay', methods=['POST'])
-def pay():
-    user = session.get('user')
-    if not user:
-        return redirect('/login')
-    
-    payment_type = request.form.get('type')
-    if payment_type == "single":
-        return "✅ Оплата 99 ₽ прошла успешно! <a href='/'>На главную</a>"
-    elif payment_type == "subscription":
-        return "✅ Подписка на месяц оформлена! <a href='/'>На главную</a>"
-    
-    return "❌ Ошибка оплаты"
-
 # ==================== ЗАПУСК ====================
 # НЕ ДОБАВЛЯЙ app.run() — Render запускает сам!
