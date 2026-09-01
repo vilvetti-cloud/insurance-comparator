@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head><title>Сравнение КАСКО</title>
+<style>
+body { font-family: Arial; max-width: 1000px; margin: 0 auto; padding: 20px; }
+h1 { color: #2c3e50; text-align: center; }
+.back-button { display: inline-block; background: #3498db; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-right: 10px; }
+.pdf-button { display: inline-block; background: #e74c3c; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+.buttons { margin: 20px 0; }
+table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
+th { background: #2c3e50; color: white; }
+.analysis { background: #f0f8ff; border: 1px solid #b0d4f1; border-radius: 8px; padding: 20px; margin: 20px 0; }
+.timestamp { text-align: center; color: #888; font-size: 14px; }
+.vs-title { text-align: center; font-size: 24px; margin: 20px 0; }
+</style></head>
+<body>
+    <div class="buttons">
+        <a href="/" class="back-button">← Назад</a>
+        <a href="/download_pdf?company1={{ comparison.company1.name }}&company2={{ comparison.company2.name }}" class="pdf-button">📄 Скачать PDF</a>
+    </div>
+    <h1>📊 Сравнение КАСКО</h1>
+    <div class="vs-title">
+        <span>{{ comparison.company1.name }}</span>
+        <span style="margin: 0 20px; color: #e74c3c;">⚔️</span>
+        <span>{{ comparison.company2.name }}</span>
+    </div>
+    <table>
+        <tr><th>Параметр</th><th>{{ comparison.company1.name }}</th><th>{{ comparison.company2.name }}</th></tr>
+        <tr><td><strong>Франшиза</strong></td><td>{{ comparison.company1.data.franchise }}</td><td>{{ comparison.company2.data.franchise }}</td></tr>
+        <tr><td><strong>Без справок</strong></td><td>{{ comparison.company1.data.without_certificates }}</td><td>{{ comparison.company2.data.without_certificates }}</td></tr>
+        <tr><td><strong>GAP</strong></td><td>{{ comparison.company1.data.gap }}</td><td>{{ comparison.company2.data.gap }}</td></tr>
+        <tr><td><strong>Порог тотала</strong></td><td>{{ comparison.company1.data.total_loss }}</td><td>{{ comparison.company2.data.total_loss }}</td></tr>
+        <tr><td><strong>Самовозгорание</strong></td><td>{{ comparison.company1.data.fire }}</td><td>{{ comparison.company2.data.fire }}</td></tr>
+        <tr><td><strong>Терроризм</strong></td><td>{{ comparison.company1.data.terrorism }}</td><td>{{ comparison.company2.data.terrorism }}</td></tr>
+        <tr><td><strong>БПЛА</strong></td><td>{{ comparison.company1.data.drone }}</td><td>{{ comparison.company2.data.drone }}</td></tr>
+        <tr><td><strong>Эвакуатор</strong></td><td>{{ comparison.company1.data.tow_truck }}</td><td>{{ comparison.company2.data.tow_truck }}</td></tr>
+        <tr><td><strong>Тип ремонта</strong></td><td>{{ comparison.company1.data.repair_type }}</td><td>{{ comparison.company2.data.repair_type }}</td></tr>
+        <tr><td><strong>Срок выплаты</strong></td><td>{{ comparison.company1.data.payment_terms }}</td><td>{{ comparison.company2.data.payment_terms }}</td></tr>
+        <tr><td><strong>Преимущества</strong></td><td>{{ comparison.company1.data.advantages }}</td><td>{{ comparison.company2.data.advantages }}</td></tr>
+        <tr><td><strong>Слабые места</strong></td><td>{{ comparison.company1.data.weak_points }}</td><td>{{ comparison.company2.data.weak_points }}</td></tr>
+        <tr><td><strong>Рейтинг</strong></td><td>{{ comparison.company1.data.rating }}</td><td>{{ comparison.company2.data.rating }}</td></tr>
+        <tr><td><strong>Офисы</strong></td><td>{{ comparison.company1.data.offices }}</td><td>{{ comparison.company2.data.offices }}</td></tr>
+    </table>
+    <div class="analysis">
+        <h3>📋 Анализ сравнения</h3>
+        <ul>{% for point in comparison.analysis %}<li>{{ point }}</li>{% else %}<li>Нет данных для анализа</li>{% endfor %}</ul>
+    </div>
+    <p class="timestamp">Обновлено: {{ comparison.timestamp }}</p>
+</body></html>
