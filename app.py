@@ -278,6 +278,94 @@ def _score_match(block, word):
     return score
 
 
+# ==================== LLM-ИЗВЛЕЧЕНИЕ (основной метод) ====================
+# Вместо поиска по ключевым словам отдаём очищенный текст модели и просим
+# заполнить строго заданную схему через forced tool use — модель либо
+# заполняет поле тем, что реально нашла в тексте, либо оставляет пустым,
+# JSON на выходе гарантированно валиден (не нужно парсить текст ответа).
+
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+
+EXTRACT_TOOL_SCHEMA = {
+    "name": "extract_insurance_fields",
+    "description": (
+        "Извлекает условия автостраховки КАСКО из текста страницы сайта "
+        "страховой компании. Заполняй поле только если в тексте есть "
+        "явное подтверждение — если условия не упомянуты, поле нужно "
+        "пропустить (не выдумывать значение)."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "franchise": {"type": "string", "description": "Тип и размер франшизы"},
+            "without_certificates": {"type": "string", "description": "Условия выплаты без справок из ГИБДД"},
+            "gap": {"type": "string", "description": "Наличие и условия GAP-страхования"},
+            "total_loss": {"type": "string", "description": "Порог полной гибели/тотала в % от страховой суммы"},
+            "fire": {"type": "string", "description": "Условия покрытия самовозгорания"},
+            "terrorism": {"type": "string", "description": "Условия покрытия риска терроризма"},
+            "drone": {"type": "string", "description": "Условия покрытия ущерба от БПЛА/дронов"},
+            "tow_truck": {"type": "string", "description": "Условия оплаты эвакуатора"},
+            "repair_type": {"type": "string", "description": "Где производится ремонт (СТОА, дилер, выплата)"},
+            "payment_terms": {"type": "string", "description": "Срок выплаты возмещения"},
+        },
+        "required": []
+    }
+}
+
+
+def parse_source_llm(url):
+    """Извлечение через Claude API. Возвращает None, если ключ не настроен,
+    страница не подходит для парсинга (мало контента) или вызов не удался —
+    тогда parse_all_sources() откатится на keyword-парсер, затем на fallback."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+
+    try:
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        soup = _clean_soup(BeautifulSoup(response.text, 'html.parser'))
+        blocks = _text_blocks(soup)
+
+        if len(blocks) < 5:
+            print(f"      ⚠️ {url}: мало контента, вероятно нужен JS-рендеринг — пропуск LLM-извлечения")
+            return None
+
+        # Ограничиваем объём текста, который уходит в модель — экономия
+        # токенов и защита от случайно огромных страниц.
+        page_text = "\n".join(blocks)[:12000]
+
+        import anthropic
+        client = anthropic.Anthropic()
+        message = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1024,
+            tools=[EXTRACT_TOOL_SCHEMA],
+            tool_choice={"type": "tool", "name": "extract_insurance_fields"},
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Вот текст страницы сайта страховой компании (уже очищен "
+                    "от меню/футера/скриптов):\n\n" + page_text
+                )
+            }]
+        )
+
+        for block in message.content:
+            if block.type == "tool_use":
+                # Убираем пустые строки и явные "не найдено" — модель иногда
+                # заполняет поле фразой вместо того, чтобы его пропустить.
+                data = {
+                    k: v for k, v in block.input.items()
+                    if isinstance(v, str) and v.strip() and "не найдено" not in v.lower() and "не указано" not in v.lower()
+                }
+                return data or None
+        return None
+    except Exception as e:
+        print(f"      ⚠️ LLM-извлечение не удалось для {url}: {e}")
+        return None
+
+
+# ==================== KEYWORD-ПАРСИНГ (запасной метод) ====================
+
 def parse_source(url):
     try:
         response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
@@ -315,7 +403,7 @@ def parse_all_sources():
     for name, info in SOURCES.items():
         print(f"   Парсим {name}...")
         for url in info["urls"]:
-            result = parse_source(url)
+            result = parse_source_llm(url) or parse_source(url)
             if result:
                 all_data[name] = result
                 print(f"      ✅ Найдено: {len(result)} полей")
