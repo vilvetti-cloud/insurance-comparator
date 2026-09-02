@@ -284,13 +284,18 @@ def _score_match(block, word):
 # либо заполняет поле тем, что реально нашла в тексте, либо оставляет
 # пустым, JSON на выходе гарантированно валиден.
 #
-# Используется OpenAI (у вас уже есть ключ) — Chat Completions API с
-# принудительным function calling, доп. пакеты не нужны, хватает requests.
-# Учтите: в отличие от Groq это платный API (хотя с gpt-4o-mini цена очень
-# низкая — доли цента за обновление всех 11 компаний); бесплатен он только
-# если на вашем ключе остались стартовые пробные кредиты.
+# Провайдер выбирается переменной LLM_PROVIDER ("groq" по умолчанию — есть
+# бесплатный ключ без карты; "openai" — если задан OPENAI_API_KEY).
+# Оба используют OpenAI-совместимый REST-формат, доп. пакеты не нужны.
 
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+
+PROVIDER_CONFIG = {
+    "groq": {"url": "https://api.groq.com/openai/v1/chat/completions", "key_env": "GROQ_API_KEY", "model": GROQ_MODEL},
+    "openai": {"url": "https://api.openai.com/v1/chat/completions", "key_env": "OPENAI_API_KEY", "model": OPENAI_MODEL},
+}
 
 EXTRACT_TOOL_SCHEMA = {
     "type": "function",
@@ -323,10 +328,16 @@ EXTRACT_TOOL_SCHEMA = {
 
 
 def parse_source_llm(url):
-    """Извлечение через OpenAI. Возвращает None, если ключ не настроен,
-    страница не подходит (мало контента) или вызов не удался — тогда
-    parse_all_sources() откатится на keyword-парсер, затем на fallback."""
-    api_key = os.environ.get("OPENAI_API_KEY")
+    """Извлечение через Groq/OpenAI (см. LLM_PROVIDER). Возвращает None, если
+    ключ не настроен, страница не подходит (мало контента) или вызов не
+    удался — тогда parse_all_sources() откатится на keyword-парсер, затем
+    на fallback."""
+    provider = PROVIDER_CONFIG.get(LLM_PROVIDER)
+    if not provider:
+        print(f"      ⚠️ Неизвестный LLM_PROVIDER='{LLM_PROVIDER}', ожидается 'groq' или 'openai'")
+        return None
+
+    api_key = os.environ.get(provider["key_env"])
     if not api_key:
         return None
 
@@ -343,14 +354,14 @@ def parse_source_llm(url):
         # токенов и защита от случайно огромных страниц.
         page_text = "\n".join(blocks)[:12000]
 
-        openai_response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
+        llm_response = requests.post(
+            provider["url"],
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": OPENAI_MODEL,
+                "model": provider["model"],
                 "messages": [{
                     "role": "user",
                     "content": (
@@ -361,10 +372,17 @@ def parse_source_llm(url):
                 "tools": [EXTRACT_TOOL_SCHEMA],
                 "tool_choice": {"type": "function", "function": {"name": "extract_insurance_fields"}},
             },
-            timeout=30,
+            timeout=20,
         )
-        openai_response.raise_for_status()
-        message = openai_response.json()["choices"][0]["message"]
+
+        if not llm_response.ok:
+            # Печатаем реальное тело ответа, а не туманное "NoneType" —
+            # там обычно прямо написано, в чём дело (нет квоты, неверный
+            # ключ, неверная модель, rate limit и т.п.).
+            print(f"      ⚠️ {LLM_PROVIDER} {llm_response.status_code} для {url}: {llm_response.text[:300]}")
+            return None
+
+        message = llm_response.json()["choices"][0].get("message") or {}
         tool_calls = message.get("tool_calls") or []
         if not tool_calls:
             return None
