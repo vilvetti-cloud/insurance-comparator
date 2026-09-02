@@ -139,36 +139,19 @@ def compare():
         return redirect('/login')
     
     if request.method == 'POST':
+        # ОТЛАДКА: показываем, что пришло
         main_company = request.form.get('main_company')
         company2 = request.form.get('company2')
         
-        if not main_company or not company2:
-            return "❌ Выберите обе компании!"
-        
-        data1 = INSURANCE_DATA.get(main_company, {})
-        data2 = INSURANCE_DATA.get(company2, {})
-        
-        advantages = []
-        total1 = data1.get("total_loss", "0%").replace("%", "")
-        total2 = data2.get("total_loss", "0%").replace("%", "")
-        if total1.isdigit() and total2.isdigit():
-            if int(total1) > int(total2):
-                advantages.append(f"✅ {main_company} лучше по порогу тотала: {total1}% vs {total2}%")
-        
-        return render_template('result.html',
-                             company1=main_company,
-                             company2=company2,
-                             main_company=main_company,
-                             data1=data1,
-                             data2=data2,
-                             advantages=advantages,
-                             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        # ВИДИМОЕ СООБЩЕНИЕ С ДАННЫМИ
+        return f"""
+        <h3>Отладка формы</h3>
+        <p>main_company = {main_company}</p>
+        <p>company2 = {company2}</p>
+        <p><a href="/compare">← Назад</a></p>
+        """
     
     return render_template('compare_form.html', companies=ALL_COMPANIES)
-
-@app.route('/payment')
-def payment():
-    return render_template('payment.html', user=session.get('user'))
 
 # ==================== ШАБЛОНЫ ====================
 os.makedirs('templates', exist_ok=True)
