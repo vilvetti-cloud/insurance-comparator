@@ -280,44 +280,54 @@ def _score_match(block, word):
 
 # ==================== LLM-ИЗВЛЕЧЕНИЕ (основной метод) ====================
 # Вместо поиска по ключевым словам отдаём очищенный текст модели и просим
-# заполнить строго заданную схему через forced tool use — модель либо
-# заполняет поле тем, что реально нашла в тексте, либо оставляет пустым,
-# JSON на выходе гарантированно валиден (не нужно парсить текст ответа).
+# заполнить строго заданную схему через forced function calling — модель
+# либо заполняет поле тем, что реально нашла в тексте, либо оставляет
+# пустым, JSON на выходе гарантированно валиден.
+#
+# Используется OpenAI (у вас уже есть ключ) — Chat Completions API с
+# принудительным function calling, доп. пакеты не нужны, хватает requests.
+# Учтите: в отличие от Groq это платный API (хотя с gpt-4o-mini цена очень
+# низкая — доли цента за обновление всех 11 компаний); бесплатен он только
+# если на вашем ключе остались стартовые пробные кредиты.
 
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 EXTRACT_TOOL_SCHEMA = {
-    "name": "extract_insurance_fields",
-    "description": (
-        "Извлекает условия автостраховки КАСКО из текста страницы сайта "
-        "страховой компании. Заполняй поле только если в тексте есть "
-        "явное подтверждение — если условия не упомянуты, поле нужно "
-        "пропустить (не выдумывать значение)."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "franchise": {"type": "string", "description": "Тип и размер франшизы"},
-            "without_certificates": {"type": "string", "description": "Условия выплаты без справок из ГИБДД"},
-            "gap": {"type": "string", "description": "Наличие и условия GAP-страхования"},
-            "total_loss": {"type": "string", "description": "Порог полной гибели/тотала в % от страховой суммы"},
-            "fire": {"type": "string", "description": "Условия покрытия самовозгорания"},
-            "terrorism": {"type": "string", "description": "Условия покрытия риска терроризма"},
-            "drone": {"type": "string", "description": "Условия покрытия ущерба от БПЛА/дронов"},
-            "tow_truck": {"type": "string", "description": "Условия оплаты эвакуатора"},
-            "repair_type": {"type": "string", "description": "Где производится ремонт (СТОА, дилер, выплата)"},
-            "payment_terms": {"type": "string", "description": "Срок выплаты возмещения"},
-        },
-        "required": []
+    "type": "function",
+    "function": {
+        "name": "extract_insurance_fields",
+        "description": (
+            "Извлекает условия автостраховки КАСКО из текста страницы сайта "
+            "страховой компании. Заполняй поле только если в тексте есть "
+            "явное подтверждение — если условия не упомянуты, поле нужно "
+            "пропустить (не выдумывать значение)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "franchise": {"type": "string", "description": "Тип и размер франшизы"},
+                "without_certificates": {"type": "string", "description": "Условия выплаты без справок из ГИБДД"},
+                "gap": {"type": "string", "description": "Наличие и условия GAP-страхования"},
+                "total_loss": {"type": "string", "description": "Порог полной гибели/тотала в % от страховой суммы"},
+                "fire": {"type": "string", "description": "Условия покрытия самовозгорания"},
+                "terrorism": {"type": "string", "description": "Условия покрытия риска терроризма"},
+                "drone": {"type": "string", "description": "Условия покрытия ущерба от БПЛА/дронов"},
+                "tow_truck": {"type": "string", "description": "Условия оплаты эвакуатора"},
+                "repair_type": {"type": "string", "description": "Где производится ремонт (СТОА, дилер, выплата)"},
+                "payment_terms": {"type": "string", "description": "Срок выплаты возмещения"},
+            },
+            "required": []
+        }
     }
 }
 
 
 def parse_source_llm(url):
-    """Извлечение через Claude API. Возвращает None, если ключ не настроен,
-    страница не подходит для парсинга (мало контента) или вызов не удался —
-    тогда parse_all_sources() откатится на keyword-парсер, затем на fallback."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    """Извлечение через OpenAI. Возвращает None, если ключ не настроен,
+    страница не подходит (мало контента) или вызов не удался — тогда
+    parse_all_sources() откатится на keyword-парсер, затем на fallback."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
         return None
 
     try:
@@ -333,32 +343,40 @@ def parse_source_llm(url):
         # токенов и защита от случайно огромных страниц.
         page_text = "\n".join(blocks)[:12000]
 
-        import anthropic
-        client = anthropic.Anthropic()
-        message = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=1024,
-            tools=[EXTRACT_TOOL_SCHEMA],
-            tool_choice={"type": "tool", "name": "extract_insurance_fields"},
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Вот текст страницы сайта страховой компании (уже очищен "
-                    "от меню/футера/скриптов):\n\n" + page_text
-                )
-            }]
+        openai_response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENAI_MODEL,
+                "messages": [{
+                    "role": "user",
+                    "content": (
+                        "Вот текст страницы сайта страховой компании (уже "
+                        "очищен от меню/футера/скриптов):\n\n" + page_text
+                    )
+                }],
+                "tools": [EXTRACT_TOOL_SCHEMA],
+                "tool_choice": {"type": "function", "function": {"name": "extract_insurance_fields"}},
+            },
+            timeout=30,
         )
+        openai_response.raise_for_status()
+        message = openai_response.json()["choices"][0]["message"]
+        tool_calls = message.get("tool_calls") or []
+        if not tool_calls:
+            return None
 
-        for block in message.content:
-            if block.type == "tool_use":
-                # Убираем пустые строки и явные "не найдено" — модель иногда
-                # заполняет поле фразой вместо того, чтобы его пропустить.
-                data = {
-                    k: v for k, v in block.input.items()
-                    if isinstance(v, str) and v.strip() and "не найдено" not in v.lower() and "не указано" not in v.lower()
-                }
-                return data or None
-        return None
+        raw_args = json.loads(tool_calls[0]["function"]["arguments"])
+        # Убираем пустые строки и явные "не найдено" — модель иногда
+        # заполняет поле фразой вместо того, чтобы его пропустить.
+        data = {
+            k: v for k, v in raw_args.items()
+            if isinstance(v, str) and v.strip() and "не найдено" not in v.lower() and "не указано" not in v.lower()
+        }
+        return data or None
     except Exception as e:
         print(f"      ⚠️ LLM-извлечение не удалось для {url}: {e}")
         return None
