@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сравнение</title>
+    <style>
+        body{font-family:Arial;padding:10px;background:#f5f5f5}
+        .container{max-width:500px;margin:0 auto;background:white;padding:20px;border-radius:10px}
+        select{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px}
+        .btn{width:100%;padding:14px;background:#27ae60;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer}
+        .vs{text-align:center;font-size:24px;color:#e74c3c;margin:5px 0}
+        .back{display:inline-block;margin-top:10px;color:#3498db;text-decoration:none}
+        .label{font-weight:bold;color:#555;display:block;margin-top:10px}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Сравнение</h1>
+    <p style="text-align:center;color:#555;">Выберите основную компанию и вторую для сравнения</p>
+    <form method="POST" action="/compare">
+        <label class="label">🏆 Основная компания (ваша):</label>
+        <select name="main_company" required>
+            <option value="">-- Выберите --</option>
+            {% for c in companies %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+        </select>
+        <div class="vs">⚔️</div>
+        <label class="label">Компания для сравнения:</label>
+        <select name="company2" required>
+            <option value="">-- Выберите --</option>
+            {% for c in companies %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn">Сравнить →</button>
+    </form>
+    <a href="/" class="back">← На главную</a>
+</div>
+</body>
+</html>
