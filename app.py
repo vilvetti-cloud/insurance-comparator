@@ -4,208 +4,15 @@ import json
 import os
 import hashlib
 import secrets
+import requests
+from bs4 import BeautifulSoup
+import re
+import time
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
 # ==================== ВСЕ ИСТОЧНИКИ ДАННЫХ ====================
-
-SOURCES = {
-    # === ОФИЦИАЛЬНЫЕ САЙТЫ ===
-    "РЕСО-Гарантия": {
-        "urls": [
-            "https://reso.ru/individual/property/flat/",
-            "https://reso.ru/individual/property/flat/vse-vklucheno/"
-        ],
-        "parser": "parse_reso"
-    },
-    "Ингосстрах": {
-        "urls": [
-            "https://www.ingos.ru/property/flat",
-            "https://www.ingos.ru/faq/chasto-zadavaemye-voprosy-po-strahovaniyu-kvartiry"
-        ],
-        "parser": "parse_ingos"
-    },
-    "Т-Страхование": {
-        "urls": [
-            "https://tbank.ru/insurance/help/estate/property/about/about-policy/"
-        ],
-        "parser": "parse_tinkoff"
-    },
-    "АльфаСтрахование": {
-        "urls": [
-            "https://alfastrahovanie.sddbk.ru/imushestvo/strahovanie-ot-bpla/"
-        ],
-        "parser": "parse_alfa"
-    },
-    "СберСтрахование": {
-        "urls": [
-            "https://sberbankins.ru/products/home-insurance-online/"
-        ],
-        "parser": "parse_sber"
-    },
-    "Согласие": {
-        "urls": [
-            "https://soglasie.ru/company/insurance-rules/"
-        ],
-        "parser": "parse_soglasie"
-    },
-    "Югория": {
-        "urls": [
-            "https://ugsk.ru/property/"
-        ],
-        "parser": "parse_yugoria"
-    },
-    "Совкомбанк Страхование": {
-        "urls": [
-            "https://sovcomins.ru/"
-        ],
-        "parser": "parse_sovcombank"
-    },
-    "ВСК": {
-        "urls": [
-            "https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"
-        ],
-        "parser": "parse_vsk"
-    },
-    "СОГАЗ": {
-        "urls": [
-            "https://www.sogaz.ru/"
-        ],
-        "parser": "parse_sogaz"
-    },
-    "Ренессанс": {
-        "urls": [
-            "https://renessans.sddbk.ru/imushestvo/kvartira/"
-        ],
-        "parser": "parse_renessans"
-    },
-
-    # === АГРЕГАТОРЫ ===
-    "Сравни.ру": {
-        "urls": [
-            "https://sravni.ru/strahovanie-nedvizhimosti/ingosstrah/",
-            "https://sravni.ru/strahovanie-nedvizhimosti/yugoriya/"
-        ],
-        "type": "aggregator"
-    },
-    "Finuslugi": {
-        "urls": [
-            "https://finuslugi.ru"
-        ],
-        "type": "aggregator"
-    },
-    "Polis.online": {
-        "urls": [
-            "https://polis.online"
-        ],
-        "type": "aggregator"
-    },
-
-    # === БРОКЕРЫ ===
-    "Infullbroker": {
-        "urls": [
-            "https://infullbroker.ru"
-        ],
-        "type": "broker"
-    },
-    "Prosto.insure": {
-        "urls": [
-            "https://prosto.insure/company/tinkoff-strakhovanie"
-        ],
-        "type": "broker"
-    },
-
-    # === НОВОСТНЫЕ САЙТЫ ===
-    "VC.ru": {
-        "urls": [
-            "https://vc.ru"
-        ],
-        "type": "news"
-    },
-    "Vedomosti": {
-        "urls": [
-            "https://vedomosti.ru"
-        ],
-        "type": "news"
-    }
-}
-
-def parse_source(url, company_name):
-    """Парсит один источник"""
-    try:
-        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-        soup = BeautifulSoup(response.text, 'html.parser')
-        text = soup.get_text()
-        
-        # Ищем ключевые слова
-        keywords = {
-            "franchise": ["франшиз", "безусловн", "условн"],
-            "total_loss": ["тотал", "гибель", "уничтож"],
-            "drone": ["бпла", "беспилот", "дрон"],
-            "repair": ["ремонт", "стоа", "дилер"],
-            "payment": ["выплат", "возмещ", "срок"]
-        }
-        
-        result = {}
-        for key, words in keywords.items():
-            for word in words:
-                if word in text.lower():
-                    # Находим предложение с этим словом
-                    sentences = re.split(r'[.!?]\s*', text)
-                    for sentence in sentences:
-                        if word in sentence.lower():
-                            result[key] = sentence.strip()
-                            break
-                    break
-        
-        return result
-    except Exception as e:
-        print(f"   ❌ Ошибка парсинга {url}: {e}")
-        return None
-
-def parse_all_sources():
-    """Парсит все источники и объединяет данные"""
-    print(f"🔄 Начинаю сбор данных из {len(SOURCES)} источников...")
-    
-    all_data = {}
-    
-    for source_name, source_info in SOURCES.items():
-        print(f"\n📂 Парсим: {source_name}")
-        
-        # Если это компания — есть url и parser
-        if "urls" in source_info:
-            company_data = {}
-            for url in source_info["urls"]:
-                result = parse_source(url, source_name)
-                if result:
-                    for key, value in result.items():
-                        if value and (not company_data.get(key) or len(value) > len(str(company_data.get(key, "")))):
-                            company_data[key] = value
-                time.sleep(1)
-            
-            # Если нашли данные — сохраняем
-            if company_data:
-                # Добавляем недостающие поля из fallback
-                fallback = get_fallback_data().get(source_name, {})
-                for key, value in fallback.items():
-                    if key not in company_data or not company_data[key]:
-                        company_data[key] = value
-                
-                all_data[source_name] = company_data
-                print(f"   ✅ Найдено данных: {len(company_data)} полей")
-    
-    # Добавляем компании, которые не удалось распарсить
-    fallback_data = get_fallback_data()
-    for company, data in fallback_data.items():
-        if company not in all_data:
-            all_data[company] = data
-            print(f"   📦 Использованы запасные данные для {company}")
-    
-    all_data["_last_updated"] = datetime.now().isoformat()
-    all_data["_sources_count"] = len(SOURCES)
-    
-    return all_data
 
 def get_fallback_data():
     """Запасные данные для всех компаний"""
@@ -388,7 +195,171 @@ def get_fallback_data():
         }
     }
 
-ALL_COMPANIES = list(INSURANCE_DATA.keys())
+SOURCES = {
+    "РЕСО-Гарантия": {
+        "urls": [
+            "https://reso.ru/individual/property/flat/",
+            "https://reso.ru/individual/property/flat/vse-vklucheno/"
+        ]
+    },
+    "Ингосстрах": {
+        "urls": [
+            "https://www.ingos.ru/property/flat",
+            "https://www.ingos.ru/faq/chasto-zadavaemye-voprosy-po-strahovaniyu-kvartiry"
+        ]
+    },
+    "Т-Страхование": {
+        "urls": [
+            "https://tbank.ru/insurance/help/estate/property/about/about-policy/"
+        ]
+    },
+    "АльфаСтрахование": {
+        "urls": [
+            "https://alfastrahovanie.sddbk.ru/imushestvo/strahovanie-ot-bpla/"
+        ]
+    },
+    "СберСтрахование": {
+        "urls": [
+            "https://sberbankins.ru/products/home-insurance-online/"
+        ]
+    },
+    "Согласие": {
+        "urls": [
+            "https://soglasie.ru/company/insurance-rules/"
+        ]
+    },
+    "Югория": {
+        "urls": [
+            "https://ugsk.ru/property/"
+        ]
+    },
+    "Совкомбанк Страхование": {
+        "urls": [
+            "https://sovcomins.ru/"
+        ]
+    },
+    "ВСК": {
+        "urls": [
+            "https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"
+        ]
+    },
+    "СОГАЗ": {
+        "urls": [
+            "https://www.sogaz.ru/"
+        ]
+    },
+    "Ренессанс": {
+        "urls": [
+            "https://renessans.sddbk.ru/imushestvo/kvartira/"
+        ]
+    },
+    "Сравни.ру": {
+        "urls": [
+            "https://sravni.ru/strahovanie-nedvizhimosti/ingosstrah/",
+            "https://sravni.ru/strahovanie-nedvizhimosti/yugoriya/"
+        ],
+        "type": "aggregator"
+    },
+    "Finuslugi": {
+        "urls": ["https://finuslugi.ru"],
+        "type": "aggregator"
+    },
+    "Polis.online": {
+        "urls": ["https://polis.online"],
+        "type": "aggregator"
+    },
+    "Infullbroker": {
+        "urls": ["https://infullbroker.ru"],
+        "type": "broker"
+    },
+    "Prosto.insure": {
+        "urls": ["https://prosto.insure/company/tinkoff-strakhovanie"],
+        "type": "broker"
+    },
+    "VC.ru": {
+        "urls": ["https://vc.ru"],
+        "type": "news"
+    },
+    "Vedomosti": {
+        "urls": ["https://vedomosti.ru"],
+        "type": "news"
+    }
+}
+
+def parse_source(url):
+    """Парсит один источник"""
+    try:
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        soup = BeautifulSoup(response.text, 'html.parser')
+        text = soup.get_text()
+        
+        keywords = {
+            "franchise": ["франшиз", "безусловн", "условн"],
+            "total_loss": ["тотал", "гибель", "уничтож"],
+            "drone": ["бпла", "беспилот", "дрон"],
+            "repair": ["ремонт", "стоа", "дилер"],
+            "payment": ["выплат", "возмещ", "срок"]
+        }
+        
+        result = {}
+        for key, words in keywords.items():
+            for word in words:
+                if word in text.lower():
+                    sentences = re.split(r'[.!?]\s*', text)
+                    for sentence in sentences:
+                        if word in sentence.lower():
+                            result[key] = sentence.strip()
+                            break
+                    break
+        return result
+    except Exception as e:
+        print(f"   ❌ Ошибка парсинга {url}: {e}")
+        return None
+
+def parse_all_sources():
+    """Парсит все источники"""
+    print(f"🔄 Начинаю сбор данных из {len(SOURCES)} источников...")
+    
+    all_data = {}
+    
+    for source_name, source_info in SOURCES.items():
+        print(f"\n📂 Парсим: {source_name}")
+        company_data = {}
+        for url in source_info["urls"]:
+            result = parse_source(url)
+            if result:
+                for key, value in result.items():
+                    if value and (not company_data.get(key) or len(value) > len(str(company_data.get(key, "")))):
+                        company_data[key] = value
+            time.sleep(0.5)
+        
+        if company_data:
+            fallback = get_fallback_data().get(source_name, {})
+            for key, value in fallback.items():
+                if key not in company_data or not company_data[key]:
+                    company_data[key] = value
+            all_data[source_name] = company_data
+            print(f"   ✅ Найдено данных: {len(company_data)} полей")
+    
+    fallback_data = get_fallback_data()
+    for company, data in fallback_data.items():
+        if company not in all_data:
+            all_data[company] = data
+            print(f"   📦 Использованы запасные данные для {company}")
+    
+    all_data["_last_updated"] = datetime.now().isoformat()
+    all_data["_sources_count"] = len(SOURCES)
+    return all_data
+
+# ==================== ЗАГРУЗКА ДАННЫХ ====================
+
+print("📦 Загрузка данных...")
+INSURANCE_DATA = parse_all_sources()
+ALL_COMPANIES = [c for c in INSURANCE_DATA.keys() if not c.startswith("_")]
+print(f"✅ Загружено {len(ALL_COMPANIES)} компаний")
+
+# ==================== ПОЛЬЗОВАТЕЛИ ====================
+
 USERS_FILE = "users.json"
 
 def load_users():
@@ -402,10 +373,17 @@ def save_users(users):
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f)
 
+# ==================== МАРШРУТЫ ====================
+
 @app.route('/')
 def index():
     user = session.get('user')
-    return render_template('index.html', companies=ALL_COMPANIES, user=user, now=datetime.now().strftime("%Y-%m-%d %H:%M"))
+    last_updated = INSURANCE_DATA.get("_last_updated", "неизвестно")
+    return render_template('index.html', 
+                         companies=ALL_COMPANIES,
+                         user=user,
+                         now=datetime.now().strftime("%Y-%m-%d %H:%M"),
+                         last_updated=last_updated)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -475,6 +453,14 @@ def compare():
 def payment():
     return render_template('payment.html', user=session.get('user'))
 
+@app.route('/update')
+def manual_update():
+    global INSURANCE_DATA, ALL_COMPANIES
+    print("🔄 Ручное обновление данных...")
+    INSURANCE_DATA = parse_all_sources()
+    ALL_COMPANIES = [c for c in INSURANCE_DATA.keys() if not c.startswith("_")]
+    return "✅ Данные обновлены! <a href='/'>На главную</a>"
+
 # ==================== ШАБЛОНЫ ====================
 os.makedirs('templates', exist_ok=True)
 
@@ -495,6 +481,7 @@ h1{font-size:20px;text-align:center;color:#2c3e50}
 .status-ok{background:#d5f5e3;color:#27ae60}
 .status-no{background:#fadbd8;color:#e74c3c}
 .meta{text-align:center;color:#888;font-size:11px;margin-top:15px}
+.update-info{text-align:center;color:#27ae60;font-size:12px;margin-top:5px}
 a{color:#3498db;text-decoration:none}
 </style>
 </head>
@@ -503,10 +490,13 @@ a{color:#3498db;text-decoration:none}
 <div class="user-bar">{% if user %}👤 {{ user }} | <a href="/logout">Выйти</a>{% else %}<a href="/login">Войти</a> | <a href="/register">Регистрация</a>{% endif %}</div>
 <h1>🔍 Сравнение КАСКО</h1>
 <p style="text-align:center;color:#555;">Сравни страховые компании за 99 ₽</p>
+<div class="update-info">🤖 Данные собираются из 18 источников</div>
+<div class="update-info">📅 Последнее обновление: {{ last_updated[:16] if last_updated != 'неизвестно' else 'неизвестно' }}</div>
 {% if user %}
 <div class="status status-ok">✅ Вы вошли как {{ user }}</div>
 <a href="/compare" class="btn">📊 Новое сравнение</a>
 <a href="/payment" class="btn btn-blue">💳 Оплатить (99 ₽ / 399 ₽)</a>
+<a href="/update" class="btn btn-orange">🔄 Обновить данные сейчас</a>
 {% else %}
 <div class="status status-no">⚠️ Войдите, чтобы сравнивать</div>
 <a href="/login" class="btn btn-blue">🔑 Войти</a>
@@ -562,9 +552,9 @@ with open('templates/result.html', 'w') as f:
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Результат сравнения</title>
 <style>
 body{font-family:Arial;padding:10px;background:#f5f5f5}
-.container{max-width:600px;margin:0 auto;background:white;padding:20px;border-radius:10px}
-table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
-th,td{border:1px solid #ddd;padding:8px;text-align:left}
+.container{max-width:800px;margin:0 auto;background:white;padding:20px;border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+th,td{border:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}
 th{background:#2c3e50;color:white}
 .main-badge{background:#27ae60;color:white;padding:3px 10px;border-radius:12px;font-size:12px;margin-left:10px}
 .vs-title{text-align:center;font-size:18px;font-weight:bold;margin:10px 0;padding:10px;background:#f0f8ff;border-radius:8px}
@@ -579,12 +569,22 @@ th{background:#2c3e50;color:white}
 <div class="vs-title">🏆 {{ main_company }} <span class="main-badge">ОСНОВНАЯ</span><br>⚔️ {{ company2 }}</div>
 <table>
 <tr><th>Параметр</th><th>{{ company1 }}</th><th>{{ company2 }}</th></tr>
-<tr><td>Франшиза</td><td>{{ data1.franchise or '—' }}</td><td>{{ data2.franchise or '—' }}</td></tr>
-<tr><td>Порог тотала</td><td>{{ data1.total_loss or '—' }}</td><td>{{ data2.total_loss or '—' }}</td></tr>
-<tr><td>Рейтинг</td><td>{{ data1.rating or '—' }}</td><td>{{ data2.rating or '—' }}</td></tr>
-<tr><td>Офисы</td><td>{{ data1.offices or '—' }}</td><td>{{ data2.offices or '—' }}</td></tr>
+<tr><td><strong>Франшиза</strong></td><td>{{ data1.franchise or '—' }}</td><td>{{ data2.franchise or '—' }}</td></tr>
+<tr><td><strong>Без справок</strong></td><td>{{ data1.without_certificates or '—' }}</td><td>{{ data2.without_certificates or '—' }}</td></tr>
+<tr><td><strong>GAP</strong></td><td>{{ data1.gap or '—' }}</td><td>{{ data2.gap or '—' }}</td></tr>
+<tr><td><strong>Порог тотала</strong></td><td>{{ data1.total_loss or '—' }}</td><td>{{ data2.total_loss or '—' }}</td></tr>
+<tr><td><strong>Самовозгорание</strong></td><td>{{ data1.fire or '—' }}</td><td>{{ data2.fire or '—' }}</td></tr>
+<tr><td><strong>Терроризм</strong></td><td>{{ data1.terrorism or '—' }}</td><td>{{ data2.terrorism or '—' }}</td></tr>
+<tr><td><strong>БПЛА</strong></td><td>{{ data1.drone or '—' }}</td><td>{{ data2.drone or '—' }}</td></tr>
+<tr><td><strong>Эвакуатор</strong></td><td>{{ data1.tow_truck or '—' }}</td><td>{{ data2.tow_truck or '—' }}</td></tr>
+<tr><td><strong>Тип ремонта</strong></td><td>{{ data1.repair_type or '—' }}</td><td>{{ data2.repair_type or '—' }}</td></tr>
+<tr><td><strong>Срок выплаты</strong></td><td>{{ data1.payment_terms or '—' }}</td><td>{{ data2.payment_terms or '—' }}</td></tr>
+<tr><td><strong>Рейтинг</strong></td><td>{{ data1.rating or '—' }}</td><td>{{ data2.rating or '—' }}</td></tr>
+<tr><td><strong>Офисы</strong></td><td>{{ data1.offices or '—' }}</td><td>{{ data2.offices or '—' }}</td></tr>
+<tr><td><strong>Преимущества</strong></td><td>{{ data1.advantages or '—' }}</td><td>{{ data2.advantages or '—' }}</td></tr>
+<tr><td><strong>Слабые места</strong></td><td style="color:#e74c3c;">{{ data1.weak_points or '—' }}</td><td style="color:#e74c3c;">{{ data2.weak_points or '—' }}</td></tr>
 </table>
-<div class="analysis"><strong>📋 Анализ</strong><ul>{% for adv in advantages %}<li class="advantage">✅ {{ adv }}</li>{% endfor %}</ul></div>
+<div class="analysis"><strong>📋 Анализ</strong><ul>{% for adv in advantages %}<li class="advantage">{{ adv }}</li>{% endfor %}</ul></div>
 <a href="/compare" class="back">← Новое сравнение</a><br>
 <a href="/" class="back">На главную</a>
 <div class="meta">Обновлено: {{ timestamp }}</div>
