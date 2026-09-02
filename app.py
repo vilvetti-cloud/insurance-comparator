@@ -287,69 +287,49 @@ SOURCES = {
 }
 
 def parse_source(url):
-    """Парсит один источник"""
+    """Умный парсинг — извлекает только конкретные параметры"""
     try:
         response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(response.text, 'html.parser')
         text = soup.get_text()
-        
-        keywords = {
-            "franchise": ["франшиз", "безусловн", "условн"],
-            "total_loss": ["тотал", "гибель", "уничтож"],
-            "drone": ["бпла", "беспилот", "дрон"],
-            "repair": ["ремонт", "стоа", "дилер"],
-            "payment": ["выплат", "возмещ", "срок"]
-        }
+        text = ' '.join(text.split())  # убираем лишние пробелы и переносы
         
         result = {}
-        for key, words in keywords.items():
+        
+        # Ищем каждый параметр по своим ключевым словам
+        searches = {
+            "franchise": ["франшиз", "безусловн", "условн", "агрегатн", "динамическ"],
+            "without_certificates": ["без справок", "без документов", "упрощенн"],
+            "gap": ["gap", "индексируем", "постоянная страховая"],
+            "total_loss": ["тотал", "гибель", "уничтож", "порог"],
+            "fire": ["самовозгор", "пожар", "возгоран"],
+            "terrorism": ["терроризм", "теракт"],
+            "drone": ["бпла", "беспилот", "дрон"],
+            "tow_truck": ["эвакуатор", "эвакуац"],
+            "repair": ["ремонт", "стоа", "дилер"],
+            "payment": ["выплат", "возмещ", "срок", "дней"],
+            "advantages": ["преимуществ", "плюс", "лучше"],
+            "weak_points": ["слабы", "минус", "недостат", "ограничени"]
+        }
+        
+        for key, words in searches.items():
             for word in words:
                 if word in text.lower():
-                    sentences = re.split(r'[.!?]\s*', text)
-                    for sentence in sentences:
-                        if word in sentence.lower():
-                            result[key] = sentence.strip()
-                            break
-                    break
+                    # Ищем предложение или фразу с этим словом (до 100 символов вокруг)
+                    pattern = r'[^.!?]{0,50}' + word + r'[^.!?]{0,100}[.!?]'
+                    matches = re.findall(pattern, text.lower(), re.IGNORECASE)
+                    if matches:
+                        clean = matches[0].strip()
+                        # Убираем лишние символы и сокращаем
+                        clean = re.sub(r'\s+', ' ', clean)
+                        clean = clean[:100]  # не больше 100 символов
+                        result[key] = clean.capitalize()
+                        break
+        
         return result
     except Exception as e:
         print(f"   ❌ Ошибка парсинга {url}: {e}")
         return None
-
-def parse_all_sources():
-    """Парсит все источники"""
-    print(f"🔄 Начинаю сбор данных из {len(SOURCES)} источников...")
-    
-    all_data = {}
-    
-    for source_name, source_info in SOURCES.items():
-        print(f"\n📂 Парсим: {source_name}")
-        company_data = {}
-        for url in source_info["urls"]:
-            result = parse_source(url)
-            if result:
-                for key, value in result.items():
-                    if value and (not company_data.get(key) or len(value) > len(str(company_data.get(key, "")))):
-                        company_data[key] = value
-            time.sleep(0.5)
-        
-        if company_data:
-            fallback = get_fallback_data().get(source_name, {})
-            for key, value in fallback.items():
-                if key not in company_data or not company_data[key]:
-                    company_data[key] = value
-            all_data[source_name] = company_data
-            print(f"   ✅ Найдено данных: {len(company_data)} полей")
-    
-    fallback_data = get_fallback_data()
-    for company, data in fallback_data.items():
-        if company not in all_data:
-            all_data[company] = data
-            print(f"   📦 Использованы запасные данные для {company}")
-    
-    all_data["_last_updated"] = datetime.now().isoformat()
-    all_data["_sources_count"] = len(SOURCES)
-    return all_data
 
 # ==================== ЗАГРУЗКА ДАННЫХ ====================
 
