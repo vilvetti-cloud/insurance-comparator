@@ -6,15 +6,17 @@
     <title>Результат сравнения</title>
     <style>
         body{font-family:Arial;padding:10px;background:#f5f5f5}
-        .container{max-width:600px;margin:0 auto;background:white;padding:20px;border-radius:10px}
-        table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
-        th,td{border:1px solid #ddd;padding:8px;text-align:left}
+        .container{max-width:800px;margin:0 auto;background:white;padding:20px;border-radius:10px}
+        h1{font-size:20px;text-align:center}
+        table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+        th,td{border:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}
         th{background:#2c3e50;color:white}
         .main-badge{background:#27ae60;color:white;padding:3px 10px;border-radius:12px;font-size:12px;margin-left:10px}
         .vs-title{text-align:center;font-size:18px;font-weight:bold;margin:10px 0;padding:10px;background:#f0f8ff;border-radius:8px}
         .advantage{color:#27ae60}
         .back{display:inline-block;margin-top:10px;color:#3498db;text-decoration:none}
         .meta{text-align:center;color:#888;font-size:11px;margin-top:15px}
+        .weak{color:#e74c3c}
     </style>
 </head>
 <body>
@@ -23,12 +25,22 @@
     <div class="vs-title">🏆 {{ main_company }} <span class="main-badge">ОСНОВНАЯ</span><br>⚔️ {{ company2 }}</div>
     <table>
         <tr><th>Параметр</th><th>{{ company1 }}</th><th>{{ company2 }}</th></tr>
-        <tr><td>Франшиза</td><td>{{ data1.franchise or '—' }}</td><td>{{ data2.franchise or '—' }}</td></tr>
-        <tr><td>Порог тотала</td><td>{{ data1.total_loss or '—' }}</td><td>{{ data2.total_loss or '—' }}</td></tr>
-        <tr><td>Рейтинг</td><td>{{ data1.rating or '—' }}</td><td>{{ data2.rating or '—' }}</td></tr>
-        <tr><td>Офисы</td><td>{{ data1.offices or '—' }}</td><td>{{ data2.offices or '—' }}</td></tr>
+        <tr><td><strong>Франшиза</strong></td><td>{{ data1.franchise or '—' }}</td><td>{{ data2.franchise or '—' }}</td></tr>
+        <tr><td><strong>Без справок</strong></td><td>{{ data1.without_certificates or '—' }}</td><td>{{ data2.without_certificates or '—' }}</td></tr>
+        <tr><td><strong>GAP</strong></td><td>{{ data1.gap or '—' }}</td><td>{{ data2.gap or '—' }}</td></tr>
+        <tr><td><strong>Порог тотала</strong></td><td>{{ data1.total_loss or '—' }}</td><td>{{ data2.total_loss or '—' }}</td></tr>
+        <tr><td><strong>Самовозгорание</strong></td><td>{{ data1.fire or '—' }}</td><td>{{ data2.fire or '—' }}</td></tr>
+        <tr><td><strong>Терроризм</strong></td><td>{{ data1.terrorism or '—' }}</td><td>{{ data2.terrorism or '—' }}</td></tr>
+        <tr><td><strong>БПЛА</strong></td><td>{{ data1.drone or '—' }}</td><td>{{ data2.drone or '—' }}</td></tr>
+        <tr><td><strong>Эвакуатор</strong></td><td>{{ data1.tow_truck or '—' }}</td><td>{{ data2.tow_truck or '—' }}</td></tr>
+        <tr><td><strong>Тип ремонта</strong></td><td>{{ data1.repair_type or '—' }}</td><td>{{ data2.repair_type or '—' }}</td></tr>
+        <tr><td><strong>Срок выплаты</strong></td><td>{{ data1.payment_terms or '—' }}</td><td>{{ data2.payment_terms or '—' }}</td></tr>
+        <tr><td><strong>Рейтинг</strong></td><td>{{ data1.rating or '—' }}</td><td>{{ data2.rating or '—' }}</td></tr>
+        <tr><td><strong>Офисы</strong></td><td>{{ data1.offices or '—' }}</td><td>{{ data2.offices or '—' }}</td></tr>
+        <tr><td><strong>Преимущества</strong></td><td>{{ data1.advantages or '—' }}</td><td>{{ data2.advantages or '—' }}</td></tr>
+        <tr><td><strong>Слабые места</strong></td><td class="weak">{{ data1.weak_points or '—' }}</td><td class="weak">{{ data2.weak_points or '—' }}</td></tr>
     </table>
-    <div class="analysis"><strong>📋 Анализ</strong><ul>{% for adv in advantages %}<li class="advantage">✅ {{ adv }}</li>{% endfor %}</ul></div>
+    <div class="analysis"><strong>📋 Анализ</strong><ul>{% for adv in advantages %}<li class="advantage">{{ adv }}</li>{% endfor %}</ul></div>
     <a href="/compare" class="back">← Новое сравнение</a><br>
     <a href="/" class="back">На главную</a>
     <div class="meta">Обновлено: {{ timestamp }}</div>
