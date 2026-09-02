@@ -1,3 +1,5 @@
+# app.py — ЧИСТАЯ ВЕРСИЯ С УМНЫМ ПАРСИНГОМ
+
 from flask import Flask, render_template, request, session, redirect, url_for
 from datetime import datetime
 import json
@@ -12,10 +14,9 @@ import time
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
-# ==================== ВСЕ ИСТОЧНИКИ ДАННЫХ ====================
+# ==================== ЗАПАСНЫЕ ДАННЫЕ (ЧИСТЫЕ) ====================
 
 def get_fallback_data():
-    """Запасные данные для всех компаний"""
     return {
         "РЕСО-Гарантия": {
             "franchise": "Безусловная / условно-безусловная",
@@ -34,8 +35,8 @@ def get_fallback_data():
             "offices": "1200+"
         },
         "СОГАЗ": {
-            "franchise": "Безусловная / условно-безусловная / динамическая",
-            "without_certificates": "Вариантно: 1 раз один элемент / Неограниченно стекла + 1 раз кузовной",
+            "franchise": "Безусловная / условно-безусловная",
+            "without_certificates": "Вариантно: 1 раз один элемент / Неограниченно стекла + 1",
             "gap": "Указывается отдельным риском",
             "total_loss": "70%",
             "fire": "Входит",
@@ -50,25 +51,25 @@ def get_fallback_data():
             "offices": "500+"
         },
         "АльфаСтрахование": {
-            "franchise": "Условно-безусловная (применяется к Хищению)",
+            "franchise": "Условно-безусловная (на Хищение)",
             "without_certificates": "Стекла без ограничений + 1 кузовной элемент 2 раза в год",
             "gap": "Включен по умолчанию",
             "total_loss": "75%",
-            "fire": "За доп. плату, 0,8% от СС",
-            "terrorism": "За доп. плату, 0,2-0,3% от СС",
+            "fire": "За доп. плату, 0,8%",
+            "terrorism": "За доп. плату, 0,2-0,3%",
             "drone": "За доп. плату",
             "tow_truck": "Петковые ТС - 5 000 руб.; Прочие - 10 000 руб.",
             "repair_type": "Ремонт на СТОА страховщика",
             "payment_terms": "7 рабочих дней",
             "advantages": "Без справок с бонусами",
-            "weak_points": "Франшиза действует на Хищение, самовозгорание - за доп. плату",
+            "weak_points": "Франшиза на Хищение, самовозгорание - за доп. плату",
             "rating": "4.6",
             "offices": "600+"
         },
         "Ингосстрах": {
-            "franchise": "Условная/условно-безусловная по каждому случаю или со 2-го случая",
-            "without_certificates": "1 раз в год: ЛПКП не более 1-й детали; остекление кузова",
-            "gap": "Включен при отметке «Постоянная страховая сумма»",
+            "franchise": "Условная/условно-безусловная",
+            "without_certificates": "ЛПКП 1 деталь; остекление (кроме крыши)",
+            "gap": "Включен при постоянной СС",
             "total_loss": "75%",
             "fire": "Входит",
             "terrorism": "За доп. плату, 0,3%",
@@ -76,262 +77,203 @@ def get_fallback_data():
             "tow_truck": "По запросу",
             "repair_type": "Ремонт на СТОА страховщика",
             "payment_terms": "10 рабочих дней",
-            "advantages": "Широкая сеть офисов, гибкие условия",
-            "weak_points": "Без справок – только ЛКП 1 детали, возможны ограничения по пробегу",
+            "advantages": "Широкая сеть офисов",
+            "weak_points": "Без справок – только ЛКП 1 детали",
             "rating": "4.4",
             "offices": "900+"
         },
         "Ренессанс": {
-            "franchise": "11 видов франшиз (безусловная, франшиза виновника, со 2-го случая)",
-            "without_certificates": "Вариативно (стекла 1 раз в год / без ограничений / до 5% СС 2 раза)",
+            "franchise": "11 видов франшиз",
+            "without_certificates": "Вариативно (стекла / до 5% СС)",
             "gap": "Отдельный риск",
             "total_loss": "75%",
             "fire": "Только для электромобилей",
-            "terrorism": "За доп. плату, 0,5% от СС на легковые ТС",
-            "drone": "За доп. плату, 0,5% от СС на легковые",
-            "tow_truck": "Петковые ТС - лимит 10 000 руб.",
+            "terrorism": "За доп. плату, 0,5%",
+            "drone": "За доп. плату, 0,5%",
+            "tow_truck": "Петковые ТС - 10 000 руб.",
             "repair_type": "Ремонт или выплата",
             "payment_terms": "10 рабочих дней",
-            "advantages": "Много вариантов франшизы, гибкие условия",
-            "weak_points": "Франшиза по хищению/угону, эвакуация - за доп. плату",
+            "advantages": "Много вариантов франшизы",
+            "weak_points": "Эвакуация - за доп. плату, франшиза по угону",
             "rating": "4.3",
             "offices": "500+"
         },
         "Т-Страхование": {
-            "franchise": "Условно-безусловная (для ТС старше 5 лет - обязательные франшизы)",
-            "without_certificates": "Стекла: неогранич. кол-во раз; Кузовные элементы: 1 раз в год - до 3% от СС",
+            "franchise": "Условно-безусловная (обязательная для ТС > 5 лет)",
+            "without_certificates": "Стекла неогранич.; Кузов до 3% СС",
             "gap": "Отдельный риск",
             "total_loss": "65%",
             "fire": "Нет инф.",
             "terrorism": "Нет инф.",
             "drone": "Нет инф.",
-            "tow_truck": "Лимит 10 000 руб.",
+            "tow_truck": "10 000 руб.",
             "repair_type": "Ремонт или выплата",
             "payment_terms": "5 рабочих дней",
             "advantages": "Онлайн-оформление, без справок",
-            "weak_points": "Ниже порог тотала, обязательные франшизы для некоторых сегментов",
+            "weak_points": "Ниже порог тотала",
             "rating": "4.7",
             "offices": "онлайн"
         },
         "ВСК": {
-            "franchise": "Условно-безусловная (может не применяться по отдельным рискам)",
-            "without_certificates": "Стекла: 5% СС (неагрегатная); Прочие элементы: 3% СС (агрегатная)",
-            "gap": "Включен, если указан 1 период страхования (1 год)",
+            "franchise": "Условно-безусловная",
+            "without_certificates": "Стекла: 5% СС; Прочие: 3% СС",
+            "gap": "Включен при 1 периоде",
             "total_loss": "75%",
-            "fire": "Исключение из страхового покрытия",
-            "terrorism": "Исключение из страхового покрытия",
-            "drone": "Включен при наличии в полисе GAP и отметки официальный дилер",
-            "tow_truck": "Петковые ТС - лимит 5 000 руб.; Прочие - лимит 15 000 руб.",
+            "fire": "Исключение",
+            "terrorism": "Исключение",
+            "drone": "Включен при наличии GAP",
+            "tow_truck": "5 000 / 15 000 руб.",
             "repair_type": "Ремонт на СТОА страховщика",
             "payment_terms": "10 рабочих дней",
             "advantages": "Гибкие условия по справкам",
-            "weak_points": "Камеры кругового обзора не оплачиваются без справок, самовозгорание - исключено",
+            "weak_points": "Камеры не оплачиваются без справок",
             "rating": "4.2",
             "offices": "800+"
         },
         "Согласие": {
             "franchise": "Условно-безусловная / динамическая",
-            "without_certificates": "Неограниченно стекла (искл. крыша и люк) + 1 раз любой элемент",
-            "gap": "В разделе 'Условия страхования' указывается как риск ГЭП",
+            "without_certificates": "Неограниченно стекла + 1 элемент",
+            "gap": "Отдельный риск",
             "total_loss": "70%",
-            "fire": "За доп. плату, 1.15% для ФЛ",
-            "terrorism": "За доп. плату, тариф 1.1% только для МСК и МО",
+            "fire": "За доп. плату, 1.15%",
+            "terrorism": "За доп. плату (МСК и МО)",
             "drone": "За доп. плату",
-            "tow_truck": "5 000 руб. (до 3,5 т); 10 000 руб. (свыше 3,5 т)",
+            "tow_truck": "5 000 / 10 000 руб.",
             "repair_type": "Ремонт или выплата",
             "payment_terms": "10 рабочих дней",
             "advantages": "Гибкие условия",
-            "weak_points": "Тотал 70% (РЕСО 75%), эвакуатор 5 000 руб. (ниже РЕСО)",
+            "weak_points": "Тотал 70%",
             "rating": "4.2",
             "offices": "300+"
         },
         "Югория": {
-            "franchise": "Условно-безусловная (при пролонгации - 3% от СС на каждый случай)",
-            "without_certificates": "Стекла: 1 раз (исключая панорамную крышу)",
-            "gap": "По типу страховой суммы: неагрегатная - изменяющаяся",
+            "franchise": "Условно-безусловная",
+            "without_certificates": "Стекла: 1 раз (кроме панорамной)",
+            "gap": "Неагрегатная",
             "total_loss": "Не указан",
-            "fire": "Исключение из покрытия",
+            "fire": "Исключение",
             "terrorism": "Нет инф.",
             "drone": "Входит",
-            "tow_truck": "Лимит 5% от СС, но не более 15 000 рублей",
+            "tow_truck": "5% от СС (до 15 000 руб.)",
             "repair_type": "Ремонт или выплата",
             "payment_terms": "10 рабочих дней",
             "advantages": "Гибкие условия пролонгации",
-            "weak_points": "При пролонгации возможна доп. франшиза, самовозгорание исключено",
+            "weak_points": "При пролонгации доп. франшиза",
             "rating": "3.9",
             "offices": "400+"
         },
         "СберСтрахование": {
-            "franchise": "6 видов франшиз (условная, безусловная, динамическая, со 2-го случая, агрегатная)",
-            "without_certificates": "Вариантно: 1 раз - 1 деталь кузова + стекла / Только стекла",
-            "gap": "Включен, если СС индексируемая",
+            "franchise": "6 видов франшиз",
+            "without_certificates": "1 деталь + стекла / Только стекла",
+            "gap": "Включен при индексируемой СС",
             "total_loss": "70%",
             "fire": "Исключение",
             "terrorism": "Исключение",
             "drone": "Исключение",
-            "tow_truck": "Петковые ТС - 6 000 руб.; Грузовые - 12 000 руб.",
+            "tow_truck": "6 000 / 12 000 руб.",
             "repair_type": "Ремонт или выплата",
             "payment_terms": "7 рабочих дней",
             "advantages": "Много вариантов франшизы",
-            "weak_points": "Тотал 70% (РЕСО 75%), аваром/эвакуация могут быть исключены",
+            "weak_points": "Тотал 70%",
             "rating": "4.0",
             "offices": "1000+"
         },
         "Совкомбанк Страхование": {
-            "franchise": "Условно-безусловная / Условная по отдельным группам / Обязательная 25%",
-            "without_certificates": "Только ремонт или замена ветрового стекла",
+            "franchise": "Условно-безусловная / Обязательная 25%",
+            "without_certificates": "Только ремонт или замена стекла",
             "gap": "Нет инф.",
             "total_loss": "75%",
-            "fire": "Входит в группу событий №2",
+            "fire": "Входит",
             "terrorism": "Исключение",
             "drone": "Исключение",
-            "tow_truck": "Лимит 6 500 руб.",
+            "tow_truck": "6 500 руб.",
             "repair_type": "Ремонт или выплата",
             "payment_terms": "10 рабочих дней",
             "advantages": "Группы событий",
-            "weak_points": "Терроризм исключен, обязательная франшиза",
+            "weak_points": "Терроризм исключен",
             "rating": "3.8",
             "offices": "200+"
         }
     }
 
+# ==================== ИСТОЧНИКИ ====================
+
 SOURCES = {
-    "РЕСО-Гарантия": {
-        "urls": [
-            "https://reso.ru/individual/property/flat/",
-            "https://reso.ru/individual/property/flat/vse-vklucheno/"
-        ]
-    },
-    "Ингосстрах": {
-        "urls": [
-            "https://www.ingos.ru/property/flat",
-            "https://www.ingos.ru/faq/chasto-zadavaemye-voprosy-po-strahovaniyu-kvartiry"
-        ]
-    },
-    "Т-Страхование": {
-        "urls": [
-            "https://tbank.ru/insurance/help/estate/property/about/about-policy/"
-        ]
-    },
-    "АльфаСтрахование": {
-        "urls": [
-            "https://alfastrahovanie.sddbk.ru/imushestvo/strahovanie-ot-bpla/"
-        ]
-    },
-    "СберСтрахование": {
-        "urls": [
-            "https://sberbankins.ru/products/home-insurance-online/"
-        ]
-    },
-    "Согласие": {
-        "urls": [
-            "https://soglasie.ru/company/insurance-rules/"
-        ]
-    },
-    "Югория": {
-        "urls": [
-            "https://ugsk.ru/property/"
-        ]
-    },
-    "Совкомбанк Страхование": {
-        "urls": [
-            "https://sovcomins.ru/"
-        ]
-    },
-    "ВСК": {
-        "urls": [
-            "https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"
-        ]
-    },
-    "СОГАЗ": {
-        "urls": [
-            "https://www.sogaz.ru/"
-        ]
-    },
-    "Ренессанс": {
-        "urls": [
-            "https://renessans.sddbk.ru/imushestvo/kvartira/"
-        ]
-    },
-    "Сравни.ру": {
-        "urls": [
-            "https://sravni.ru/strahovanie-nedvizhimosti/ingosstrah/",
-            "https://sravni.ru/strahovanie-nedvizhimosti/yugoriya/"
-        ],
-        "type": "aggregator"
-    },
-    "Finuslugi": {
-        "urls": ["https://finuslugi.ru"],
-        "type": "aggregator"
-    },
-    "Polis.online": {
-        "urls": ["https://polis.online"],
-        "type": "aggregator"
-    },
-    "Infullbroker": {
-        "urls": ["https://infullbroker.ru"],
-        "type": "broker"
-    },
-    "Prosto.insure": {
-        "urls": ["https://prosto.insure/company/tinkoff-strakhovanie"],
-        "type": "broker"
-    },
-    "VC.ru": {
-        "urls": ["https://vc.ru"],
-        "type": "news"
-    },
-    "Vedomosti": {
-        "urls": ["https://vedomosti.ru"],
-        "type": "news"
-    }
+    "РЕСО-Гарантия": {"urls": ["https://reso.ru/individual/property/flat/"]},
+    "Ингосстрах": {"urls": ["https://www.ingos.ru/property/flat"]},
+    "Т-Страхование": {"urls": ["https://tbank.ru/insurance/help/estate/property/about/about-policy/"]},
+    "АльфаСтрахование": {"urls": ["https://alfastrahovanie.sddbk.ru/imushestvo/strahovanie-ot-bpla/"]},
+    "СберСтрахование": {"urls": ["https://sberbankins.ru/products/home-insurance-online/"]},
+    "Согласие": {"urls": ["https://soglasie.ru/company/insurance-rules/"]},
+    "Югория": {"urls": ["https://ugsk.ru/property/"]},
+    "Совкомбанк Страхование": {"urls": ["https://sovcomins.ru/"]},
+    "ВСК": {"urls": ["https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"]},
+    "СОГАЗ": {"urls": ["https://www.sogaz.ru/"]},
+    "Ренессанс": {"urls": ["https://renessans.sddbk.ru/imushestvo/kvartira/"]}
 }
 
+# ==================== УМНЫЙ ПАРСИНГ ====================
+
 def parse_source(url):
-    """Умный парсинг — извлекает только конкретные параметры"""
     try:
         response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(response.text, 'html.parser')
         text = soup.get_text()
-        text = ' '.join(text.split())  # убираем лишние пробелы и переносы
+        text = ' '.join(text.split())
         
         result = {}
-        
-        # Ищем каждый параметр по своим ключевым словам
-        searches = {
-            "franchise": ["франшиз", "безусловн", "условн", "агрегатн", "динамическ"],
-            "without_certificates": ["без справок", "без документов", "упрощенн"],
-            "gap": ["gap", "индексируем", "постоянная страховая"],
-            "total_loss": ["тотал", "гибель", "уничтож", "порог"],
-            "fire": ["самовозгор", "пожар", "возгоран"],
-            "terrorism": ["терроризм", "теракт"],
+        keywords = {
+            "franchise": ["франшиз", "безусловн", "условн"],
+            "total_loss": ["тотал", "гибель", "уничтож"],
             "drone": ["бпла", "беспилот", "дрон"],
-            "tow_truck": ["эвакуатор", "эвакуац"],
-            "repair": ["ремонт", "стоа", "дилер"],
-            "payment": ["выплат", "возмещ", "срок", "дней"],
-            "advantages": ["преимуществ", "плюс", "лучше"],
-            "weak_points": ["слабы", "минус", "недостат", "ограничени"]
+            "repair_type": ["ремонт", "стоа", "дилер"],
+            "payment_terms": ["выплат", "возмещ", "срок", "дней"]
         }
         
-        for key, words in searches.items():
+        for key, words in keywords.items():
             for word in words:
                 if word in text.lower():
-                    # Ищем предложение или фразу с этим словом (до 100 символов вокруг)
                     pattern = r'[^.!?]{0,50}' + word + r'[^.!?]{0,100}[.!?]'
                     matches = re.findall(pattern, text.lower(), re.IGNORECASE)
                     if matches:
-                        clean = matches[0].strip()
-                        # Убираем лишние символы и сокращаем
-                        clean = re.sub(r'\s+', ' ', clean)
-                        clean = clean[:100]  # не больше 100 символов
-                        result[key] = clean.capitalize()
-                        break
+                        clean = re.sub(r'\s+', ' ', matches[0].strip())
+                        if len(clean) > 10 and len(clean) < 150:
+                            result[key] = clean.capitalize()
+                            break
         
         return result
     except Exception as e:
-        print(f"   ❌ Ошибка парсинга {url}: {e}")
         return None
 
-# ==================== ЗАГРУЗКА ДАННЫХ ====================
+def parse_all_sources():
+    print(f"🔄 Сбор данных...")
+    all_data = {}
+    
+    for name, info in SOURCES.items():
+        print(f"   Парсим {name}...")
+        for url in info["urls"]:
+            result = parse_source(url)
+            if result:
+                all_data[name] = result
+                print(f"      ✅ Найдено: {len(result)} полей")
+                break
+        time.sleep(0.5)
+    
+    # Добавляем недостающие поля из запасных данных
+    fallback = get_fallback_data()
+    for name, data in fallback.items():
+        if name in all_data:
+            for key, value in data.items():
+                if key not in all_data[name] or not all_data[name][key]:
+                    all_data[name][key] = value
+        else:
+            all_data[name] = data
+            print(f"   📦 Запасные данные для {name}")
+    
+    all_data["_last_updated"] = datetime.now().isoformat()
+    return all_data
+
+# ==================== ЗАГРУЗКА ====================
 
 print("📦 Загрузка данных...")
 INSURANCE_DATA = parse_all_sources()
@@ -436,7 +378,7 @@ def payment():
 @app.route('/update')
 def manual_update():
     global INSURANCE_DATA, ALL_COMPANIES
-    print("🔄 Ручное обновление данных...")
+    print("🔄 Ручное обновление...")
     INSURANCE_DATA = parse_all_sources()
     ALL_COMPANIES = [c for c in INSURANCE_DATA.keys() if not c.startswith("_")]
     return "✅ Данные обновлены! <a href='/'>На главную</a>"
@@ -470,7 +412,7 @@ a{color:#3498db;text-decoration:none}
 <div class="user-bar">{% if user %}👤 {{ user }} | <a href="/logout">Выйти</a>{% else %}<a href="/login">Войти</a> | <a href="/register">Регистрация</a>{% endif %}</div>
 <h1>🔍 Сравнение КАСКО</h1>
 <p style="text-align:center;color:#555;">Сравни страховые компании за 99 ₽</p>
-<div class="update-info">🤖 Данные собираются из 18 источников</div>
+<div class="update-info">🤖 Данные собираются автоматически</div>
 <div class="update-info">📅 Последнее обновление: {{ last_updated[:16] if last_updated != 'неизвестно' else 'неизвестно' }}</div>
 {% if user %}
 <div class="status status-ok">✅ Вы вошли как {{ user }}</div>
