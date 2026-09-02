@@ -214,35 +214,98 @@ SOURCES = {
 
 # ==================== УМНЫЙ ПАРСИНГ ====================
 
+# Ключевые слова + "маркеры единиц измерения" — блок, где рядом со словом
+# встречается %, руб., "дней" и т.п., почти всегда содержательный, а не мусорный.
+KEYWORDS = {
+    "franchise": ["франшиз"],
+    "without_certificates": ["без справок", "без документ", "лкп", "без предоставления"],
+    "gap": ["gap", "гэп"],
+    "total_loss": ["тотал", "полная гибель", "конструктивн"],
+    "fire": ["самовозгоран", "возгоран"],
+    "terrorism": ["терроризм", "терр. акт", "теракт"],
+    "drone": ["бпла", "беспилот", "дрон"],
+    "tow_truck": ["эвакуа"],
+    "repair_type": ["ремонт на сто", "ремонт у диле", "стоа"],
+    "payment_terms": ["срок выплат", "срок возмещ", "рабочих дней"],
+}
+
+UNIT_MARKERS = re.compile(r'(\d+\s?%|\d+\s?руб|\bдней\b|\bдня\b|\bмесяц)', re.IGNORECASE)
+
+# Теги, которые никогда не должны попадать в текст: скрипты, стили, меню,
+# футер, куки-баннеры и т.п. BeautifulSoup НЕ убирает script/style из
+# get_text() сам по себе — их надо явно вырезать.
+NOISE_TAGS = ["script", "style", "noscript", "nav", "footer", "header",
+              "iframe", "svg", "form", "button"]
+NOISE_CLASS_HINTS = ["cookie", "menu", "banner", "footer", "header", "modal", "popup"]
+
+
+def _clean_soup(soup):
+    for tag in soup.find_all(NOISE_TAGS):
+        tag.decompose()
+    for tag in soup.find_all(True, class_=True):
+        classes = " ".join(tag.get("class", [])).lower()
+        if any(hint in classes for hint in NOISE_CLASS_HINTS):
+            tag.decompose()
+    return soup
+
+
+def _text_blocks(soup):
+    """Текст по отдельным блокам (параграф/пункт списка/ячейка/заголовок),
+    а НЕ вся страница одной строкой. Это главное отличие от старой версии:
+    старый код склеивал весь текст страницы без разделителей, из-за чего
+    хвост одного блока и начало другого превращались в одно "предложение"."""
+    blocks = []
+    for el in soup.find_all(["p", "li", "td", "th", "h1", "h2", "h3", "h4", "dd", "dt"]):
+        t = ' '.join(el.get_text(" ", strip=True).split())
+        if t:
+            blocks.append(t)
+    return blocks
+
+
+def _score_match(block, word):
+    """Чем ближе к 'настоящему' содержательному предложению — тем выше score."""
+    length = len(block)
+    if length < 15 or length > 300:
+        return -1  # слишком короткое (обрывок меню) или слишком длинное (мусор)
+    score = 0
+    if UNIT_MARKERS.search(block):
+        score += 3  # есть %, руб., "дней" — почти наверняка релевантно
+    if block.lower().count(word) == 1:
+        score += 1  # слово встречается один раз, не спам-повтор
+    # штраф за типичный мусор навигации/футера
+    if any(x in block.lower() for x in ["войти", "регистрац", "подпис", "©", "все права"]):
+        score -= 5
+    return score
+
+
 def parse_source(url):
     try:
         response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(response.text, 'html.parser')
-        text = soup.get_text()
-        text = ' '.join(text.split())
-        
+        soup = _clean_soup(soup)
+        blocks = _text_blocks(soup)
+
+        # Сигнал того, что страница рендерится через JS и requests её не видит:
+        # мало текстовых блоков или почти весь текст короче ожидаемого.
+        if len(blocks) < 5:
+            print(f"      ⚠️ {url}: подозрительно мало контента ({len(blocks)} блоков) — "
+                  f"возможно, страница требует JS-рендеринга (playwright/selenium)")
+            return None
+
         result = {}
-        keywords = {
-            "franchise": ["франшиз", "безусловн", "условн"],
-            "total_loss": ["тотал", "гибель", "уничтож"],
-            "drone": ["бпла", "беспилот", "дрон"],
-            "repair_type": ["ремонт", "стоа", "дилер"],
-            "payment_terms": ["выплат", "возмещ", "срок", "дней"]
-        }
-        
-        for key, words in keywords.items():
+        for key, words in KEYWORDS.items():
+            best_block, best_score = None, 0
             for word in words:
-                if word in text.lower():
-                    pattern = r'[^.!?]{0,50}' + word + r'[^.!?]{0,100}[.!?]'
-                    matches = re.findall(pattern, text.lower(), re.IGNORECASE)
-                    if matches:
-                        clean = re.sub(r'\s+', ' ', matches[0].strip())
-                        if len(clean) > 10 and len(clean) < 150:
-                            result[key] = clean.capitalize()
-                            break
-        
-        return result
-    except Exception as e:
+                for block in blocks:
+                    if word in block.lower():
+                        score = _score_match(block, word)
+                        if score > best_score:
+                            best_block, best_score = block, score
+            if best_block:
+                result[key] = best_block
+
+        return result if result else None
+    except Exception:
         return None
 
 def parse_all_sources():
