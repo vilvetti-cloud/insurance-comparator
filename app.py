@@ -8,185 +8,385 @@ import secrets
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
-# ==================== ДАННЫЕ ====================
-INSURANCE_DATA = {
+# ==================== ВСЕ ИСТОЧНИКИ ДАННЫХ ====================
+
+SOURCES = {
+    # === ОФИЦИАЛЬНЫЕ САЙТЫ ===
     "РЕСО-Гарантия": {
-        "franchise": "Безусловная / условно-безусловная (с 1-го или со 2-го случая)",
-        "without_certificates": "Стекла без ограничений; 1 кузовной элемент в год",
-        "gap": "Отдельный риск",
-        "total_loss": "75%",
-        "fire": "Входит",
-        "terrorism": "Входит",
-        "drone": "Лимит 1% СС",
-        "tow_truck": "Лимит 1% СС",
-        "repair_type": "Ремонт у официального дилера",
-        "payment_terms": "5 рабочих дней",
-        "advantages": "Ремонт у дилера, 5 дней на выплату, без учета износа",
-        "weak_points": "Требуется уточнение условий по телефону",
-        "rating": "4.5",
-        "offices": "1200+"
-    },
-    "СОГАЗ": {
-        "franchise": "Безусловная / условно-безусловная / динамическая",
-        "without_certificates": "Вариантно: 1 раз один элемент / Неограниченно стекла + 1 раз кузовной",
-        "gap": "Указывается отдельным риском",
-        "total_loss": "70%",
-        "fire": "Входит",
-        "terrorism": "Исключение",
-        "drone": "Исключение",
-        "tow_truck": "Лимит 0,5% от СС",
-        "repair_type": "Ремонт на СТОА страховщика",
-        "payment_terms": "30 рабочих дней",
-        "advantages": "Гибкие условия, надёжность",
-        "weak_points": "Тотал 70%, срок выплаты 30 дней",
-        "rating": "4.3",
-        "offices": "500+"
-    },
-    "АльфаСтрахование": {
-        "franchise": "Условно-безусловная (применяется к Хищению)",
-        "without_certificates": "Стекла без ограничений + 1 кузовной элемент 2 раза в год",
-        "gap": "Включен по умолчанию",
-        "total_loss": "75%",
-        "fire": "За доп. плату, 0,8% от СС",
-        "terrorism": "За доп. плату, 0,2-0,3% от СС",
-        "drone": "За доп. плату",
-        "tow_truck": "Петковые ТС - 5 000 руб.; Прочие - 10 000 руб.",
-        "repair_type": "Ремонт на СТОА страховщика",
-        "payment_terms": "7 рабочих дней",
-        "advantages": "Без справок с бонусами",
-        "weak_points": "Франшиза действует на Хищение, самовозгорание - за доп. плату",
-        "rating": "4.6",
-        "offices": "600+"
+        "urls": [
+            "https://reso.ru/individual/property/flat/",
+            "https://reso.ru/individual/property/flat/vse-vklucheno/"
+        ],
+        "parser": "parse_reso"
     },
     "Ингосстрах": {
-        "franchise": "Условная/условно-безусловная по каждому случаю или со 2-го случая",
-        "without_certificates": "1 раз в год: ЛПКП не более 1-й детали; остекление кузова",
-        "gap": "Включен при отметке «Постоянная страховая сумма»",
-        "total_loss": "75%",
-        "fire": "Входит",
-        "terrorism": "За доп. плату, 0,3%",
-        "drone": "За доп. плату",
-        "tow_truck": "По запросу",
-        "repair_type": "Ремонт на СТОА страховщика",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Широкая сеть офисов, гибкие условия",
-        "weak_points": "Без справок – только ЛКП 1 детали, возможны ограничения по пробегу",
-        "rating": "4.4",
-        "offices": "900+"
-    },
-    "Ренессанс": {
-        "franchise": "11 видов франшиз (безусловная, франшиза виновника, со 2-го случая)",
-        "without_certificates": "Вариативно (стекла 1 раз в год / без ограничений / до 5% СС 2 раза)",
-        "gap": "Отдельный риск",
-        "total_loss": "75%",
-        "fire": "Только для электромобилей",
-        "terrorism": "За доп. плату, 0,5% от СС на легковые ТС",
-        "drone": "За доп. плату, 0,5% от СС на легковые",
-        "tow_truck": "Петковые ТС - лимит 10 000 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Много вариантов франшизы, гибкие условия",
-        "weak_points": "Франшиза по хищению/угону, эвакуация - за доп. плату",
-        "rating": "4.3",
-        "offices": "500+"
+        "urls": [
+            "https://www.ingos.ru/property/flat",
+            "https://www.ingos.ru/faq/chasto-zadavaemye-voprosy-po-strahovaniyu-kvartiry"
+        ],
+        "parser": "parse_ingos"
     },
     "Т-Страхование": {
-        "franchise": "Условно-безусловная (для ТС старше 5 лет - обязательные франшизы)",
-        "without_certificates": "Стекла: неогранич. кол-во раз; Кузовные элементы: 1 раз в год - до 3% от СС",
-        "gap": "Отдельный риск",
-        "total_loss": "65%",
-        "fire": "Нет инф.",
-        "terrorism": "Нет инф.",
-        "drone": "Нет инф.",
-        "tow_truck": "Лимит 10 000 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "5 рабочих дней",
-        "advantages": "Онлайн-оформление, без справок",
-        "weak_points": "Ниже порог тотала, обязательные франшизы для некоторых сегментов",
-        "rating": "4.7",
-        "offices": "онлайн"
+        "urls": [
+            "https://tbank.ru/insurance/help/estate/property/about/about-policy/"
+        ],
+        "parser": "parse_tinkoff"
     },
-    "ВСК": {
-        "franchise": "Условно-безусловная (может не применяться по отдельным рискам)",
-        "without_certificates": "Стекла: 5% СС (неагрегатная); Прочие элементы: 3% СС (агрегатная)",
-        "gap": "Включен, если указан 1 период страхования (1 год)",
-        "total_loss": "75%",
-        "fire": "Исключение из страхового покрытия",
-        "terrorism": "Исключение из страхового покрытия",
-        "drone": "Включен при наличии в полисе GAP и отметки официальный дилер",
-        "tow_truck": "Петковые ТС - лимит 5 000 руб.; Прочие - лимит 15 000 руб.",
-        "repair_type": "Ремонт на СТОА страховщика",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Гибкие условия по справкам",
-        "weak_points": "Камеры кругового обзора не оплачиваются без справок, самовозгорание - исключено",
-        "rating": "4.2",
-        "offices": "800+"
-    },
-    "Согласие": {
-        "franchise": "Условно-безусловная / динамическая",
-        "without_certificates": "Неограниченно стекла (искл. крыша и люк) + 1 раз любой элемент",
-        "gap": "В разделе 'Условия страхования' указывается как риск ГЭП",
-        "total_loss": "70%",
-        "fire": "За доп. плату, 1.15% для ФЛ",
-        "terrorism": "За доп. плату, тариф 1.1% только для МСК и МО",
-        "drone": "За доп. плату",
-        "tow_truck": "5 000 руб. (до 3,5 т); 10 000 руб. (свыше 3,5 т)",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Гибкие условия",
-        "weak_points": "Тотал 70% (РЕСО 75%), эвакуатор 5 000 руб. (ниже РЕСО)",
-        "rating": "4.2",
-        "offices": "300+"
-    },
-    "Югория": {
-        "franchise": "Условно-безусловная (при пролонгации - 3% от СС на каждый случай)",
-        "without_certificates": "Стекла: 1 раз (исключая панорамную крышу)",
-        "gap": "По типу страховой суммы: неагрегатная - изменяющаяся",
-        "total_loss": "Не указан",
-        "fire": "Исключение из покрытия",
-        "terrorism": "Нет инф.",
-        "drone": "Входит",
-        "tow_truck": "Лимит 5% от СС, но не более 15 000 рублей",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Гибкие условия пролонгации",
-        "weak_points": "При пролонгации возможна доп. франшиза, самовозгорание исключено",
-        "rating": "3.9",
-        "offices": "400+"
+    "АльфаСтрахование": {
+        "urls": [
+            "https://alfastrahovanie.sddbk.ru/imushestvo/strahovanie-ot-bpla/"
+        ],
+        "parser": "parse_alfa"
     },
     "СберСтрахование": {
-        "franchise": "6 видов франшиз (условная, безусловная, динамическая, со 2-го случая, агрегатная)",
-        "without_certificates": "Вариантно: 1 раз - 1 деталь кузова + стекла / Только стекла",
-        "gap": "Включен, если СС индексируемая",
-        "total_loss": "70%",
-        "fire": "Исключение",
-        "terrorism": "Исключение",
-        "drone": "Исключение",
-        "tow_truck": "Петковые ТС - 6 000 руб.; Грузовые - 12 000 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "7 рабочих дней",
-        "advantages": "Много вариантов франшизы",
-        "weak_points": "Тотал 70% (РЕСО 75%), аваром/эвакуация могут быть исключены",
-        "rating": "4.0",
-        "offices": "1000+"
+        "urls": [
+            "https://sberbankins.ru/products/home-insurance-online/"
+        ],
+        "parser": "parse_sber"
+    },
+    "Согласие": {
+        "urls": [
+            "https://soglasie.ru/company/insurance-rules/"
+        ],
+        "parser": "parse_soglasie"
+    },
+    "Югория": {
+        "urls": [
+            "https://ugsk.ru/property/"
+        ],
+        "parser": "parse_yugoria"
     },
     "Совкомбанк Страхование": {
-        "franchise": "Условно-безусловная / Условная по отдельным группам / Обязательная 25%",
-        "without_certificates": "Только ремонт или замена ветрового стекла",
-        "gap": "Нет инф.",
-        "total_loss": "75%",
-        "fire": "Входит в группу событий №2",
-        "terrorism": "Исключение",
-        "drone": "Исключение",
-        "tow_truck": "Лимит 6 500 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Группы событий",
-        "weak_points": "Терроризм исключен, обязательная франшиза",
-        "rating": "3.8",
-        "offices": "200+"
+        "urls": [
+            "https://sovcomins.ru/"
+        ],
+        "parser": "parse_sovcombank"
+    },
+    "ВСК": {
+        "urls": [
+            "https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"
+        ],
+        "parser": "parse_vsk"
+    },
+    "СОГАЗ": {
+        "urls": [
+            "https://www.sogaz.ru/"
+        ],
+        "parser": "parse_sogaz"
+    },
+    "Ренессанс": {
+        "urls": [
+            "https://renessans.sddbk.ru/imushestvo/kvartira/"
+        ],
+        "parser": "parse_renessans"
+    },
+
+    # === АГРЕГАТОРЫ ===
+    "Сравни.ру": {
+        "urls": [
+            "https://sravni.ru/strahovanie-nedvizhimosti/ingosstrah/",
+            "https://sravni.ru/strahovanie-nedvizhimosti/yugoriya/"
+        ],
+        "type": "aggregator"
+    },
+    "Finuslugi": {
+        "urls": [
+            "https://finuslugi.ru"
+        ],
+        "type": "aggregator"
+    },
+    "Polis.online": {
+        "urls": [
+            "https://polis.online"
+        ],
+        "type": "aggregator"
+    },
+
+    # === БРОКЕРЫ ===
+    "Infullbroker": {
+        "urls": [
+            "https://infullbroker.ru"
+        ],
+        "type": "broker"
+    },
+    "Prosto.insure": {
+        "urls": [
+            "https://prosto.insure/company/tinkoff-strakhovanie"
+        ],
+        "type": "broker"
+    },
+
+    # === НОВОСТНЫЕ САЙТЫ ===
+    "VC.ru": {
+        "urls": [
+            "https://vc.ru"
+        ],
+        "type": "news"
+    },
+    "Vedomosti": {
+        "urls": [
+            "https://vedomosti.ru"
+        ],
+        "type": "news"
     }
 }
+
+def parse_source(url, company_name):
+    """Парсит один источник"""
+    try:
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        soup = BeautifulSoup(response.text, 'html.parser')
+        text = soup.get_text()
+        
+        # Ищем ключевые слова
+        keywords = {
+            "franchise": ["франшиз", "безусловн", "условн"],
+            "total_loss": ["тотал", "гибель", "уничтож"],
+            "drone": ["бпла", "беспилот", "дрон"],
+            "repair": ["ремонт", "стоа", "дилер"],
+            "payment": ["выплат", "возмещ", "срок"]
+        }
+        
+        result = {}
+        for key, words in keywords.items():
+            for word in words:
+                if word in text.lower():
+                    # Находим предложение с этим словом
+                    sentences = re.split(r'[.!?]\s*', text)
+                    for sentence in sentences:
+                        if word in sentence.lower():
+                            result[key] = sentence.strip()
+                            break
+                    break
+        
+        return result
+    except Exception as e:
+        print(f"   ❌ Ошибка парсинга {url}: {e}")
+        return None
+
+def parse_all_sources():
+    """Парсит все источники и объединяет данные"""
+    print(f"🔄 Начинаю сбор данных из {len(SOURCES)} источников...")
+    
+    all_data = {}
+    
+    for source_name, source_info in SOURCES.items():
+        print(f"\n📂 Парсим: {source_name}")
+        
+        # Если это компания — есть url и parser
+        if "urls" in source_info:
+            company_data = {}
+            for url in source_info["urls"]:
+                result = parse_source(url, source_name)
+                if result:
+                    for key, value in result.items():
+                        if value and (not company_data.get(key) or len(value) > len(str(company_data.get(key, "")))):
+                            company_data[key] = value
+                time.sleep(1)
+            
+            # Если нашли данные — сохраняем
+            if company_data:
+                # Добавляем недостающие поля из fallback
+                fallback = get_fallback_data().get(source_name, {})
+                for key, value in fallback.items():
+                    if key not in company_data or not company_data[key]:
+                        company_data[key] = value
+                
+                all_data[source_name] = company_data
+                print(f"   ✅ Найдено данных: {len(company_data)} полей")
+    
+    # Добавляем компании, которые не удалось распарсить
+    fallback_data = get_fallback_data()
+    for company, data in fallback_data.items():
+        if company not in all_data:
+            all_data[company] = data
+            print(f"   📦 Использованы запасные данные для {company}")
+    
+    all_data["_last_updated"] = datetime.now().isoformat()
+    all_data["_sources_count"] = len(SOURCES)
+    
+    return all_data
+
+def get_fallback_data():
+    """Запасные данные для всех компаний"""
+    return {
+        "РЕСО-Гарантия": {
+            "franchise": "Безусловная / условно-безусловная",
+            "without_certificates": "Стекла без ограничений; 1 кузовной элемент в год",
+            "gap": "Отдельный риск",
+            "total_loss": "75%",
+            "fire": "Входит",
+            "terrorism": "Входит",
+            "drone": "Лимит 1% СС",
+            "tow_truck": "Лимит 1% СС",
+            "repair_type": "Ремонт у официального дилера",
+            "payment_terms": "5 рабочих дней",
+            "advantages": "Ремонт у дилера, 5 дней на выплату, без учета износа",
+            "weak_points": "Требуется уточнение условий по телефону",
+            "rating": "4.5",
+            "offices": "1200+"
+        },
+        "СОГАЗ": {
+            "franchise": "Безусловная / условно-безусловная / динамическая",
+            "without_certificates": "Вариантно: 1 раз один элемент / Неограниченно стекла + 1 раз кузовной",
+            "gap": "Указывается отдельным риском",
+            "total_loss": "70%",
+            "fire": "Входит",
+            "terrorism": "Исключение",
+            "drone": "Исключение",
+            "tow_truck": "Лимит 0,5% от СС",
+            "repair_type": "Ремонт на СТОА страховщика",
+            "payment_terms": "30 рабочих дней",
+            "advantages": "Гибкие условия, надёжность",
+            "weak_points": "Тотал 70%, срок выплаты 30 дней",
+            "rating": "4.3",
+            "offices": "500+"
+        },
+        "АльфаСтрахование": {
+            "franchise": "Условно-безусловная (применяется к Хищению)",
+            "without_certificates": "Стекла без ограничений + 1 кузовной элемент 2 раза в год",
+            "gap": "Включен по умолчанию",
+            "total_loss": "75%",
+            "fire": "За доп. плату, 0,8% от СС",
+            "terrorism": "За доп. плату, 0,2-0,3% от СС",
+            "drone": "За доп. плату",
+            "tow_truck": "Петковые ТС - 5 000 руб.; Прочие - 10 000 руб.",
+            "repair_type": "Ремонт на СТОА страховщика",
+            "payment_terms": "7 рабочих дней",
+            "advantages": "Без справок с бонусами",
+            "weak_points": "Франшиза действует на Хищение, самовозгорание - за доп. плату",
+            "rating": "4.6",
+            "offices": "600+"
+        },
+        "Ингосстрах": {
+            "franchise": "Условная/условно-безусловная по каждому случаю или со 2-го случая",
+            "without_certificates": "1 раз в год: ЛПКП не более 1-й детали; остекление кузова",
+            "gap": "Включен при отметке «Постоянная страховая сумма»",
+            "total_loss": "75%",
+            "fire": "Входит",
+            "terrorism": "За доп. плату, 0,3%",
+            "drone": "За доп. плату",
+            "tow_truck": "По запросу",
+            "repair_type": "Ремонт на СТОА страховщика",
+            "payment_terms": "10 рабочих дней",
+            "advantages": "Широкая сеть офисов, гибкие условия",
+            "weak_points": "Без справок – только ЛКП 1 детали, возможны ограничения по пробегу",
+            "rating": "4.4",
+            "offices": "900+"
+        },
+        "Ренессанс": {
+            "franchise": "11 видов франшиз (безусловная, франшиза виновника, со 2-го случая)",
+            "without_certificates": "Вариативно (стекла 1 раз в год / без ограничений / до 5% СС 2 раза)",
+            "gap": "Отдельный риск",
+            "total_loss": "75%",
+            "fire": "Только для электромобилей",
+            "terrorism": "За доп. плату, 0,5% от СС на легковые ТС",
+            "drone": "За доп. плату, 0,5% от СС на легковые",
+            "tow_truck": "Петковые ТС - лимит 10 000 руб.",
+            "repair_type": "Ремонт или выплата",
+            "payment_terms": "10 рабочих дней",
+            "advantages": "Много вариантов франшизы, гибкие условия",
+            "weak_points": "Франшиза по хищению/угону, эвакуация - за доп. плату",
+            "rating": "4.3",
+            "offices": "500+"
+        },
+        "Т-Страхование": {
+            "franchise": "Условно-безусловная (для ТС старше 5 лет - обязательные франшизы)",
+            "without_certificates": "Стекла: неогранич. кол-во раз; Кузовные элементы: 1 раз в год - до 3% от СС",
+            "gap": "Отдельный риск",
+            "total_loss": "65%",
+            "fire": "Нет инф.",
+            "terrorism": "Нет инф.",
+            "drone": "Нет инф.",
+            "tow_truck": "Лимит 10 000 руб.",
+            "repair_type": "Ремонт или выплата",
+            "payment_terms": "5 рабочих дней",
+            "advantages": "Онлайн-оформление, без справок",
+            "weak_points": "Ниже порог тотала, обязательные франшизы для некоторых сегментов",
+            "rating": "4.7",
+            "offices": "онлайн"
+        },
+        "ВСК": {
+            "franchise": "Условно-безусловная (может не применяться по отдельным рискам)",
+            "without_certificates": "Стекла: 5% СС (неагрегатная); Прочие элементы: 3% СС (агрегатная)",
+            "gap": "Включен, если указан 1 период страхования (1 год)",
+            "total_loss": "75%",
+            "fire": "Исключение из страхового покрытия",
+            "terrorism": "Исключение из страхового покрытия",
+            "drone": "Включен при наличии в полисе GAP и отметки официальный дилер",
+            "tow_truck": "Петковые ТС - лимит 5 000 руб.; Прочие - лимит 15 000 руб.",
+            "repair_type": "Ремонт на СТОА страховщика",
+            "payment_terms": "10 рабочих дней",
+            "advantages": "Гибкие условия по справкам",
+            "weak_points": "Камеры кругового обзора не оплачиваются без справок, самовозгорание - исключено",
+            "rating": "4.2",
+            "offices": "800+"
+        },
+        "Согласие": {
+            "franchise": "Условно-безусловная / динамическая",
+            "without_certificates": "Неограниченно стекла (искл. крыша и люк) + 1 раз любой элемент",
+            "gap": "В разделе 'Условия страхования' указывается как риск ГЭП",
+            "total_loss": "70%",
+            "fire": "За доп. плату, 1.15% для ФЛ",
+            "terrorism": "За доп. плату, тариф 1.1% только для МСК и МО",
+            "drone": "За доп. плату",
+            "tow_truck": "5 000 руб. (до 3,5 т); 10 000 руб. (свыше 3,5 т)",
+            "repair_type": "Ремонт или выплата",
+            "payment_terms": "10 рабочих дней",
+            "advantages": "Гибкие условия",
+            "weak_points": "Тотал 70% (РЕСО 75%), эвакуатор 5 000 руб. (ниже РЕСО)",
+            "rating": "4.2",
+            "offices": "300+"
+        },
+        "Югория": {
+            "franchise": "Условно-безусловная (при пролонгации - 3% от СС на каждый случай)",
+            "without_certificates": "Стекла: 1 раз (исключая панорамную крышу)",
+            "gap": "По типу страховой суммы: неагрегатная - изменяющаяся",
+            "total_loss": "Не указан",
+            "fire": "Исключение из покрытия",
+            "terrorism": "Нет инф.",
+            "drone": "Входит",
+            "tow_truck": "Лимит 5% от СС, но не более 15 000 рублей",
+            "repair_type": "Ремонт или выплата",
+            "payment_terms": "10 рабочих дней",
+            "advantages": "Гибкие условия пролонгации",
+            "weak_points": "При пролонгации возможна доп. франшиза, самовозгорание исключено",
+            "rating": "3.9",
+            "offices": "400+"
+        },
+        "СберСтрахование": {
+            "franchise": "6 видов франшиз (условная, безусловная, динамическая, со 2-го случая, агрегатная)",
+            "without_certificates": "Вариантно: 1 раз - 1 деталь кузова + стекла / Только стекла",
+            "gap": "Включен, если СС индексируемая",
+            "total_loss": "70%",
+            "fire": "Исключение",
+            "terrorism": "Исключение",
+            "drone": "Исключение",
+            "tow_truck": "Петковые ТС - 6 000 руб.; Грузовые - 12 000 руб.",
+            "repair_type": "Ремонт или выплата",
+            "payment_terms": "7 рабочих дней",
+            "advantages": "Много вариантов франшизы",
+            "weak_points": "Тотал 70% (РЕСО 75%), аваром/эвакуация могут быть исключены",
+            "rating": "4.0",
+            "offices": "1000+"
+        },
+        "Совкомбанк Страхование": {
+            "franchise": "Условно-безусловная / Условная по отдельным группам / Обязательная 25%",
+            "without_certificates": "Только ремонт или замена ветрового стекла",
+            "gap": "Нет инф.",
+            "total_loss": "75%",
+            "fire": "Входит в группу событий №2",
+            "terrorism": "Исключение",
+            "drone": "Исключение",
+            "tow_truck": "Лимит 6 500 руб.",
+            "repair_type": "Ремонт или выплата",
+            "payment_terms": "10 рабочих дней",
+            "advantages": "Группы событий",
+            "weak_points": "Терроризм исключен, обязательная франшиза",
+            "rating": "3.8",
+            "offices": "200+"
+        }
+    }
 
 ALL_COMPANIES = list(INSURANCE_DATA.keys())
 USERS_FILE = "users.json"
