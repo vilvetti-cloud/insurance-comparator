@@ -289,7 +289,7 @@ def _score_match(block, word):
 # Оба используют OpenAI-совместимый REST-формат, доп. пакеты не нужны.
 
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 PROVIDER_CONFIG = {
@@ -382,7 +382,9 @@ def parse_source_llm(url):
             print(f"      ⚠️ {LLM_PROVIDER} {llm_response.status_code} для {url}: {llm_response.text[:300]}")
             return None
 
-        message = llm_response.json()["choices"][0].get("message") or {}
+        choices = llm_response.json().get("choices") or []
+        first_choice = choices[0] if choices else None
+        message = (first_choice or {}).get("message") or {}
         tool_calls = message.get("tool_calls") or []
         if not tool_calls:
             return None
