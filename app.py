@@ -10,11 +10,32 @@ from bs4 import BeautifulSoup
 import re
 import time
 import urllib3
+import re
 from duckduckgo_search import DDGS
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
+
+def clean_text_blocks(html):
+    """Очищает HTML и возвращает список текстовых блоков"""
+    soup = BeautifulSoup(html, 'html.parser')
+    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "iframe", "svg", "form", "button"]):
+        tag.decompose()
+    blocks = []
+    for el in soup.find_all(["p", "li", "td", "th", "h1", "h2", "h3", "h4", "dd", "dt"]):
+        t = ' '.join(el.get_text(" ", strip=True).split())
+        if t and len(t) > 15:
+            blocks.append(t)
+    return blocks
+
+def fetch_page(url, use_js=False):
+    try:
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
+        return response.text
+    except Exception as e:
+        print(f"      ⚠️ Ошибка загрузки {url}: {e}")
+        return None
 
 # ==================== ЗАПАСНЫЕ ДАННЫЕ ====================
 
