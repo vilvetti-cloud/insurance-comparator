@@ -225,12 +225,9 @@ REQUIRED_FIELDS = [
     "advantages", "weak_points"
 ]
 
-# ==================== СЕТЕВЫЕ ЗАПРОСЫ ====================
-
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
 }
 
 def fetch_page(url):
@@ -285,9 +282,6 @@ def is_fully_populated(data):
             return False
     return True
 
-# ==================== LLM ====================
-
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 
 EXTRACT_TOOL_SCHEMA = {
@@ -331,8 +325,6 @@ def parse_with_llm(text):
     except Exception:
         return None
 
-# ==================== КАСКАД ====================
-
 def parse_company_cascade(company_name):
     card = {}
     
@@ -372,7 +364,7 @@ def parse_company_cascade(company_name):
     merge_fields(parse_url_with_llm(cbr_url))
     if is_fully_populated(card): return card
 
-    # 6. Поиск DDGS (обновленный импорт)
+    # 6. Поиск DDGS (исправленный импорт)
     try:
         with DDGS() as ddgs:
             results = list(ddgs.text(f"КАСКО {company_name} условия 2026", max_results=3))
@@ -400,7 +392,6 @@ def load_or_update_data():
         except Exception:
             pass
     
-    # Если кэша нет — моментально отдаем fallback, а не зависаем на парсинге
     data = get_fallback_data()
     data["_last_updated"] = datetime.now().isoformat()
     return data
@@ -413,7 +404,8 @@ ALL_COMPANIES = list(get_fallback_data().keys())
 @app.route('/')
 def index():
     last_updated = INSURANCE_DATA.get("_last_updated", "неизвестно")
-    return render_template('index.html', companies=ALL_COMPANIES, now=datetime.now().strftime("%Y-%m-%d %H:%M"), last_updated=last_updated)
+    # Передаем user=True чтобы скрывать блоки авторизации в шаблоне
+    return render_template('index.html', companies=ALL_COMPANIES, now=datetime.now().strftime("%Y-%m-%d %H:%M"), last_updated=last_updated, user=True)
 
 @app.route('/compare', methods=['POST'])
 def compare():
@@ -451,7 +443,8 @@ def compare():
         data1=data1, 
         data2=data2, 
         advantages=advantages, 
-        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        user=True
     )
 
 if __name__ == '__main__':
