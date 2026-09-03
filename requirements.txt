@@ -1,6 +1,5 @@
-flask
-gunicorn
+Flask
 requests
 beautifulsoup4
-lxml_html_clean
-duckduckgo-search
+duckduckgo_search
+gunicorn
