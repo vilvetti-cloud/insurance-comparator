@@ -10,7 +10,6 @@ from bs4 import BeautifulSoup
 import re
 import time
 import urllib3
-from requests_html import HTMLSession
 from duckduckgo_search import DDGS
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
