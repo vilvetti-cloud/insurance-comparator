@@ -274,32 +274,13 @@ EXTRACT_TOOL_SCHEMA = {
 }
 
 def fetch_page(url, use_js=False):
-    """Загружает страницу"""
     try:
-        if use_js:
-            session = HTMLSession()
-            response = session.get(url, timeout=15)
-            response.html.render(sleep=2, timeout=20)
-            return response.html.html
-        else:
-            response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
-            return response.text
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
+        return response.text
     except Exception as e:
         print(f"      ⚠️ Ошибка загрузки {url}: {e}")
         return None
-
-def clean_text_blocks(html):
-    """Очищает HTML и возвращает список блоков"""
-    soup = BeautifulSoup(html, 'html.parser')
-    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "iframe", "svg", "form", "button"]):
-        tag.decompose()
-    blocks = []
-    for el in soup.find_all(["p", "li", "td", "th", "h1", "h2", "h3", "h4", "dd", "dt"]):
-        t = ' '.join(el.get_text(" ", strip=True).split())
-        if t and len(t) > 15:
-            blocks.append(t)
-    return blocks
-
+        
 def parse_with_llm(text):
     """Универсальный LLM-парсинг через Groq"""
     provider = PROVIDER_CONFIG.get(LLM_PROVIDER)
