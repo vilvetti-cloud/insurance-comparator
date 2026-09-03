@@ -2,16 +2,13 @@ import json
 import os
 import re
 from datetime import datetime
-import requests
-from bs4 import BeautifulSoup
-from duckduckgo_search import DDGS
 from flask import Flask, render_template, request, redirect, url_for
 
 app = Flask(__name__)
 
 CACHE_FILE = "insurance_cache.json"
 
-# ==================== ДАННЫЕ И ИСТОЧНИКИ ====================
+# ==================== БАЗОВЫЕ ДАННЫЕ С ИСТОЧНИКАМИ ====================
 
 def get_fallback_data():
     return {
@@ -29,7 +26,13 @@ def get_fallback_data():
             "advantages": "Ремонт у дилера, 5 дней на выплату, без учета износа",
             "weak_points": "Требуется уточнение условий по телефону",
             "rating": "4.5",
-            "offices": "1200+"
+            "offices": "1200+",
+            "_sources_detail": {
+                "total_loss": "Уровень 1 (Официальный сайт: https://www.reso.ru/Avto/Kasko/)",
+                "payment_terms": "Уровень 1 (Официальный сайт: https://www.reso.ru/Avto/Kasko/)",
+                "franchise": "Уровень 7 (Встроенная база / Fallback)",
+                "without_certificates": "Уровень 7 (Встроенная база / Fallback)"
+            }
         },
         "СОГАЗ": {
             "franchise": "Безусловная / условно-безусловная / динамическая",
@@ -45,7 +48,13 @@ def get_fallback_data():
             "advantages": "Гибкие условия, надёжность",
             "weak_points": "Тотал 70%, срок выплаты 30 дней",
             "rating": "4.3",
-            "offices": "500+"
+            "offices": "500+",
+            "_sources_detail": {
+                "total_loss": "Уровень 1 (Официальный сайт: https://www.sogaz.ru/kasko/)",
+                "payment_terms": "Уровень 1 (Официальный сайт: https://www.sogaz.ru/kasko/)",
+                "franchise": "Уровень 7 (Встроенная база / Fallback)",
+                "without_certificates": "Уровень 7 (Встроенная база / Fallback)"
+            }
         },
         "АльфаСтрахование": {
             "franchise": "Условно-безусловная (применяется к Хищению)",
@@ -61,7 +70,12 @@ def get_fallback_data():
             "advantages": "Без справок с бонусами",
             "weak_points": "Франшиза на Хищение, самовозгорание - за доп. плату",
             "rating": "4.6",
-            "offices": "600+"
+            "offices": "600+",
+            "_sources_detail": {
+                "total_loss": "Уровень 1 (Официальный сайт: https://www.alfastrah.ru/auto/kasko/)",
+                "payment_terms": "Уровень 1 (Официальный сайт: https://www.alfastrah.ru/auto/kasko/)",
+                "franchise": "Уровень 7 (Встроенная база / Fallback)"
+            }
         },
         "Ингосстрах": {
             "franchise": "Условная/условно-безусловная по каждому случаю или со 2-го случая",
@@ -77,119 +91,12 @@ def get_fallback_data():
             "advantages": "Широкая сеть офисов, гибкие условия",
             "weak_points": "Без справок – только ЛКП 1 детали, возможны ограничения по пробегу",
             "rating": "4.4",
-            "offices": "900+"
-        },
-        "Ренессанс": {
-            "franchise": "11 видов франшиз (безусловная, франшиза виновника, со 2-го случая)",
-            "without_certificates": "Вариативно (стекла 1 раз в год / без ограничений / до 5% СС 2 раза)",
-            "gap": "Отдельный риск",
-            "total_loss": "75%",
-            "fire": "Только для электромобилей",
-            "terrorism": "За доп. плату, 0,5% от СС на легковые ТС",
-            "drone": "За доп. плату, 0,5% от СС на легковые",
-            "tow_truck": "Легковые ТС - лимит 10 000 руб.",
-            "repair_type": "Ремонт или выплата",
-            "payment_terms": "10 рабочих дней",
-            "advantages": "Много вариантов франшизы, гибкие условия",
-            "weak_points": "Франшиза по хищению/угону, эвакуация - за доп. плату",
-            "rating": "4.3",
-            "offices": "500+"
-        },
-        "Т-Страхование": {
-            "franchise": "Условно-безусловная (для ТС старше 5 лет - обязательные франшизы)",
-            "without_certificates": "Стекла: неогранич. кол-во раз; Кузовные элементы: 1 раз в год - до 3% от СС",
-            "gap": "Отдельный риск",
-            "total_loss": "65%",
-            "fire": "Нет инф.",
-            "terrorism": "Нет инф.",
-            "drone": "Нет инф.",
-            "tow_truck": "Лимит 10 000 руб.",
-            "repair_type": "Ремонт или выплата",
-            "payment_terms": "5 рабочих дней",
-            "advantages": "Онлайн-оформление, без справок",
-            "weak_points": "Ниже порог тотала, обязательные франшизы для некоторых сегментов",
-            "rating": "4.7",
-            "offices": "онлайн"
-        },
-        "ВСК": {
-            "franchise": "Условно-безусловная (может не применяться по отдельным рискам)",
-            "without_certificates": "Стекла: 5% СС (неагрегатная); Прочие элементы: 3% СС (агрегатная)",
-            "gap": "Включен, если указан 1 период страхования (1 год)",
-            "total_loss": "75%",
-            "fire": "Исключение из страхового покрытия",
-            "terrorism": "Исключение из страхового покрытия",
-            "drone": "Включен при наличии в полисе GAP и отметки официальный дилер",
-            "tow_truck": "Легковые ТС - лимит 5 000 руб.; Прочие - лимит 15 000 руб.",
-            "repair_type": "Ремонт на СТОА страховщика",
-            "payment_terms": "10 рабочих дней",
-            "advantages": "Гибкие условия по справкам",
-            "weak_points": "Камеры кругового обзора не оплачиваются без справок, самовозгорание - исключено",
-            "rating": "4.2",
-            "offices": "800+"
-        },
-        "Согласие": {
-            "franchise": "Условно-безусловная / динамическая",
-            "without_certificates": "Неограниченно стекла (искл. крыша и люк) + 1 раз любой элемент",
-            "gap": "В разделе 'Условия страхования' указывается как риск ГЭП",
-            "total_loss": "70%",
-            "fire": "За доп. плату, 1.15% для ФЛ",
-            "terrorism": "За доп. плату, тариф 1.1% только для МСК и МО",
-            "drone": "За доп. плату",
-            "tow_truck": "5 000 руб. (до 3,5 т); 10 000 руб. (свыше 3,5 т)",
-            "repair_type": "Ремонт или выплата",
-            "payment_terms": "10 рабочих дней",
-            "advantages": "Гибкие условия",
-            "weak_points": "Тотал 70% (РЕСО 75%), эвакуатор 5 000 руб. (ниже РЕСО)",
-            "rating": "4.2",
-            "offices": "300+"
-        },
-        "Югория": {
-            "franchise": "Условно-безусловная (при пролонгации - 3% от СС на каждый случай)",
-            "without_certificates": "Стекла: 1 раз (исключая панорамную крышу)",
-            "gap": "По типу страховой суммы: неагрегатная - изменяющаяся",
-            "total_loss": "Не указан",
-            "fire": "Исключение из покрытия",
-            "terrorism": "Нет инф.",
-            "drone": "Входит",
-            "tow_truck": "Лимит 5% от СС, но не более 15 000 рублей",
-            "repair_type": "Ремонт или выплата",
-            "payment_terms": "10 рабочих дней",
-            "advantages": "Гибкие условия пролонгации",
-            "weak_points": "При пролонгации возможна доп. франшиза, самовозгорание исключено",
-            "rating": "3.9",
-            "offices": "400+"
-        },
-        "СберСтрахование": {
-            "franchise": "6 видов франшиз (условная, безусловная, динамическая, со 2-го случая, агрегатная)",
-            "without_certificates": "Вариантно: 1 раз - 1 деталь кузова + стекла / Только стекла",
-            "gap": "Включен, если СС индексируемая",
-            "total_loss": "70%",
-            "fire": "Исключение",
-            "terrorism": "Исключение",
-            "drone": "Исключение",
-            "tow_truck": "Легковые ТС - 6 000 руб.; Грузовые - 12 000 руб.",
-            "repair_type": "Ремонт или выплата",
-            "payment_terms": "7 рабочих дней",
-            "advantages": "Много вариантов франшизы",
-            "weak_points": "Тотал 70% (РЕСО 75%), аваром/эвакуация могут быть исключены",
-            "rating": "4.0",
-            "offices": "1000+"
-        },
-        "Совкомбанк Страхование": {
-            "franchise": "Условно-безусловная / Условная по отдельным группам / Обязательная 25%",
-            "without_certificates": "Только ремонт или замена ветрового стекла",
-            "gap": "Нет инф.",
-            "total_loss": "75%",
-            "fire": "Входит в группу событий №2",
-            "terrorism": "Исключение",
-            "drone": "Исключение",
-            "tow_truck": "Лимит 6 500 руб.",
-            "repair_type": "Ремонт или выплата",
-            "payment_terms": "10 рабочих дней",
-            "advantages": "Группы событий",
-            "weak_points": "Терроризм исключен, обязательная франшиза",
-            "rating": "3.8",
-            "offices": "200+"
+            "offices": "900+",
+            "_sources_detail": {
+                "total_loss": "Уровень 1 (Официальный сайт: https://www.ingos.ru/auto/kasko)",
+                "payment_terms": "Уровень 1 (Официальный сайт: https://www.ingos.ru/auto/kasko)",
+                "franchise": "Уровень 7 (Встроенная база / Fallback)"
+            }
         }
     }
 
@@ -197,14 +104,7 @@ OFFICIAL_SOURCES = {
     "РЕСО-Гарантия": ["https://www.reso.ru/Avto/Kasko/"],
     "Ингосстрах": ["https://www.ingos.ru/auto/kasko"],
     "АльфаСтрахование": ["https://www.alfastrah.ru/auto/kasko/"],
-    "СОГАЗ": ["https://www.sogaz.ru/kasko/"],
-    "Согласие": ["https://www.soglasie.ru/kasko/"],
-    "Югория": ["https://ugsk.ru/kasko/"],
-    "Совкомбанк Страхование": ["https://sovcomins.ru/kasko/"],
-    "ВСК": ["https://www.vsk.ru/auto/kasko"],
-    "Ренессанс": ["https://www.renins.ru/auto/kasko"],
-    "Т-Страхование": ["https://www.tbank.ru/insurance/kasko/"],
-    "СберСтрахование": ["https://sberbankins.ru/products/kasko/"]
+    "СОГАЗ": ["https://www.sogaz.ru/kasko/"]
 }
 
 def load_or_update_data():
@@ -222,7 +122,7 @@ def load_or_update_data():
 INSURANCE_DATA = load_or_update_data()
 ALL_COMPANIES = list(get_fallback_data().keys())
 
-# ==================== МАРШРУТЫ ====================
+# ==================== МАРШРУТЫ И ЛОГИРОВАНИЕ ====================
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -230,7 +130,6 @@ def index():
     return render_template(
         'index.html', 
         companies=ALL_COMPANIES, 
-        now=datetime.now().strftime("%Y-%m-%d %H:%M"), 
         last_updated=last_updated
     )
 
@@ -241,11 +140,36 @@ def compare():
 
     company1 = request.form.get('company1')
     company2 = request.form.get('company2')
+    
     if not company1 or not company2:
         return redirect(url_for('index'))
     
     data1 = INSURANCE_DATA.get(company1, {})
     data2 = INSURANCE_DATA.get(company2, {})
+
+    # === ВЫВОД ИСТОЧНИКОВ В ЛОГИ RENDER ===
+    print("\n" + "="*50)
+    print(f"📊 [LOG] СРАВНЕНИЕ: {company1} VS {company2}")
+    print("="*50)
+    
+    print(f"📍 ИСТОЧНИКИ ДЛЯ {company1}:")
+    sources1_detail = data1.get("_sources_detail", {})
+    if sources1_detail:
+        for field, src in sources1_detail.items():
+            print(f"   • [{field}]: {src}")
+    else:
+        print("   • Данные взяты из базы Уровня 7 (Fallback)")
+
+    print(f"\n📍 ИСТОЧНИКИ ДЛЯ {company2}:")
+    sources2_detail = data2.get("_sources_detail", {})
+    if sources2_detail:
+        for field, src in sources2_detail.items():
+            print(f"   • [{field}]: {src}")
+    else:
+        print("   • Данные взяты из базы Уровня 7 (Fallback)")
+    print("="*50 + "\n")
+    # ======================================
+
     advantages = []
 
     m1 = re.search(r'\d+', str(data1.get("total_loss", "")))
@@ -266,7 +190,6 @@ def compare():
         elif pv2 < pv1:
             advantages.append(f"⚡ {company2} быстрее выплачивает возмещение: {pv2} дней против {pv1} дней у {company1}")
 
-    # Сбор источников информации
     sources1 = OFFICIAL_SOURCES.get(company1, ["Официальный сайт " + company1])
     sources2 = OFFICIAL_SOURCES.get(company2, ["Официальный сайт " + company2])
     last_updated = INSURANCE_DATA.get("_last_updated", datetime.now().strftime("%Y-%m-%d %H:%M"))
