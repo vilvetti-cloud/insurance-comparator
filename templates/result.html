@@ -2,63 +2,78 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Результат сравнения</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сравнение {{ company1 }} и {{ company2 }}</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f8f9fa; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        h2 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
+        body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 30px 15px; margin: 0; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+        h2 { text-align: center; color: #1e293b; margin-top: 0; margin-bottom: 20px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
-        th, td { border: 1px solid #dee2e6; padding: 10px; text-align: left; }
-        th { background: #343a40; color: white; }
-        .sources-block { background: #e9ecef; padding: 15px; border-radius: 6px; font-size: 13px; margin-top: 20px; }
-        .sources-block h4 { margin: 0 0 10px 0; }
-        .back-btn { display: inline-block; padding: 10px 18px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
+        th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; }
+        th { background: #1e293b; color: white; }
+        .param { font-weight: bold; background: #f8fafc; width: 25%; }
+        .info-btn { color: #3b82f6; cursor: pointer; text-decoration: none; margin-left: 4px; font-weight: bold; }
+        .sources-box { background: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 13px; color: #475569; margin-bottom: 20px; }
+        .btn-back { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
+        .btn-back:hover { background: #0056b3; }
     </style>
 </head>
 <body>
+
 <div class="container">
     <h2>📊 {{ company1 }} vs {{ company2 }}</h2>
-    
+
     <table>
         <thead>
             <tr>
-                <th>Параметр</th>
+                <th class="param">Параметр</th>
                 <th>{{ company1 }}</th>
                 <th>{{ company2 }}</th>
             </tr>
         </thead>
         <tbody>
+            {% set fields = [
+                ('franchise', 'Франшиза'),
+                ('without_certificates', 'Без справок'),
+                ('gap', 'GAP-страхование'),
+                ('total_loss', 'Порог тотала'),
+                ('fire', 'Пожар'),
+                ('terrorism', 'Терроризм'),
+                ('drone', 'БПЛА / Дроны'),
+                ('tow_truck', 'Эвакуатор'),
+                ('repair_type', 'Тип ремонта'),
+                ('payment_terms', 'Срок выплат'),
+                ('advantages', 'Преимущества'),
+                ('weak_points', 'Недостатки'),
+                ('rating', 'Рейтинг'),
+                ('offices', 'Офисы')
+            ] %}
+
+            {% for key, label in fields %}
             <tr>
-                <td>Порог тотала</td>
-                <td title="Источник: {{ data1._sources_detail.total_loss }}">{{ data1.total_loss }} ℹ️</td>
-                <td title="Источник: {{ data2._sources_detail.total_loss }}">{{ data2.total_loss }} ℹ️</td>
+                <td class="param">{{ label }}</td>
+                <td>
+                    {{ data1.get(key, '—') }}
+                    <span class="info-btn" title="Источник: {{ data1._sources_detail.get(key, 'Запасная база') }}">ℹ️</span>
+                </td>
+                <td>
+                    {{ data2.get(key, '—') }}
+                    <span class="info-btn" title="Источник: {{ data2._sources_detail.get(key, 'Запасная база') }}">ℹ️</span>
+                </td>
             </tr>
-            <tr>
-                <td>Срок выплат</td>
-                <td title="Источник: {{ data1._sources_detail.payment_terms }}">{{ data1.payment_terms }} ℹ️</td>
-                <td title="Источник: {{ data2._sources_detail.payment_terms }}">{{ data2.payment_terms }} ℹ️</td>
-            </tr>
-            <tr>
-                <td>Франшиза</td>
-                <td title="Источник: {{ data1._sources_detail.franchise }}">{{ data1.franchise }} ℹ️</td>
-                <td title="Источник: {{ data2._sources_detail.franchise }}">{{ data2.franchise }} ℹ️</td>
-            </tr>
-            <tr>
-                <td>Без справок</td>
-                <td title="Источник: {{ data1._sources_detail.without_certificates }}">{{ data1.without_certificates }} ℹ️</td>
-                <td title="Источник: {{ data2._sources_detail.without_certificates }}">{{ data2.without_certificates }} ℹ️</td>
-            </tr>
+            {% endfor %}
         </tbody>
     </table>
 
-    <div class="sources-block">
-        <h4>📌 Источники данных:</h4>
-        <p><strong>{{ company1 }}:</strong> {{ sources1[0] }}</p>
-        <p><strong>{{ company2 }}:</strong> {{ sources2[0] }}</p>
-        <p><em>* Наведите курсор на значок ℹ️ в любой строке таблицы, чтобы узнать уровень и точный URL источника конкретного параметра.</em></p>
+    <div class="sources-box">
+        <strong>📌 Официальные сайты:</strong><br>
+        • <strong>{{ company1 }}:</strong> <a href="{{ sources1[0] }}" target="_blank">{{ sources1[0] }}</a><br>
+        • <strong>{{ company2 }}:</strong> <a href="{{ sources2[0] }}" target="_blank">{{ sources2[0] }}</a><br>
+        <small style="margin-top: 8px; display: block;">* Наведите на значок ℹ️ в таблице, чтобы узнать уровень источника конкретного параметра.</small>
     </div>
 
-    <a href="/" class="back-btn">← Новое сравнение</a>
+    <a href="/" class="btn-back">← Новое сравнение</a>
 </div>
+
 </body>
 </html>
