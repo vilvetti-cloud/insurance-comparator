@@ -609,4 +609,15 @@ th{background:#2c3e50;color:white}
 <tr><td><strong>Эвакуатор</strong></td><td>{{ data1.tow_truck or '—' }}</td><td>{{ data2.tow_truck or '—' }}</td></tr>
 <tr><td><strong>Тип ремонта</strong></td><td>{{ data1.repair_type or '—' }}</td><td>{{ data2.repair_type or '—' }}</td></tr>
 <tr><td><strong>Срок выплаты</strong></td><td>{{ data1.payment_terms or '—' }}</td><td>{{ data2.payment_terms or '—' }}</td></tr>
-<tr><td><strong>Рейтинг</strong
+<tr><td><strong>Рейтинг</strong></td><td>{{ data1.rating or '—' }}</td><td>{{ data2.rating or '—' }}</td></tr>
+<tr><td><strong>Офисы</strong></td><td>{{ data1.offices or '—' }}</td><td>{{ data2.offices or '—' }}</td></tr>
+<tr><td><strong>Преимущества</strong></td><td>{{ data1.advantages or '—' }}</td><td>{{ data2.advantages or '—' }}</td></tr>
+<tr><td><strong>Слабые места</strong></td><td style="color:#e74c3c;">{{ data1.weak_points or '—' }}</td><td style="color:#e74c3c;">{{ data2.weak_points or '—' }}</td></tr>
+</table>
+<div class="analysis"><strong>📋 Анализ</strong><ul>{% for adv in advantages %}<li class="advantage">{{ adv }}</li>{% endfor %}</ul></div>
+<a href="/" class="back">← На главную</a>
+<div class="meta">Обновлено: {{ timestamp }}</div>
+</div>
+</body>
+</html>
+''')
