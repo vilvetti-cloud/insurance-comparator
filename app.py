@@ -1,17 +1,16 @@
-from flask import Flask, render_template, request
-from datetime import datetime
 import json
 import os
-import requests
-from bs4 import BeautifulSoup
 import re
 import time
-import urllib3
-from duckduckgo_search import DDGS
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from datetime import datetime
+import requests
+from bs4 import BeautifulSoup
+from ddgs import DDGS
+from flask import Flask, render_template, request
 
 app = Flask(__name__)
+
+CACHE_FILE = "insurance_cache.json"
 
 # ==================== ЗАПАСНЫЕ ДАННЫЕ (Уровень 7) ====================
 
@@ -195,8 +194,6 @@ def get_fallback_data():
         }
     }
 
-# ==================== ИСТОЧНИКИ (Уровни 1-5) ====================
-
 OFFICIAL_SOURCES = {
     "РЕСО-Гарантия": ["https://www.reso.ru/Avto/Kasko/"],
     "Ингосстрах": ["https://www.ingos.ru/auto/kasko"],
@@ -218,15 +215,8 @@ AGGREGATOR_SOURCES = [
     {"name": "kupipolis", "url": "https://kupipolis.ru/pravila-strahovaniya/"}
 ]
 
-REVIEW_SOURCES = [
-    "https://polis.online",
-    "https://polis812.ru",
-    "https://infullbroker.ru"
-]
-
-FEEDBACK_SOURCES = [
-    "https://sravni.ru"
-]
+REVIEW_SOURCES = ["https://polis.online", "https://polis812.ru", "https://infullbroker.ru"]
+FEEDBACK_SOURCES = ["https://sravni.ru"]
 
 REQUIRED_FIELDS = [
     "franchise", "without_certificates", "gap", "total_loss", 
@@ -235,32 +225,40 @@ REQUIRED_FIELDS = [
     "advantages", "weak_points"
 ]
 
-# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+# ==================== СЕТЕВЫЕ ЗАПРОСЫ ====================
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+}
+
+def fetch_page(url):
+    try:
+        response = requests.get(url, timeout=8, headers=HEADERS)
+        if response.status_code == 200:
+            return response.text
+    except Exception:
+        pass
+    return None
 
 def clean_text_blocks(html):
     soup = BeautifulSoup(html, 'html.parser')
-    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "iframe", "svg", "form", "button"]):
+    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "iframe", "svg", "form"]):
         tag.decompose()
     blocks = []
-    for el in soup.find_all(["p", "li", "td", "th", "h1", "h2", "h3", "h4", "dd", "dt"]):
+    for el in soup.find_all(["p", "li", "td", "th", "h1", "h2", "h3", "h4"]):
         t = ' '.join(el.get_text(" ", strip=True).split())
         if t and len(t) > 15:
             blocks.append(t)
     return blocks
-
-def fetch_page(url):
-    try:
-        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
-        return response.text
-    except Exception as e:
-        return None
 
 def parse_url_with_llm(url):
     html = fetch_page(url)
     if not html:
         return None
     blocks = clean_text_blocks(html)
-    if len(blocks) < 5:
+    if len(blocks) < 3:
         return None
     return parse_with_llm("\n".join(blocks))
 
@@ -283,65 +281,43 @@ def company_slug(company_name):
 def is_fully_populated(data):
     for f in REQUIRED_FIELDS:
         val = str(data.get(f, "")).strip()
-        if not val or val == "—" or val == "Нет инф.":
+        if not val or val in ["—", "Нет инф."]:
             return False
     return True
 
-# ==================== LLM-ПАРСИНГ ====================
+# ==================== LLM ====================
 
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-
-PROVIDER_CONFIG = {
-    "groq": {"url": "https://api.groq.com/openai/v1/chat/completions", "key_env": "GROQ_API_KEY", "model": GROQ_MODEL},
-}
 
 EXTRACT_TOOL_SCHEMA = {
     "type": "function",
     "function": {
         "name": "extract_insurance_fields",
-        "description": "Извлекает условия автостраховки КАСКО из текста.",
+        "description": "Извлекает условия КАСКО из текста.",
         "parameters": {
             "type": "object",
-            "properties": {
-                "franchise": {"type": "string"},
-                "without_certificates": {"type": "string"},
-                "gap": {"type": "string"},
-                "total_loss": {"type": "string"},
-                "fire": {"type": "string"},
-                "terrorism": {"type": "string"},
-                "drone": {"type": "string"},
-                "tow_truck": {"type": "string"},
-                "repair_type": {"type": "string"},
-                "payment_terms": {"type": "string"},
-                "rating": {"type": "string"},
-                "offices": {"type": "string"},
-                "advantages": {"type": "string"},
-                "weak_points": {"type": "string"}
-            },
+            "properties": {k: {"type": "string"} for k in REQUIRED_FIELDS},
             "required": []
         }
     }
 }
 
 def parse_with_llm(text):
-    provider = PROVIDER_CONFIG.get(LLM_PROVIDER)
-    if not provider:
-        return None
-    api_key = os.environ.get(provider["key_env"])
+    api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         return None
     try:
         response = requests.post(
-            provider["url"],
+            "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
-                "model": provider["model"],
-                "messages": [{"role": "user", "content": "Извлеки условия КАСКО из текста:\n\n" + text[:6000]}],
+                "model": GROQ_MODEL,
+                "messages": [{"role": "user", "content": "Извлеки условия КАСКО:\n\n" + text[:5000]}],
                 "tools": [EXTRACT_TOOL_SCHEMA],
                 "tool_choice": "auto",
             },
-            timeout=20,
+            timeout=15,
         )
         if not response.ok:
             return None
@@ -355,10 +331,9 @@ def parse_with_llm(text):
     except Exception:
         return None
 
-# ==================== КАСКАДНЫЙ ПОИСК (Уровни 1 - 7) ====================
+# ==================== КАСКАД ====================
 
 def parse_company_cascade(company_name):
-    print(f"\n🏢 Старт каскадного поиска для {company_name}...")
     card = {}
     
     def merge_fields(new_data):
@@ -367,67 +342,49 @@ def parse_company_cascade(company_name):
         for k, v in new_data.items():
             if k in REQUIRED_FIELDS and v:
                 curr_v = str(card.get(k, "")).strip()
-                if not curr_v or curr_v == "—" or curr_v == "Нет инф.":
+                if not curr_v or curr_v in ["—", "Нет инф."]:
                     card[k] = v
 
-    # Уровень 1: Официальные страницы
-    print("  🔍 [Уровень 1] Официальный сайт...")
+    # 1. Официальные сайты
     if company_name in OFFICIAL_SOURCES:
         for url in OFFICIAL_SOURCES[company_name]:
             merge_fields(parse_url_with_llm(url))
-            if is_fully_populated(card):
-                return card
+            if is_fully_populated(card): return card
 
-    # Уровень 2: Агрегаторы правил
-    print("  🔍 [Уровень 2] Агрегаторы правил...")
+    # 2. Агрегаторы
     slug = company_slug(company_name)
     for agg in AGGREGATOR_SOURCES:
         merge_fields(parse_url_with_llm(f"{agg['url']}{slug}/"))
-        if is_fully_populated(card):
-            return card
+        if is_fully_populated(card): return card
 
-    # Уровень 3: Сравнительные обзоры
-    print("  🔍 [Уровень 3] Сравнительные обзоры...")
+    # 3. Обзоры
     for base_url in REVIEW_SOURCES:
         merge_fields(parse_url_with_llm(f"{base_url}/kasko/{slug}/"))
-        if is_fully_populated(card):
-            return card
+        if is_fully_populated(card): return card
 
-    # Уровень 4: Отзывы клиентов
-    print("  🔍 [Уровень 4] Отзывы...")
+    # 4. Отзывы
     for base_url in FEEDBACK_SOURCES:
         merge_fields(parse_url_with_llm(f"{base_url}/strahovanie/avto/kasko/{slug}/"))
-        if is_fully_populated(card):
-            return card
+        if is_fully_populated(card): return card
 
-    # Уровень 5: Банк России
-    print("  🔍 [Уровень 5] Банк России (cbr.ru)...")
-    cbr_url = f"https://cbr.ru/search/?q={company_name}+жалобы+страхование"
+    # 5. ЦБ РФ
+    cbr_url = f"https://cbr.ru/search/?q={company_name}+жалобы"
     merge_fields(parse_url_with_llm(cbr_url))
-    if is_fully_populated(card):
-        return card
+    if is_fully_populated(card): return card
 
-    # Уровень 6: Поисковые системы (DuckDuckGo / Google)
-    print("  🔍 [Уровень 6] Инернет-поиск (DuckDuckGo)...")
-    queries = [
-        f"КАСКО {company_name} условия 2026",
-        f"{company_name} КАСКО франшиза тотал БПЛА 2026"
-    ]
-    for q in queries:
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(q, max_results=3))
-                for r in results:
-                    url = r.get('href', '')
-                    if url and not any(x in url for x in ['youtube', 'facebook', 'twitter']):
-                        merge_fields(parse_url_with_llm(url))
-                        if is_fully_populated(card):
-                            return card
-        except Exception:
-            pass
+    # 6. Поиск DDGS (обновленный импорт)
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(f"КАСКО {company_name} условия 2026", max_results=3))
+            for r in results:
+                url = r.get('href', '')
+                if url and not any(x in url for x in ['youtube', 'facebook', 'vk.com']):
+                    merge_fields(parse_url_with_llm(url))
+                    if is_fully_populated(card): return card
+    except Exception:
+        pass
 
-    # Уровень 7: Запасные данные (Fallback)
-    print("  📦 [Уровень 7] Применение запасных данных (Fallback)...")
+    # 7. Fallback
     fallback = get_fallback_data().get(company_name, {})
     for k, v in fallback.items():
         if k not in card or not card[k] or card[k] in ["—", "Нет инф."]:
@@ -435,19 +392,21 @@ def parse_company_cascade(company_name):
 
     return card
 
-def parse_all_companies(company_list):
-    print("🔄 Запуск сбора данных по компаниям...")
-    data = {}
-    for company in company_list:
-        data[company] = parse_company_cascade(company)
-        time.sleep(0.3)
+def load_or_update_data():
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    
+    # Если кэша нет — моментально отдаем fallback, а не зависаем на парсинге
+    data = get_fallback_data()
     data["_last_updated"] = datetime.now().isoformat()
     return data
 
-# ==================== ДАННЫЕ ====================
-
+INSURANCE_DATA = load_or_update_data()
 ALL_COMPANIES = list(get_fallback_data().keys())
-INSURANCE_DATA = parse_all_companies(ALL_COMPANIES)
 
 # ==================== МАРШРУТЫ ====================
 
@@ -467,12 +426,8 @@ def compare():
     data2 = INSURANCE_DATA.get(company2, {})
     advantages = []
 
-    # Безопасное сравнение тотала с использованием регулярных выражений
-    t1_raw = str(data1.get("total_loss", ""))
-    t2_raw = str(data2.get("total_loss", ""))
-    m1 = re.search(r'\d+', t1_raw)
-    m2 = re.search(r'\d+', t2_raw)
-
+    m1 = re.search(r'\d+', str(data1.get("total_loss", "")))
+    m2 = re.search(r'\d+', str(data2.get("total_loss", "")))
     if m1 and m2:
         v1, v2 = int(m1.group()), int(m2.group())
         if v1 > v2:
@@ -480,12 +435,8 @@ def compare():
         elif v2 > v1:
             advantages.append(f"✅ {company2} имеет более высокий порог тотала: {v2}% против {v1}% у {company1}")
 
-    # Сравнение сроков выплат
-    p1_raw = str(data1.get("payment_terms", ""))
-    p2_raw = str(data2.get("payment_terms", ""))
-    pm1 = re.search(r'\d+', p1_raw)
-    pm2 = re.search(r'\d+', p2_raw)
-
+    pm1 = re.search(r'\d+', str(data1.get("payment_terms", "")))
+    pm2 = re.search(r'\d+', str(data2.get("payment_terms", "")))
     if pm1 and pm2:
         pv1, pv2 = int(pm1.group()), int(pm2.group())
         if pv1 < pv2:
@@ -504,4 +455,5 @@ def compare():
     )
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
