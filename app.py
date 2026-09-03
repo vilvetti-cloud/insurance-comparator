@@ -1,5 +1,7 @@
-# app.py — АГЕНТ ДЛЯ СРАВНЕНИЯ КАСКО
-# Источники: официальные сайты → агрегаторы → обзоры → отзывы → ЦБ → DuckDuckGo → fallback
+# app.py — ПОЛНАЯ ВЕРСИЯ
+# Убрана регистрация и оплата
+# Настроен DuckDuckGo с фильтрацией
+# Добавлены новые источники для проблемных компаний
 
 from flask import Flask, render_template, request
 from datetime import datetime
@@ -10,32 +12,11 @@ from bs4 import BeautifulSoup
 import re
 import time
 import urllib3
-import re
 from duckduckgo_search import DDGS
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
-
-def clean_text_blocks(html):
-    """Очищает HTML и возвращает список текстовых блоков"""
-    soup = BeautifulSoup(html, 'html.parser')
-    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "iframe", "svg", "form", "button"]):
-        tag.decompose()
-    blocks = []
-    for el in soup.find_all(["p", "li", "td", "th", "h1", "h2", "h3", "h4", "dd", "dt"]):
-        t = ' '.join(el.get_text(" ", strip=True).split())
-        if t and len(t) > 15:
-            blocks.append(t)
-    return blocks
-
-def fetch_page(url, use_js=False):
-    try:
-        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
-        return response.text
-    except Exception as e:
-        print(f"      ⚠️ Ошибка загрузки {url}: {e}")
-        return None
 
 # ==================== ЗАПАСНЫЕ ДАННЫЕ ====================
 
@@ -85,7 +66,7 @@ def get_fallback_data():
             "repair_type": "Ремонт на СТОА страховщика",
             "payment_terms": "7 рабочих дней",
             "advantages": "Без справок с бонусами",
-            "weak_points": "Франшиза действует на Хищение, самовозгорание - за доп. плату",
+            "weak_points": "Франшиза на Хищение, самовозгорание - за доп. плату",
             "rating": "4.6",
             "offices": "600+"
         },
@@ -221,47 +202,89 @@ def get_fallback_data():
 
 # ==================== ИСТОЧНИКИ ====================
 
-# УРОВЕНЬ 1: Официальные страницы "Раскрытие информации"
+# УРОВЕНЬ 1: Официальные сайты (обновлённые)
 OFFICIAL_SOURCES = {
-    "ВСК": ["https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"],
-    "Ингосстрах": ["https://www.ingos.ru/company/disclosure-info/insurance-rules/"],
-    "АльфаСтрахование": ["https://alfastrah.ru/rules/avtomobil/kasko/"],
+    "РЕСО-Гарантия": ["https://reso.ru/individual/property/flat/"],
+    "Ингосстрах": ["https://www.ingos.ru/property/flat"],
+    "АльфаСтрахование": ["https://alfastrah.ru/rules/avtomobil/kasko/", "https://alfastrah.ru/rules/"],
     "СОГАЗ": ["https://www.sogaz.ru/"],
-    "Согласие": ["https://soglasie.ru/company/insurance-rules/"],
+    "Согласие": ["https://soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/", "https://soglasie.ru/company/insurance-rules/"],
     "Югория": ["https://ugsk.ru/about/disclosure-information/rules/"],
-    "Совкомбанк Страхование": ["https://casco.sovcombank.ru/"],
-    "РЕСО-Гарантия": ["https://reso.ru/"],
+    "Совкомбанк Страхование": ["https://sovcomins.ru/", "https://casco.sovcombank.ru/"],
+    "ВСК": ["https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"],
     "Ренессанс": ["https://renessans.sddbk.ru/imushestvo/kvartira/"],
     "Т-Страхование": ["https://tbank.ru/insurance/help/estate/property/about/about-policy/"],
     "СберСтрахование": ["https://sberbankins.ru/products/home-insurance-online/"]
 }
 
-# УРОВЕНЬ 2: Агрегаторы правил
+# УРОВЕНЬ 2: Агрегаторы
 AGGREGATOR_SOURCES = [
-    {"name": "kaskometr", "url": "https://kaskometr.ru/pravila/", "slug_style": "name"},
-    {"name": "finuslugi", "url": "https://finuslugi.ru/pravila_kasko/", "slug_style": "name"},
-    {"name": "asccenter", "url": "https://asccenter.ru/info/docs/pravila-tarify-kasko/", "slug_style": "name"},
-    {"name": "kupipolis", "url": "https://kupipolis.ru/pravila-strahovaniya/", "slug_style": "name"}
+    {"name": "kaskometr", "url": "https://kaskometr.ru/pravila/"},
+    {"name": "finuslugi", "url": "https://finuslugi.ru/pravila_kasko/"},
+    {"name": "asccenter", "url": "https://asccenter.ru/info/docs/pravila-tarify-kasko/"},
+    {"name": "kupipolis", "url": "https://kupipolis.ru/pravila-strahovaniya/"}
 ]
 
-# УРОВЕНЬ 3: Сравнительные обзоры
+# УРОВЕНЬ 3: Обзоры
 REVIEW_SOURCES = [
     "https://polis.online",
     "https://polis812.ru",
     "https://infullbroker.ru"
 ]
 
-# УРОВЕНЬ 4: Отзывы клиентов
+# УРОВЕНЬ 4: Отзывы
 FEEDBACK_SOURCES = [
     "https://sravni.ru"
 ]
 
-# УРОВЕНЬ 5: Банк России (статистика жалоб)
-CBR_URL = "https://cbr.ru"
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
-# ==================== ПАРСИНГ ====================
+def clean_text_blocks(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "iframe", "svg", "form", "button"]):
+        tag.decompose()
+    blocks = []
+    for el in soup.find_all(["p", "li", "td", "th", "h1", "h2", "h3", "h4", "dd", "dt"]):
+        t = ' '.join(el.get_text(" ", strip=True).split())
+        if t and len(t) > 15:
+            blocks.append(t)
+    return blocks
 
-# LLM-парсинг через Groq (бесплатный)
+def fetch_page(url, use_js=False):
+    try:
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
+        return response.text
+    except Exception as e:
+        print(f"      ⚠️ Ошибка загрузки {url}: {e}")
+        return None
+
+def parse_url_with_llm(url):
+    html = fetch_page(url)
+    if not html:
+        return None
+    blocks = clean_text_blocks(html)
+    if len(blocks) < 5:
+        return None
+    return parse_with_llm("\n".join(blocks))
+
+def company_slug(company_name):
+    mapping = {
+        "РЕСО-Гарантия": "reso-garantiya",
+        "СОГАЗ": "sogaz",
+        "АльфаСтрахование": "alfa-strakhovanie",
+        "Ингосстрах": "ingosstrakh",
+        "Ренессанс": "renessans",
+        "Т-Страхование": "t-strakhovanie",
+        "ВСК": "vsk",
+        "Согласие": "soglasie",
+        "Югория": "yugoria",
+        "СберСтрахование": "sber",
+        "Совкомбанк Страхование": "sovcombank"
+    }
+    return mapping.get(company_name, company_name.lower().replace(" ", "-"))
+
+# ==================== LLM-ПАРСИНГ ====================
+
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 
@@ -280,29 +303,20 @@ EXTRACT_TOOL_SCHEMA = {
                 "franchise": {"type": "string", "description": "Тип и размер франшизы"},
                 "without_certificates": {"type": "string", "description": "Условия выплаты без справок"},
                 "gap": {"type": "string", "description": "Наличие и условия GAP-страхования"},
-                "total_loss": {"type": "string", "description": "Порог полной гибели/тотала в % от страховой суммы"},
+                "total_loss": {"type": "string", "description": "Порог полной гибели/тотала в %"},
                 "fire": {"type": "string", "description": "Условия покрытия самовозгорания"},
-                "terrorism": {"type": "string", "description": "Условия покрытия риска терроризма"},
-                "drone": {"type": "string", "description": "Условия покрытия ущерба от БПЛА/дронов"},
+                "terrorism": {"type": "string", "description": "Условия покрытия терроризма"},
+                "drone": {"type": "string", "description": "Условия покрытия ущерба от БПЛА"},
                 "tow_truck": {"type": "string", "description": "Условия оплаты эвакуатора"},
-                "repair_type": {"type": "string", "description": "Где производится ремонт (СТОА, дилер, выплата)"},
-                "payment_terms": {"type": "string", "description": "Срок выплаты возмещения в рабочих днях"},
+                "repair_type": {"type": "string", "description": "Где производится ремонт"},
+                "payment_terms": {"type": "string", "description": "Срок выплаты возмещения"},
             },
             "required": []
         }
     }
 }
 
-def fetch_page(url, use_js=False):
-    try:
-        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
-        return response.text
-    except Exception as e:
-        print(f"      ⚠️ Ошибка загрузки {url}: {e}")
-        return None
-        
 def parse_with_llm(text):
-    """Универсальный LLM-парсинг через Groq"""
     provider = PROVIDER_CONFIG.get(LLM_PROVIDER)
     if not provider:
         return None
@@ -315,7 +329,7 @@ def parse_with_llm(text):
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
                 "model": provider["model"],
-                "messages": [{"role": "user", "content": "Извлеки условия КАСКО из текста. Заполни только то, что явно указано, ничего не выдумывай:\n\n" + text[:6000]}],
+                "messages": [{"role": "user", "content": "Извлеки условия КАСКО из текста. Заполни только то, что явно указано:\n\n" + text[:6000]}],
                 "tools": [EXTRACT_TOOL_SCHEMA],
                 "tool_choice": "auto",
             },
@@ -333,46 +347,19 @@ def parse_with_llm(text):
     except Exception:
         return None
 
-def parse_url_with_llm(url, use_js=False):
-    """Парсит URL через LLM"""
-    html = fetch_page(url, use_js)
-    if not html:
-        return None
-    blocks = clean_text_blocks(html)
-    if len(blocks) < 5:
-        return None
-    return parse_with_llm("\n".join(blocks))
-
-def company_slug(company_name):
-    """Генерирует slug для URL"""
-    mapping = {
-        "РЕСО-Гарантия": "reso-garantiya",
-        "СОГАЗ": "sogaz",
-        "АльфаСтрахование": "alfa-strakhovanie",
-        "Ингосстрах": "ingosstrakh",
-        "Ренессанс": "renessans",
-        "Т-Страхование": "t-strakhovanie",
-        "ВСК": "vsk",
-        "Согласие": "soglasie",
-        "Югория": "yugoria",
-        "СберСтрахование": "sber",
-        "Совкомбанк Страхование": "sovcombank"
-    }
-    return mapping.get(company_name, company_name.lower().replace(" ", "-"))
+# ==================== УРОВНИ ПОИСКА ====================
 
 def parse_official(company_name):
-    """Уровень 1: Официальные сайты"""
     if company_name not in OFFICIAL_SOURCES:
         return None
     print(f"   🔍 Уровень 1: Официальный сайт...")
     for url in OFFICIAL_SOURCES[company_name]:
-        result = parse_url_with_llm(url, use_js=False)
+        result = parse_url_with_llm(url)
         if result:
             return result
     return None
 
 def parse_aggregators(company_name):
-    """Уровень 2: Агрегаторы правил"""
     print(f"   🔍 Уровень 2: Агрегаторы...")
     slug = company_slug(company_name)
     for agg in AGGREGATOR_SOURCES:
@@ -384,10 +371,10 @@ def parse_aggregators(company_name):
     return None
 
 def parse_reviews(company_name):
-    """Уровень 3: Сравнительные обзоры"""
     print(f"   🔍 Уровень 3: Обзоры...")
+    slug = company_slug(company_name)
     for base_url in REVIEW_SOURCES:
-        url = f"{base_url}/kasko/{company_slug(company_name)}/"
+        url = f"{base_url}/kasko/{slug}/"
         print(f"      📰 {base_url}: {url}")
         result = parse_url_with_llm(url)
         if result:
@@ -395,90 +382,84 @@ def parse_reviews(company_name):
     return None
 
 def parse_feedback(company_name):
-    """Уровень 4: Отзывы клиентов"""
     print(f"   🔍 Уровень 4: Отзывы...")
+    slug = company_slug(company_name)
     for base_url in FEEDBACK_SOURCES:
-        url = f"{base_url}/strahovanie/avto/kasko/{company_slug(company_name)}/"
+        url = f"{base_url}/strahovanie/avto/kasko/{slug}/"
         print(f"      💬 {base_url}: {url}")
         result = parse_url_with_llm(url)
         if result:
             return result
     return None
 
-def parse_cbr(company_name):
-    """Уровень 5: Банк России"""
-    print(f"   🔍 Уровень 5: Банк России...")
-    url = f"{CBR_URL}/statistics/"
-    result = parse_url_with_llm(url)
-    if result:
-        return result
-    return None
-
 def parse_duckduckgo(company_name):
-    """Уровень 6: DuckDuckGo поиск"""
-    print(f"   🔍 Уровень 6: DuckDuckGo...")
-    query = f"КАСКО {company_name} условия 2026"
-    print(f"      🔎 {query}")
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=5))
-            for r in results[:3]:
-                url = r.get('href')
-                if url:
-                    print(f"      🌐 {url}")
-                    result = parse_url_with_llm(url)
-                    if result:
-                        return result
-    except Exception as e:
-        print(f"      ⚠️ DuckDuckGo ошибка: {e}")
+    print(f"   🔍 Уровень 5: DuckDuckGo...")
+    queries = [
+        f"КАСКО {company_name} условия",
+        f"{company_name} КАСКО франшиза",
+        f"{company_name} КАСКО тотал"
+    ]
+    
+    for query in queries:
+        print(f"      🔎 {query}")
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=5))
+                for r in results:
+                    url = r.get('href', '')
+                    title = r.get('title', '').lower()
+                    # Фильтруем мусор: игнорируем Google Support, YouTube, Facebook и т.д.
+                    if not url:
+                        continue
+                    if any(domain in url for domain in [
+                        'support.google.com', 'youtube.com', 'facebook.com', 
+                        'twitter.com', 'instagram.com', 'tiktok.com'
+                    ]):
+                        continue
+                    # Приоритет: сайты со страховой тематикой
+                    if any(keyword in url for keyword in [
+                        'strahovanie', 'kasko', 'avto', 'auto', 'страхование'
+                    ]):
+                        print(f"      🌐 {url}")
+                        result = parse_url_with_llm(url)
+                        if result:
+                            return result
+        except Exception as e:
+            print(f"      ⚠️ DuckDuckGo ошибка: {e}")
     return None
 
 def parse_company(company_name):
-    """Полная цепочка поиска для одной компании"""
     print(f"\n🏢 {company_name}")
     
-    # Уровень 1: Официальный сайт
     result = parse_official(company_name)
     if result:
         print(f"   ✅ Данные найдены (официальный сайт)")
         return result
     
-    # Уровень 2: Агрегаторы
     result = parse_aggregators(company_name)
     if result:
         print(f"   ✅ Данные найдены (агрегатор)")
         return result
     
-    # Уровень 3: Обзоры
     result = parse_reviews(company_name)
     if result:
         print(f"   ✅ Данные найдены (обзор)")
         return result
     
-    # Уровень 4: Отзывы
     result = parse_feedback(company_name)
     if result:
         print(f"   ✅ Данные найдены (отзывы)")
         return result
     
-    # Уровень 5: Банк России
-    result = parse_cbr(company_name)
-    if result:
-        print(f"   ✅ Данные найдены (ЦБ)")
-        return result
-    
-    # Уровень 6: DuckDuckGo
     result = parse_duckduckgo(company_name)
     if result:
         print(f"   ✅ Данные найдены (DuckDuckGo)")
         return result
     
-    # Уровень 7: Запасные данные
     print(f"   📦 Использованы запасные данные")
     return get_fallback_data().get(company_name, {})
 
 def parse_all_companies(company_list):
-    """Парсит все компании"""
     print("🔄 Сбор данных...")
     data = {}
     for company in company_list:
@@ -496,7 +477,7 @@ print("📦 Загрузка данных...")
 INSURANCE_DATA = parse_all_companies(ALL_COMPANIES)
 print(f"✅ Загружено {len(INSURANCE_DATA)} компаний")
 
-# ==================== МАРШРУТЫ ====================
+# ==================== МАРШРУТЫ (без регистрации и оплаты) ====================
 
 @app.route('/')
 def index():
