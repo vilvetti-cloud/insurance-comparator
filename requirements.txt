@@ -2,4 +2,5 @@ flask
 gunicorn
 requests
 beautifulsoup4
-anthropic
+requests-html
+duckduckgo-search
