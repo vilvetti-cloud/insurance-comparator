@@ -1,5 +1,3 @@
-# app.py — РАБОЧАЯ ВЕРСИЯ с новыми ссылками
-
 from flask import Flask, render_template, request
 from datetime import datetime
 import json
@@ -15,7 +13,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
-# ==================== ЗАПАСНЫЕ ДАННЫЕ ====================
+# ==================== ЗАПАСНЫЕ ДАННЫЕ (Уровень 7) ====================
 
 def get_fallback_data():
     return {
@@ -59,7 +57,7 @@ def get_fallback_data():
             "fire": "За доп. плату, 0,8% от СС",
             "terrorism": "За доп. плату, 0,2-0,3% от СС",
             "drone": "За доп. плату",
-            "tow_truck": "Петковые ТС - 5 000 руб.; Прочие - 10 000 руб.",
+            "tow_truck": "Легковые ТС - 5 000 руб.; Прочие - 10 000 руб.",
             "repair_type": "Ремонт на СТОА страховщика",
             "payment_terms": "7 рабочих дней",
             "advantages": "Без справок с бонусами",
@@ -69,7 +67,7 @@ def get_fallback_data():
         },
         "Ингосстрах": {
             "franchise": "Условная/условно-безусловная по каждому случаю или со 2-го случая",
-            "without_certificates": "1 раз в год: ЛПКП не более 1-й детали; остекление кузова",
+            "without_certificates": "1 раз в год: ЛКП не более 1-й детали; остекление кузова",
             "gap": "Включен при отметке «Постоянная страховая сумма»",
             "total_loss": "75%",
             "fire": "Входит",
@@ -91,7 +89,7 @@ def get_fallback_data():
             "fire": "Только для электромобилей",
             "terrorism": "За доп. плату, 0,5% от СС на легковые ТС",
             "drone": "За доп. плату, 0,5% от СС на легковые",
-            "tow_truck": "Петковые ТС - лимит 10 000 руб.",
+            "tow_truck": "Легковые ТС - лимит 10 000 руб.",
             "repair_type": "Ремонт или выплата",
             "payment_terms": "10 рабочих дней",
             "advantages": "Много вариантов франшизы, гибкие условия",
@@ -123,7 +121,7 @@ def get_fallback_data():
             "fire": "Исключение из страхового покрытия",
             "terrorism": "Исключение из страхового покрытия",
             "drone": "Включен при наличии в полисе GAP и отметки официальный дилер",
-            "tow_truck": "Петковые ТС - лимит 5 000 руб.; Прочие - лимит 15 000 руб.",
+            "tow_truck": "Легковые ТС - лимит 5 000 руб.; Прочие - лимит 15 000 руб.",
             "repair_type": "Ремонт на СТОА страховщика",
             "payment_terms": "10 рабочих дней",
             "advantages": "Гибкие условия по справкам",
@@ -171,7 +169,7 @@ def get_fallback_data():
             "fire": "Исключение",
             "terrorism": "Исключение",
             "drone": "Исключение",
-            "tow_truck": "Петковые ТС - 6 000 руб.; Грузовые - 12 000 руб.",
+            "tow_truck": "Легковые ТС - 6 000 руб.; Грузовые - 12 000 руб.",
             "repair_type": "Ремонт или выплата",
             "payment_terms": "7 рабочих дней",
             "advantages": "Много вариантов франшизы",
@@ -197,29 +195,20 @@ def get_fallback_data():
         }
     }
 
-# ==================== ИСТОЧНИКИ ====================
+# ==================== ИСТОЧНИКИ (Уровни 1-5) ====================
 
 OFFICIAL_SOURCES = {
-    "РЕСО-Гарантия": ["https://reso.ru/individual/property/flat/"],
-    "Ингосстрах": ["https://www.ingos.ru/property/flat"],
-    "АльфаСтрахование": [
-        "https://alfastrah.ru/rules/avtomobil/kasko/",
-        "https://alfastrah.ru/rules/"
-    ],
-    "СОГАЗ": ["https://www.sogaz.ru/"],
-    "Согласие": [
-        "https://soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
-        "https://soglasie.ru/company/insurance-rules/"
-    ],
-    "Югория": ["https://ugsk.ru/about/disclosure-information/rules/"],
-    "Совкомбанк Страхование": [
-        "https://sovcomins.ru/",
-        "https://casco.sovcombank.ru/"
-    ],
-    "ВСК": ["https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"],
-    "Ренессанс": ["https://renessans.sddbk.ru/imushestvo/kvartira/"],
-    "Т-Страхование": ["https://tbank.ru/insurance/help/estate/property/about/about-policy/"],
-    "СберСтрахование": ["https://sberbankins.ru/products/home-insurance-online/"]
+    "РЕСО-Гарантия": ["https://www.reso.ru/Avto/Kasko/"],
+    "Ингосстрах": ["https://www.ingos.ru/auto/kasko"],
+    "АльфаСтрахование": ["https://www.alfastrah.ru/auto/kasko/"],
+    "СОГАЗ": ["https://www.sogaz.ru/kasko/"],
+    "Согласие": ["https://www.soglasie.ru/kasko/"],
+    "Югория": ["https://ugsk.ru/kasko/"],
+    "Совкомбанк Страхование": ["https://sovcomins.ru/kasko/"],
+    "ВСК": ["https://www.vsk.ru/auto/kasko"],
+    "Ренессанс": ["https://www.renins.ru/auto/kasko"],
+    "Т-Страхование": ["https://www.tbank.ru/insurance/kasko/"],
+    "СберСтрахование": ["https://sberbankins.ru/products/kasko/"]
 }
 
 AGGREGATOR_SOURCES = [
@@ -237,6 +226,13 @@ REVIEW_SOURCES = [
 
 FEEDBACK_SOURCES = [
     "https://sravni.ru"
+]
+
+REQUIRED_FIELDS = [
+    "franchise", "without_certificates", "gap", "total_loss", 
+    "fire", "terrorism", "drone", "tow_truck", 
+    "repair_type", "payment_terms", "rating", "offices", 
+    "advantages", "weak_points"
 ]
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
@@ -257,7 +253,6 @@ def fetch_page(url):
         response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
         return response.text
     except Exception as e:
-        print(f"      ⚠️ Ошибка загрузки {url}: {e}")
         return None
 
 def parse_url_with_llm(url):
@@ -284,6 +279,13 @@ def company_slug(company_name):
         "Совкомбанк Страхование": "sovcombank"
     }
     return mapping.get(company_name, company_name.lower().replace(" ", "-"))
+
+def is_fully_populated(data):
+    for f in REQUIRED_FIELDS:
+        val = str(data.get(f, "")).strip()
+        if not val or val == "—" or val == "Нет инф.":
+            return False
+    return True
 
 # ==================== LLM-ПАРСИНГ ====================
 
@@ -312,6 +314,10 @@ EXTRACT_TOOL_SCHEMA = {
                 "tow_truck": {"type": "string"},
                 "repair_type": {"type": "string"},
                 "payment_terms": {"type": "string"},
+                "rating": {"type": "string"},
+                "offices": {"type": "string"},
+                "advantages": {"type": "string"},
+                "weak_points": {"type": "string"}
             },
             "required": []
         }
@@ -349,120 +355,99 @@ def parse_with_llm(text):
     except Exception:
         return None
 
-# ==================== УРОВНИ ПОИСКА ====================
+# ==================== КАСКАДНЫЙ ПОИСК (Уровни 1 - 7) ====================
 
-def parse_official(company_name):
-    if company_name not in OFFICIAL_SOURCES:
-        return None
-    print(f"   🔍 Уровень 1: Официальный сайт...")
-    for url in OFFICIAL_SOURCES[company_name]:
-        result = parse_url_with_llm(url)
-        if result:
-            return result
-    return None
+def parse_company_cascade(company_name):
+    print(f"\n🏢 Старт каскадного поиска для {company_name}...")
+    card = {}
+    
+    def merge_fields(new_data):
+        if not new_data:
+            return
+        for k, v in new_data.items():
+            if k in REQUIRED_FIELDS and v:
+                curr_v = str(card.get(k, "")).strip()
+                if not curr_v or curr_v == "—" or curr_v == "Нет инф.":
+                    card[k] = v
 
-def parse_aggregators(company_name):
-    print(f"   🔍 Уровень 2: Агрегаторы...")
+    # Уровень 1: Официальные страницы
+    print("  🔍 [Уровень 1] Официальный сайт...")
+    if company_name in OFFICIAL_SOURCES:
+        for url in OFFICIAL_SOURCES[company_name]:
+            merge_fields(parse_url_with_llm(url))
+            if is_fully_populated(card):
+                return card
+
+    # Уровень 2: Агрегаторы правил
+    print("  🔍 [Уровень 2] Агрегаторы правил...")
     slug = company_slug(company_name)
     for agg in AGGREGATOR_SOURCES:
-        url = f"{agg['url']}{slug}/"
-        result = parse_url_with_llm(url)
-        if result:
-            return result
-    return None
+        merge_fields(parse_url_with_llm(f"{agg['url']}{slug}/"))
+        if is_fully_populated(card):
+            return card
 
-def parse_reviews(company_name):
-    print(f"   🔍 Уровень 3: Обзоры...")
-    slug = company_slug(company_name)
+    # Уровень 3: Сравнительные обзоры
+    print("  🔍 [Уровень 3] Сравнительные обзоры...")
     for base_url in REVIEW_SOURCES:
-        url = f"{base_url}/kasko/{slug}/"
-        result = parse_url_with_llm(url)
-        if result:
-            return result
-    return None
+        merge_fields(parse_url_with_llm(f"{base_url}/kasko/{slug}/"))
+        if is_fully_populated(card):
+            return card
 
-def parse_feedback(company_name):
-    print(f"   🔍 Уровень 4: Отзывы...")
-    slug = company_slug(company_name)
+    # Уровень 4: Отзывы клиентов
+    print("  🔍 [Уровень 4] Отзывы...")
     for base_url in FEEDBACK_SOURCES:
-        url = f"{base_url}/strahovanie/avto/kasko/{slug}/"
-        result = parse_url_with_llm(url)
-        if result:
-            return result
-    return None
+        merge_fields(parse_url_with_llm(f"{base_url}/strahovanie/avto/kasko/{slug}/"))
+        if is_fully_populated(card):
+            return card
 
-def parse_duckduckgo(company_name):
-    print(f"   🔍 Уровень 5: DuckDuckGo...")
+    # Уровень 5: Банк России
+    print("  🔍 [Уровень 5] Банк России (cbr.ru)...")
+    cbr_url = f"https://cbr.ru/search/?q={company_name}+жалобы+страхование"
+    merge_fields(parse_url_with_llm(cbr_url))
+    if is_fully_populated(card):
+        return card
+
+    # Уровень 6: Поисковые системы (DuckDuckGo / Google)
+    print("  🔍 [Уровень 6] Инернет-поиск (DuckDuckGo)...")
     queries = [
-        f"КАСКО {company_name} условия",
-        f"{company_name} КАСКО франшиза",
-        f"{company_name} КАСКО тотал"
+        f"КАСКО {company_name} условия 2026",
+        f"{company_name} КАСКО франшиза тотал БПЛА 2026"
     ]
-    for query in queries:
+    for q in queries:
         try:
             with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=3))
+                results = list(ddgs.text(q, max_results=3))
                 for r in results:
                     url = r.get('href', '')
-                    if not url:
-                        continue
-                    if any(x in url for x in ['support.google', 'youtube.com', 'facebook.com', 'twitter.com']):
-                        continue
-                    result = parse_url_with_llm(url)
-                    if result:
-                        return result
+                    if url and not any(x in url for x in ['youtube', 'facebook', 'twitter']):
+                        merge_fields(parse_url_with_llm(url))
+                        if is_fully_populated(card):
+                            return card
         except Exception:
             pass
-    return None
 
-def parse_company(company_name):
-    print(f"\n🏢 {company_name}")
-    
-    result = parse_official(company_name)
-    if result:
-        print(f"   ✅ Данные найдены (официальный сайт)")
-        return result
-    
-    result = parse_aggregators(company_name)
-    if result:
-        print(f"   ✅ Данные найдены (агрегатор)")
-        return result
-    
-    result = parse_reviews(company_name)
-    if result:
-        print(f"   ✅ Данные найдены (обзор)")
-        return result
-    
-    result = parse_feedback(company_name)
-    if result:
-        print(f"   ✅ Данные найдены (отзывы)")
-        return result
-    
-    result = parse_duckduckgo(company_name)
-    if result:
-        print(f"   ✅ Данные найдены (DuckDuckGo)")
-        return result
-    
-    print(f"   📦 Использованы запасные данные")
-    return get_fallback_data().get(company_name, {})
+    # Уровень 7: Запасные данные (Fallback)
+    print("  📦 [Уровень 7] Применение запасных данных (Fallback)...")
+    fallback = get_fallback_data().get(company_name, {})
+    for k, v in fallback.items():
+        if k not in card or not card[k] or card[k] in ["—", "Нет инф."]:
+            card[k] = v
+
+    return card
 
 def parse_all_companies(company_list):
-    print("🔄 Сбор данных...")
+    print("🔄 Запуск сбора данных по компаниям...")
     data = {}
     for company in company_list:
-        result = parse_company(company)
-        if result:
-            data[company] = result
-        time.sleep(0.5)
+        data[company] = parse_company_cascade(company)
+        time.sleep(0.3)
     data["_last_updated"] = datetime.now().isoformat()
     return data
 
 # ==================== ДАННЫЕ ====================
 
 ALL_COMPANIES = list(get_fallback_data().keys())
-print("📦 Загрузка данных...")
 INSURANCE_DATA = parse_all_companies(ALL_COMPANIES)
-print(f"✅ Загружено {len(INSURANCE_DATA)} компаний")
 
 # ==================== МАРШРУТЫ ====================
 
@@ -477,103 +462,46 @@ def compare():
     company2 = request.form.get('company2')
     if not company1 or not company2:
         return "Выберите обе компании!", 400
+    
     data1 = INSURANCE_DATA.get(company1, {})
     data2 = INSURANCE_DATA.get(company2, {})
     advantages = []
-    total1 = data1.get("total_loss", "0%").replace("%", "")
-    total2 = data2.get("total_loss", "0%").replace("%", "")
-    if total1.isdigit() and total2.isdigit():
-        if int(total1) > int(total2):
-            advantages.append(f"✅ {company1} лучше по порогу тотала: {total1}% vs {total2}%")
-    return render_template('result.html', company1=company1, company2=company2, data1=data1, data2=data2, advantages=advantages, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-# ==================== ШАБЛОНЫ ====================
+    # Безопасное сравнение тотала с использованием регулярных выражений
+    t1_raw = str(data1.get("total_loss", ""))
+    t2_raw = str(data2.get("total_loss", ""))
+    m1 = re.search(r'\d+', t1_raw)
+    m2 = re.search(r'\d+', t2_raw)
 
-os.makedirs('templates', exist_ok=True)
+    if m1 and m2:
+        v1, v2 = int(m1.group()), int(m2.group())
+        if v1 > v2:
+            advantages.append(f"✅ {company1} имеет более высокий порог тотала: {v1}% против {v2}% у {company2}")
+        elif v2 > v1:
+            advantages.append(f"✅ {company2} имеет более высокий порог тотала: {v2}% против {v1}% у {company1}")
 
-with open('templates/index.html', 'w') as f:
-    f.write('''
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Сравнение КАСКО</title>
-<style>
-body{font-family:Arial;padding:10px;background:#f5f5f5}
-.container{max-width:500px;margin:0 auto;background:white;padding:20px;border-radius:10px}
-h1{font-size:20px;text-align:center;color:#2c3e50}
-select{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px}
-.btn{width:100%;padding:14px;background:#27ae60;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer}
-.btn:hover{background:#219a52}
-.vs{text-align:center;font-size:24px;color:#e74c3c;margin:5px 0}
-.meta{text-align:center;color:#888;font-size:11px;margin-top:15px}
-.update-info{text-align:center;color:#27ae60;font-size:12px;margin-top:5px}
-</style>
-</head>
-<body>
-<div class="container">
-<h1>🔍 Сравнение КАСКО</h1>
-<p style="text-align:center;color:#555;">Выберите две страховые компании для сравнения</p>
-<div class="update-info">🤖 Данные собираются автоматически</div>
-<div class="update-info">📅 Последнее обновление: {{ last_updated[:16] if last_updated != 'неизвестно' else 'неизвестно' }}</div>
-<form method="post" action="/compare">
-<select name="company1" required>
-<option value="">-- Компания А --</option>{% for c in companies %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
-</select>
-<div class="vs">⚔️</div>
-<select name="company2" required>
-<option value="">-- Компания Б --</option>{% for c in companies %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
-</select>
-<button type="submit" class="btn">Сравнить →</button>
-</form>
-<div class="meta">Обновлено: {{ now }}</div>
-</div>
-</body>
-</html>
-''')
+    # Сравнение сроков выплат
+    p1_raw = str(data1.get("payment_terms", ""))
+    p2_raw = str(data2.get("payment_terms", ""))
+    pm1 = re.search(r'\d+', p1_raw)
+    pm2 = re.search(r'\d+', p2_raw)
 
-with open('templates/result.html', 'w') as f:
-    f.write('''
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Результат сравнения</title>
-<style>
-body{font-family:Arial;padding:10px;background:#f5f5f5}
-.container{max-width:800px;margin:0 auto;background:white;padding:20px;border-radius:10px}
-h1{font-size:20px;text-align:center}
-table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
-th,td{border:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}
-th{background:#2c3e50;color:white}
-.vs-title{text-align:center;font-size:18px;font-weight:bold;margin:10px 0;padding:10px;background:#f0f8ff;border-radius:8px}
-.main-badge{background:#27ae60;color:white;padding:3px 10px;border-radius:12px;font-size:12px;margin-left:10px}
-.advantage{color:#27ae60}
-.back{display:inline-block;margin-top:10px;color:#3498db;text-decoration:none}
-.meta{text-align:center;color:#888;font-size:11px;margin-top:15px}
-</style>
-</head>
-<body>
-<div class="container">
-<h1>📊 Результат сравнения</h1>
-<div class="vs-title">🏆 {{ company1 }} <span class="main-badge">ОСНОВНАЯ</span><br>⚔️ {{ company2 }}</div>
-<table>
-<tr><th>Параметр</th><th>{{ company1 }}</th><th>{{ company2 }}</th></tr>
-<tr><td><strong>Франшиза</strong></td><td>{{ data1.franchise or '—' }}</td><td>{{ data2.franchise or '—' }}</td></tr>
-<tr><td><strong>Без справок</strong></td><td>{{ data1.without_certificates or '—' }}</td><td>{{ data2.without_certificates or '—' }}</td></tr>
-<tr><td><strong>GAP</strong></td><td>{{ data1.gap or '—' }}</td><td>{{ data2.gap or '—' }}</td></tr>
-<tr><td><strong>Порог тотала</strong></td><td>{{ data1.total_loss or '—' }}</td><td>{{ data2.total_loss or '—' }}</td></tr>
-<tr><td><strong>Самовозгорание</strong></td><td>{{ data1.fire or '—' }}</td><td>{{ data2.fire or '—' }}</td></tr>
-<tr><td><strong>Терроризм</strong></td><td>{{ data1.terrorism or '—' }}</td><td>{{ data2.terrorism or '—' }}</td></tr>
-<tr><td><strong>БПЛА</strong></td><td>{{ data1.drone or '—' }}</td><td>{{ data2.drone or '—' }}</td></tr>
-<tr><td><strong>Эвакуатор</strong></td><td>{{ data1.tow_truck or '—' }}</td><td>{{ data2.tow_truck or '—' }}</td></tr>
-<tr><td><strong>Тип ремонта</strong></td><td>{{ data1.repair_type or '—' }}</td><td>{{ data2.repair_type or '—' }}</td></tr>
-<tr><td><strong>Срок выплаты</strong></td><td>{{ data1.payment_terms or '—' }}</td><td>{{ data2.payment_terms or '—' }}</td></tr>
-<tr><td><strong>Рейтинг</strong></td><td>{{ data1.rating or '—' }}</td><td>{{ data2.rating or '—' }}</td></tr>
-<tr><td><strong>Офисы</strong></td><td>{{ data1.offices or '—' }}</td><td>{{ data2.offices or '—' }}</td></tr>
-<tr><td><strong>Преимущества</strong></td><td>{{ data1.advantages or '—' }}</td><td>{{ data2.advantages or '—' }}</td></tr>
-<tr><td><strong>Слабые места</strong></td><td style="color:#e74c3c;">{{ data1.weak_points or '—' }}</td><td style="color:#e74c3c;">{{ data2.weak_points or '—' }}</td></tr>
-</table>
-<div class="analysis"><strong>📋 Анализ</strong><ul>{% for adv in advantages %}<li class="advantage">{{ adv }}</li>{% endfor %}</ul></div>
-<a href="/" class="back">← На главную</a>
-<div class="meta">Обновлено: {{ timestamp }}</div>
-</div>
-</body>
-</html>
-''')
+    if pm1 and pm2:
+        pv1, pv2 = int(pm1.group()), int(pm2.group())
+        if pv1 < pv2:
+            advantages.append(f"⚡ {company1} быстрее выплачивает/рассматривает возмещение: {pv1} дней против {pv2} дней")
+        elif pv2 < pv1:
+            advantages.append(f"⚡ {company2} быстрее выплачивает/рассматривает возмещение: {pv2} дней против {pv1} дней")
+
+    return render_template(
+        'result.html', 
+        company1=company1, 
+        company2=company2, 
+        data1=data1, 
+        data2=data2, 
+        advantages=advantages, 
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+if __name__ == '__main__':
+    app.run(debug=True)
