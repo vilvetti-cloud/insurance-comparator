@@ -1,18 +1,17 @@
 import json
 import os
 import re
-import time
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 
 app = Flask(__name__)
 
 CACHE_FILE = "insurance_cache.json"
 
-# ==================== ЗАПАСНЫЕ ДАННЫЕ (Уровень 7) ====================
+# ==================== ДАННЫЕ И ИСТОЧНИКИ ====================
 
 def get_fallback_data():
     return {
@@ -208,182 +207,6 @@ OFFICIAL_SOURCES = {
     "СберСтрахование": ["https://sberbankins.ru/products/kasko/"]
 }
 
-AGGREGATOR_SOURCES = [
-    {"name": "kaskometr", "url": "https://kaskometr.ru/pravila/"},
-    {"name": "finuslugi", "url": "https://finuslugi.ru/pravila_kasko/"},
-    {"name": "asccenter", "url": "https://asccenter.ru/info/docs/pravila-tarify-kasko/"},
-    {"name": "kupipolis", "url": "https://kupipolis.ru/pravila-strahovaniya/"}
-]
-
-REVIEW_SOURCES = ["https://polis.online", "https://polis812.ru", "https://infullbroker.ru"]
-FEEDBACK_SOURCES = ["https://sravni.ru"]
-
-REQUIRED_FIELDS = [
-    "franchise", "without_certificates", "gap", "total_loss", 
-    "fire", "terrorism", "drone", "tow_truck", 
-    "repair_type", "payment_terms", "rating", "offices", 
-    "advantages", "weak_points"
-]
-
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-}
-
-def fetch_page(url):
-    try:
-        response = requests.get(url, timeout=8, headers=HEADERS)
-        if response.status_code == 200:
-            return response.text
-    except Exception:
-        pass
-    return None
-
-def clean_text_blocks(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "iframe", "svg", "form"]):
-        tag.decompose()
-    blocks = []
-    for el in soup.find_all(["p", "li", "td", "th", "h1", "h2", "h3", "h4"]):
-        t = ' '.join(el.get_text(" ", strip=True).split())
-        if t and len(t) > 15:
-            blocks.append(t)
-    return blocks
-
-def parse_url_with_llm(url):
-    html = fetch_page(url)
-    if not html:
-        return None
-    blocks = clean_text_blocks(html)
-    if len(blocks) < 3:
-        return None
-    return parse_with_llm("\n".join(blocks))
-
-def company_slug(company_name):
-    mapping = {
-        "РЕСО-Гарантия": "reso-garantiya",
-        "СОГАЗ": "sogaz",
-        "АльфаСтрахование": "alfa-strakhovanie",
-        "Ингосстрах": "ingosstrakh",
-        "Ренессанс": "renessans",
-        "Т-Страхование": "t-strakhovanie",
-        "ВСК": "vsk",
-        "Согласие": "soglasie",
-        "Югория": "yugoria",
-        "СберСтрахование": "sber",
-        "Совкомбанк Страхование": "sovcombank"
-    }
-    return mapping.get(company_name, company_name.lower().replace(" ", "-"))
-
-def is_fully_populated(data):
-    for f in REQUIRED_FIELDS:
-        val = str(data.get(f, "")).strip()
-        if not val or val in ["—", "Нет инф."]:
-            return False
-    return True
-
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-
-EXTRACT_TOOL_SCHEMA = {
-    "type": "function",
-    "function": {
-        "name": "extract_insurance_fields",
-        "description": "Извлекает условия КАСКО из текста.",
-        "parameters": {
-            "type": "object",
-            "properties": {k: {"type": "string"} for k in REQUIRED_FIELDS},
-            "required": []
-        }
-    }
-}
-
-def parse_with_llm(text):
-    api_key = os.environ.get("GROQ_API_KEY")
-    if not api_key:
-        return None
-    try:
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": GROQ_MODEL,
-                "messages": [{"role": "user", "content": "Извлеки условия КАСКО:\n\n" + text[:5000]}],
-                "tools": [EXTRACT_TOOL_SCHEMA],
-                "tool_choice": "auto",
-            },
-            timeout=15,
-        )
-        if not response.ok:
-            return None
-        choices = response.json().get("choices") or []
-        message = (choices[0] or {}).get("message") or {}
-        tool_calls = message.get("tool_calls") or []
-        if not tool_calls:
-            return None
-        raw = json.loads(tool_calls[0]["function"]["arguments"])
-        return {k: v for k, v in raw.items() if isinstance(v, str) and v.strip()}
-    except Exception:
-        return None
-
-def parse_company_cascade(company_name):
-    card = {}
-    
-    def merge_fields(new_data):
-        if not new_data:
-            return
-        for k, v in new_data.items():
-            if k in REQUIRED_FIELDS and v:
-                curr_v = str(card.get(k, "")).strip()
-                if not curr_v or curr_v in ["—", "Нет инф."]:
-                    card[k] = v
-
-    # 1. Официальные сайты
-    if company_name in OFFICIAL_SOURCES:
-        for url in OFFICIAL_SOURCES[company_name]:
-            merge_fields(parse_url_with_llm(url))
-            if is_fully_populated(card): return card
-
-    # 2. Агрегаторы
-    slug = company_slug(company_name)
-    for agg in AGGREGATOR_SOURCES:
-        merge_fields(parse_url_with_llm(f"{agg['url']}{slug}/"))
-        if is_fully_populated(card): return card
-
-    # 3. Обзоры
-    for base_url in REVIEW_SOURCES:
-        merge_fields(parse_url_with_llm(f"{base_url}/kasko/{slug}/"))
-        if is_fully_populated(card): return card
-
-    # 4. Отзывы
-    for base_url in FEEDBACK_SOURCES:
-        merge_fields(parse_url_with_llm(f"{base_url}/strahovanie/avto/kasko/{slug}/"))
-        if is_fully_populated(card): return card
-
-    # 5. ЦБ РФ
-    cbr_url = f"https://cbr.ru/search/?q={company_name}+жалобы"
-    merge_fields(parse_url_with_llm(cbr_url))
-    if is_fully_populated(card): return card
-
-    # 6. Поиск DDGS (исправленный импорт)
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(f"КАСКО {company_name} условия 2026", max_results=3))
-            for r in results:
-                url = r.get('href', '')
-                if url and not any(x in url for x in ['youtube', 'facebook', 'vk.com']):
-                    merge_fields(parse_url_with_llm(url))
-                    if is_fully_populated(card): return card
-    except Exception:
-        pass
-
-    # 7. Fallback
-    fallback = get_fallback_data().get(company_name, {})
-    for k, v in fallback.items():
-        if k not in card or not card[k] or card[k] in ["—", "Нет инф."]:
-            card[k] = v
-
-    return card
-
 def load_or_update_data():
     if os.path.exists(CACHE_FILE):
         try:
@@ -393,7 +216,7 @@ def load_or_update_data():
             pass
     
     data = get_fallback_data()
-    data["_last_updated"] = datetime.now().isoformat()
+    data["_last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
     return data
 
 INSURANCE_DATA = load_or_update_data()
@@ -401,18 +224,25 @@ ALL_COMPANIES = list(get_fallback_data().keys())
 
 # ==================== МАРШРУТЫ ====================
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    last_updated = INSURANCE_DATA.get("_last_updated", "неизвестно")
-    # Передаем user=True чтобы скрывать блоки авторизации в шаблоне
-    return render_template('index.html', companies=ALL_COMPANIES, now=datetime.now().strftime("%Y-%m-%d %H:%M"), last_updated=last_updated, user=True)
+    last_updated = INSURANCE_DATA.get("_last_updated", datetime.now().strftime("%Y-%m-%d %H:%M"))
+    return render_template(
+        'index.html', 
+        companies=ALL_COMPANIES, 
+        now=datetime.now().strftime("%Y-%m-%d %H:%M"), 
+        last_updated=last_updated
+    )
 
-@app.route('/compare', methods=['POST'])
+@app.route('/compare', methods=['GET', 'POST'])
 def compare():
+    if request.method == 'GET':
+        return redirect(url_for('index'))
+
     company1 = request.form.get('company1')
     company2 = request.form.get('company2')
     if not company1 or not company2:
-        return "Выберите обе компании!", 400
+        return redirect(url_for('index'))
     
     data1 = INSURANCE_DATA.get(company1, {})
     data2 = INSURANCE_DATA.get(company2, {})
@@ -432,9 +262,14 @@ def compare():
     if pm1 and pm2:
         pv1, pv2 = int(pm1.group()), int(pm2.group())
         if pv1 < pv2:
-            advantages.append(f"⚡ {company1} быстрее выплачивает/рассматривает возмещение: {pv1} дней против {pv2} дней")
+            advantages.append(f"⚡ {company1} быстрее выплачивает возмещение: {pv1} дней против {pv2} дней у {company2}")
         elif pv2 < pv1:
-            advantages.append(f"⚡ {company2} быстрее выплачивает/рассматривает возмещение: {pv2} дней против {pv1} дней")
+            advantages.append(f"⚡ {company2} быстрее выплачивает возмещение: {pv2} дней против {pv1} дней у {company1}")
+
+    # Сбор источников информации
+    sources1 = OFFICIAL_SOURCES.get(company1, ["Официальный сайт " + company1])
+    sources2 = OFFICIAL_SOURCES.get(company2, ["Официальный сайт " + company2])
+    last_updated = INSURANCE_DATA.get("_last_updated", datetime.now().strftime("%Y-%m-%d %H:%M"))
 
     return render_template(
         'result.html', 
@@ -443,8 +278,10 @@ def compare():
         data1=data1, 
         data2=data2, 
         advantages=advantages, 
-        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        user=True
+        sources1=sources1,
+        sources2=sources2,
+        last_updated=last_updated,
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
 
 if __name__ == '__main__':
