@@ -1,4 +1,4 @@
-# app.py — МНОГОУРОВНЕВЫЙ ПАРСЕР КАСКО (6 УРОВНЕЙ) — УЛУЧШЕННАЯ ВЕРСИЯ
+# app.py — ПАРСИНГ СТРАНИЦ КАСКО + PDF + ПАМЯТЬ
 
 from flask import Flask, render_template, request, redirect
 from datetime import datetime
@@ -11,7 +11,7 @@ import time
 import random
 from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -21,13 +21,25 @@ app = Flask(__name__)
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edge/120.0.0.0 Safari/537.36",
 ]
+
+# ==================== УРЛЫ СТРАНИЦ КАСКО ====================
+
+KASKO_PAGES = {
+    "РЕСО-Гарантия": "https://reso.ru/individual/auto/kasko/",
+    "ВСК": "https://www.vsk.ru/klientam/avto/kasko/",
+    "Ингосстрах": "https://www.ingos.ru/auto/kasko/",
+    "Ренессанс": "https://www.renins.ru/auto/kasko/",
+    "АльфаСтрахование": "https://www.alfastrah.ru/individuals/auto/kasko/",
+    "Согласие": "https://www.soglasie.ru/individuals/avto/kasko/",
+    "РГС": "https://www.rgs.ru/auto/ekasko/",
+    "Т-Страхование": "https://www.tbank.ru/insurance/kasko/",
+    "СберСтрахование": "https://sberbankins.ru/products/kasko/",
+    "Югория": "https://ugsk.ru/auto/kasko/",
+    "Совкомбанк Страхование": "https://sovcomins.ru/product/kasko/"
+}
 
 # ==================== ДАННЫЕ ИЗ PDF (УРОВЕНЬ 6 — ПАМЯТЬ) ====================
 
@@ -210,99 +222,12 @@ KASKO_PDF_DATA = {
     }
 }
 
-# ==================== ОФИЦИАЛЬНЫЕ САЙТЫ (УРОВЕНЬ 1) ====================
-
-OFFICIAL_URLS = {
-    "РЕСО-Гарантия": "https://reso.ru/auto/",
-    "ВСК": "https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila",
-    "Ингосстрах": "https://www.ingos.ru/auto/",
-    "Ренессанс": "https://www.renins.ru/auto/",
-    "АльфаСтрахование": "https://www.alfastrah.ru/auto/",
-    "Т-Страхование": "https://tbank.ru/insurance/help/auto/kasko/",
-    "РГС": "https://www.rgs.ru/products/auto/",
-    "Югория": "https://ugsk.ru/auto/",
-    "СберСтрахование": "https://sberbankins.ru/avtostrahovanie",
-    "Согласие": "https://soglasie.ru/auto/",
-    "Совкомбанк Страхование": "https://sovcomins.ru/auto/"
-}
-
-# ==================== АГРЕГАТОРЫ С URL КОМПАНИЙ ====================
-
-AGGREGATOR_COMPANY_URLS = {
-    "РЕСО-Гарантия": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/reso-garantija/",
-        "Банки.ру": "https://www.banki.ru/insurance/reso-garantiya/",
-        "Инсмарт": "https://insmart.ru/company/reso-garantiya/"
-    },
-    "ВСК": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/vsk/",
-        "Банки.ру": "https://www.banki.ru/insurance/vsk/",
-        "Инсмарт": "https://insmart.ru/company/vsk/"
-    },
-    "Ингосстрах": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/ingosstrakh/",
-        "Банки.ру": "https://www.banki.ru/insurance/ingosstrakh/",
-        "Инсмарт": "https://insmart.ru/company/ingosstrakh/"
-    },
-    "Ренессанс": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/renessans/",
-        "Банки.ру": "https://www.banki.ru/insurance/renessans/",
-        "Инсмарт": "https://insmart.ru/company/renessans/"
-    },
-    "АльфаСтрахование": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/alfastrakhovanie/",
-        "Банки.ру": "https://www.banki.ru/insurance/alfastrakhovanie/",
-        "Инсмарт": "https://insmart.ru/company/alfastrah/"
-    },
-    "Т-Страхование": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/t-bank/",
-        "Банки.ру": "https://www.banki.ru/insurance/t-bank/",
-        "Инсмарт": "https://insmart.ru/company/t-bank/"
-    },
-    "РГС": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/rosgosstrakh/",
-        "Банки.ру": "https://www.banki.ru/insurance/rosgosstrakh/",
-        "Инсмарт": "https://insmart.ru/company/rgs/"
-    },
-    "Югория": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/ugoriya/",
-        "Банки.ру": "https://www.banki.ru/insurance/ugoriya/",
-        "Инсмарт": "https://insmart.ru/company/yugoriya/"
-    },
-    "СберСтрахование": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/sberstrakhovanie/",
-        "Банки.ру": "https://www.banki.ru/insurance/sberstrakhovanie/",
-        "Инсмарт": "https://insmart.ru/company/sberbank-insurance/"
-    },
-    "Согласие": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/soglasie/",
-        "Банки.ру": "https://www.banki.ru/insurance/soglasie/",
-        "Инсмарт": "https://insmart.ru/company/soglasie/"
-    },
-    "Совкомбанк Страхование": {
-        "Сравни.ру": "https://www.sravni.ru/strahovanie/company/sovkomstrakh/",
-        "Банки.ру": "https://www.banki.ru/insurance/sovcomins/",
-        "Инсмарт": "https://insmart.ru/company/sovcomins/"
-    }
-}
-
 # ==================== ПОЛЯ КАСКО ====================
 
 KASKO_FIELDS = [
-    "franchise",
-    "without_certificates",
-    "gap",
-    "total_loss",
-    "fire",
-    "terrorism",
-    "drone",
-    "tow_truck",
-    "repair_type",
-    "payment_terms",
-    "advantages",
-    "weak_points",
-    "rating",
-    "offices"
+    "franchise", "without_certificates", "gap", "total_loss", "fire", "terrorism",
+    "drone", "tow_truck", "repair_type", "payment_terms", "advantages",
+    "weak_points", "rating", "offices"
 ]
 
 FIELD_LABELS = {
@@ -329,48 +254,21 @@ def get_headers() -> Dict:
         'User-Agent': random.choice(USER_AGENTS),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
     }
 
 def fetch_url(url: str, timeout: int = 20) -> Optional[str]:
     """Загрузить URL с обходом блокировок"""
     for attempt in range(3):
         try:
-            headers = get_headers()
-            response = requests.get(
-                url,
-                headers=headers,
-                timeout=timeout,
-                verify=False,
-                allow_redirects=True
-            )
+            response = requests.get(url, headers=get_headers(), timeout=timeout, verify=False)
             if response.status_code == 200:
                 return response.text
             elif response.status_code == 403:
-                # Пробуем другой User-Agent
+                time.sleep(1)
                 continue
-            else:
-                return None
-        except requests.exceptions.SSLError:
-            try:
-                response = requests.get(
-                    url,
-                    headers=get_headers(),
-                    timeout=timeout,
-                    verify=False,
-                    allow_redirects=True
-                )
-                if response.status_code == 200:
-                    return response.text
-            except:
-                pass
-            return None
-        except Exception as e:
-            if attempt == 2:
-                print(f"      ⚠️ Ошибка загрузки {url}: {type(e).__name__}")
-            time.sleep(1)
+        except:
+            pass
+        time.sleep(1)
     return None
 
 def clean_text(text: str) -> str:
@@ -379,40 +277,88 @@ def clean_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
-def extract_value_from_text(text: str, keywords: List[str]) -> Optional[str]:
-    """Извлечь значение из текста по ключевым словам"""
-    if not text:
-        return None
-    text_lower = text.lower()
-    for keyword in keywords:
-        if keyword in text_lower:
-            # Находим предложение или фрагмент с ключевым словом
-            sentences = re.split(r'[.!?]', text)
-            for sentence in sentences:
-                if keyword in sentence.lower():
-                    # Очищаем и возвращаем
-                    cleaned = clean_text(sentence)
-                    if len(cleaned) > 10:  # Не слишком короткое
-                        return cleaned
-    return None
-
-def get_source_level_info(level: int) -> Dict:
+def get_source_info(level: int) -> Dict:
     levels = {
-        1: {"type": "official", "label": "Официальный сайт", "emoji": "🟢"},
-        2: {"type": "aggregator", "label": "Агрегатор", "emoji": "🔵"},
-        3: {"type": "special", "label": "Спец. агрегатор", "emoji": "🟣"},
-        4: {"type": "rating", "label": "Рейтинг", "emoji": "🟠"},
-        5: {"type": "search", "label": "Интернет-поиск", "emoji": "🟡"},
-        6: {"type": "memory", "label": "Внутренняя база", "emoji": "⚪"},
+        1: {"emoji": "🟢", "label": "Официальный сайт", "type": "official"},
+        2: {"emoji": "🔵", "label": "Агрегатор", "type": "aggregator"},
+        3: {"emoji": "🟣", "label": "Спец. агрегатор", "type": "special"},
+        4: {"emoji": "🟠", "label": "Рейтинг", "type": "rating"},
+        5: {"emoji": "🟡", "label": "Интернет-поиск", "type": "search"},
+        6: {"emoji": "⚪", "label": "Внутренняя база", "type": "memory"},
     }
-    return levels.get(level, {"type": "unknown", "label": "Неизвестно", "emoji": "⬜"})
+    return levels.get(level, {"emoji": "⬜", "label": "Неизвестно", "type": "unknown"})
 
-# ==================== УРОВЕНЬ 1: ОФИЦИАЛЬНЫЙ САЙТ (УЛУЧШЕННЫЙ) ====================
+# ==================== РАБОТА С PDF ====================
 
-def parse_official_site(company: str, url: str) -> Dict[str, Dict]:
-    """Парсинг официального сайта — ищем по заголовкам разделов"""
-    print(f"  📂 Уровень 1: Официальный сайт")
-    print(f"    🔗 {url}")
+def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
+    """Скачать PDF и извлечь текст"""
+    try:
+        # Пробуем импортировать PyPDF2
+        import PyPDF2
+        
+        response = requests.get(pdf_url, headers=get_headers(), timeout=30, verify=False)
+        if response.status_code != 200:
+            return None
+        
+        temp_file = "temp.pdf"
+        with open(temp_file, 'wb') as f:
+            f.write(response.content)
+        
+        reader = PyPDF2.PdfReader(temp_file)
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        
+        os.remove(temp_file)
+        return text if text else None
+        
+    except ImportError:
+        print("    ⚠️ PyPDF2 не установлен, PDF не будет парситься")
+        return None
+    except Exception as e:
+        print(f"    ⚠️ Ошибка при работе с PDF: {e}")
+        return None
+
+def find_pdf_links(html: str, base_url: str) -> List[str]:
+    """Найти ссылки на PDF на странице"""
+    soup = BeautifulSoup(html, 'html.parser')
+    pdf_links = []
+    
+    # Ищем все ссылки
+    for link in soup.find_all('a', href=True):
+        href = link.get('href')
+        if not href:
+            continue
+        
+        # Проверяем, что это PDF
+        if href.lower().endswith('.pdf') or '.pdf?' in href.lower():
+            full_url = urljoin(base_url, href)
+            pdf_links.append(full_url)
+        # Ищем по тексту
+        text = link.get_text().lower()
+        if 'правила' in text and 'страхова' in text:
+            full_url = urljoin(base_url, href)
+            if full_url not in pdf_links:
+                pdf_links.append(full_url)
+    
+    # Ищем ссылки на PDF в тексте
+    for tag in soup.find_all(['div', 'p', 'li']):
+        text = tag.get_text().lower()
+        if '.pdf' in text:
+            # Ищем URL в тексте
+            match = re.search(r'https?://[^\s]+\.pdf', text)
+            if match:
+                pdf_links.append(match.group(0))
+    
+    return pdf_links
+
+# ==================== ПАРСИНГ СТРАНИЦЫ КАСКО + PDF ====================
+
+def parse_kasko_page(company: str, url: str) -> Dict:
+    """Парсинг страницы КАСКО + поиск и парсинг PDF"""
+    print(f"  📂 Уровень 1: Страница КАСКО — {url}")
     
     result = {}
     html = fetch_url(url)
@@ -421,369 +367,162 @@ def parse_official_site(company: str, url: str) -> Dict[str, Dict]:
         print(f"    ⚠️ Не удалось загрузить страницу")
         return result
     
-    try:
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # Удаляем шум
-        for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "iframe"]):
-            tag.decompose()
-        
-        # Ищем заголовки разделов и их содержимое
-        section_keywords = {
-            "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
-            "without_certificates": ["без справок", "без документ", "без предостав"],
-            "gap": ["gap", "гэп", "gар"],
-            "total_loss": ["тотал", "полная гибель", "конструктивн", "гибел"],
-            "fire": ["самовозгоран", "возгоран", "пожар"],
-            "terrorism": ["терроризм", "терр. акт", "теракт"],
-            "drone": ["бпла", "беспилот", "дрон"],
-            "tow_truck": ["эвакуа"],
-            "repair_type": ["ремонт", "стоа", "дилер"],
-            "payment_terms": ["срок выплат", "рабочих дней", "дней"]
-        }
-        
-        # Собираем весь текст страницы
-        all_text = clean_text(soup.get_text())
-        
-        # Ищем по каждому полю
-        for field, keywords in section_keywords.items():
-            value = extract_value_from_text(all_text, keywords)
-            if value:
-                # Проверяем, что это не меню и не навигация
-                if len(value) > 20 and not any(x in value.lower() for x in ["войти", "регистрац", "подпис", "©"]):
-                    result[field] = {
-                        "value": value[:200],
-                        "source": {
-                            "level": 1,
-                            "type": "official",
-                            "name": f"Официальный сайт {company}",
-                            "url": url,
-                            "found_at": datetime.now().isoformat()
-                        }
-                    }
-                    print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
-        
-        print(f"    📊 Найдено {len(result)} полей на официальном сайте")
-        
-    except Exception as e:
-        print(f"    ⚠️ Ошибка парсинга: {e}")
+    # ---- 1. Парсим текст страницы ----
+    soup = BeautifulSoup(html, 'html.parser')
+    for tag in soup.find_all(["script", "style", "noscript"]):
+        tag.decompose()
     
-    return result
-
-# ==================== УРОВЕНЬ 2: АГРЕГАТОРЫ (УЛУЧШЕННЫЙ) ====================
-
-def parse_aggregator_page(company: str, aggregator_name: str, url: str, level: int) -> Dict[str, Dict]:
-    """Парсинг страницы компании на агрегаторе"""
-    print(f"    🔗 {aggregator_name}: {url}")
+    text = clean_text(soup.get_text())
     
-    result = {}
-    html = fetch_url(url)
+    # Ищем ключевые данные на странице
+    field_patterns = {
+        "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
+        "total_loss": ["тотал", "полная гибель", "гибель", "75%", "70%", "65%"],
+        "gap": ["gap", "гэп", "сохранение стоимости"],
+        "without_certificates": ["без справок", "без документ"],
+        "fire": ["самовозгоран", "возгоран", "пожар"],
+        "terrorism": ["терроризм", "терр. акт"],
+        "drone": ["бпла", "беспилот", "дрон"],
+        "tow_truck": ["эвакуа"],
+        "repair_type": ["ремонт", "стоа", "дилер"],
+        "payment_terms": ["срок выплат", "рабочих дней", "дней"]
+    }
     
-    if not html:
-        print(f"    ⚠️ Не удалось загрузить страницу")
-        return result
+    for field, keywords in field_patterns.items():
+        for kw in keywords:
+            if kw in text.lower():
+                sentences = re.split(r'[.!?]', text)
+                for sentence in sentences:
+                    if kw in sentence.lower():
+                        value = clean_text(sentence)
+                        if len(value) > 15 and len(value) < 300:
+                            result[field] = {
+                                "value": value,
+                                "source": {
+                                    "level": 1,
+                                    "name": f"Страница КАСКО {company}",
+                                    "url": url,
+                                    "found_at": datetime.now().isoformat()
+                                }
+                            }
+                            print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
+                            break
+                    if field in result:
+                        break
+            if field in result:
+                break
     
-    try:
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # Удаляем шум
-        for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header"]):
-            tag.decompose()
-        
-        # Ищем таблицы и списки с условиями
-        tables = soup.find_all('table')
-        list_items = soup.find_all(['li', 'p', 'div'])
-        
-        all_text = clean_text(soup.get_text())
-        
-        # Ключевые слова для поиска
-        field_keywords = {
-            "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
-            "without_certificates": ["без справок", "без документ"],
-            "gap": ["gap", "гэп"],
-            "total_loss": ["тотал", "гибель"],
-            "fire": ["самовозгоран", "возгоран"],
-            "terrorism": ["терроризм"],
-            "drone": ["бпла", "беспилот"],
-            "tow_truck": ["эвакуа"],
-            "repair_type": ["ремонт", "стоа"],
-            "payment_terms": ["срок", "дней"]
-        }
-        
-        for field, keywords in field_keywords.items():
-            value = extract_value_from_text(all_text, keywords)
-            if value and len(value) > 15:
-                # Проверяем, что это не реклама
-                if not any(x in value.lower() for x in ["подпис", "новост", "акци"]):
-                    result[field] = {
-                        "value": value[:200],
-                        "source": {
-                            "level": level,
-                            "type": "aggregator" if level == 2 else "special",
-                            "name": aggregator_name,
-                            "url": url,
-                            "found_at": datetime.now().isoformat()
-                        }
-                    }
-                    print(f"      ✅ Найдено: {FIELD_LABELS.get(field, field)}")
-        
-    except Exception as e:
-        print(f"    ⚠️ Ошибка парсинга: {e}")
+    # ---- 2. Ищем и парсим PDF ----
+    print(f"    🔍 Ищем PDF на странице...")
+    pdf_links = find_pdf_links(html, url)
     
-    return result
-
-# ==================== УРОВЕНЬ 5: ПОИСК В ИНТЕРНЕТЕ (УЛУЧШЕННЫЙ) ====================
-
-def search_internet(company: str, field: str) -> Optional[Dict]:
-    """Поиск в интернете через Google (попытка)"""
-    query = f"{company} КАСКО {FIELD_LABELS.get(field, field)} условия"
-    print(f"    🔍 Запрос: '{query}'")
-    
-    # Пробуем Google
-    search_urls = [
-        f"https://www.google.com/search?q={quote_plus(query)}&hl=ru",
-        f"https://www.google.ru/search?q={quote_plus(query)}&hl=ru",
-    ]
-    
-    for search_url in search_urls:
-        html = fetch_url(search_url, timeout=15)
-        if html:
-            try:
-                soup = BeautifulSoup(html, 'html.parser')
-                
-                # Ищем ссылки на результаты
-                for link in soup.find_all('a'):
-                    href = link.get('href', '')
-                    if '/url?q=' in href and 'http' in href:
-                        # Извлекаем реальный URL
-                        match = re.search(r'/url\?q=([^&]+)', href)
-                        if match:
-                            real_url = match.group(1)
-                            if any(x in real_url.lower() for x in ['.ru', '.com', '.рф']):
-                                # Пробуем загрузить страницу результата
-                                page_html = fetch_url(real_url, timeout=10)
-                                if page_html:
-                                    page_soup = BeautifulSoup(page_html, 'html.parser')
-                                    page_text = clean_text(page_soup.get_text())
-                                    
-                                    # Ищем ответ
-                                    field_keywords = {
-                                        "franchise": ["франшиз"],
-                                        "total_loss": ["тотал", "гибель"],
-                                        "without_certificates": ["без справок"],
-                                        "gap": ["gap"],
-                                        "fire": ["самовозгоран"],
-                                        "terrorism": ["терроризм"],
-                                        "drone": ["бпла"],
-                                        "tow_truck": ["эвакуа"],
-                                        "payment_terms": ["срок", "дней"],
-                                        "repair_type": ["ремонт", "стоа"]
+    if pdf_links:
+        print(f"    📄 Найдено PDF: {len(pdf_links)}")
+        
+        # Парсим каждый PDF
+        for pdf_url in pdf_links[:3]:  # Ограничиваем 3 PDF
+            print(f"      📥 Загружаем PDF: {pdf_url[:80]}...")
+            
+            pdf_text = extract_text_from_pdf(pdf_url)
+            if not pdf_text:
+                continue
+            
+            pdf_text_lower = pdf_text.lower()
+            
+            # Ищем данные в PDF
+            for field, keywords in field_patterns.items():
+                if field in result:  # Уже нашли на странице
+                    continue
+                    
+                for kw in keywords:
+                    if kw in pdf_text_lower:
+                        sentences = re.split(r'[.!?]', pdf_text)
+                        for sentence in sentences:
+                            if kw in sentence.lower():
+                                value = clean_text(sentence)
+                                if len(value) > 15 and len(value) < 400:
+                                    result[field] = {
+                                        "value": value,
+                                        "source": {
+                                            "level": 1,
+                                            "name": f"PDF {company}",
+                                            "url": pdf_url,
+                                            "found_at": datetime.now().isoformat()
+                                        }
                                     }
-                                    
-                                    keywords = field_keywords.get(field, [])
-                                    for kw in keywords:
-                                        if kw in page_text.lower():
-                                            # Находим предложение с ключевым словом
-                                            sentences = re.split(r'[.!?]', page_text)
-                                            for sentence in sentences:
-                                                if kw in sentence.lower() and len(sentence) > 20:
-                                                    return {
-                                                        "value": clean_text(sentence[:200]),
-                                                        "source": {
-                                                            "level": 5,
-                                                            "type": "search",
-                                                            "name": "Интернет-поиск (Google)",
-                                                            "url": real_url,
-                                                            "found_at": datetime.now().isoformat()
-                                                        }
-                                                    }
-            except Exception as e:
-                print(f"    ⚠️ Ошибка парсинга поиска: {e}")
+                                    print(f"      ✅ Из PDF: {FIELD_LABELS.get(field, field)}")
+                                    break
+                            if field in result:
+                                break
+                    if field in result:
+                        break
     
-    print(f"    ❌ Не найдено в интернете")
-    return None
+    print(f"    📊 Найдено: {len(result)} полей")
+    return result
 
 # ==================== УРОВЕНЬ 6: ПАМЯТЬ ====================
 
 def get_from_memory(company: str, field: str) -> Optional[Dict]:
     if company not in KASKO_PDF_DATA:
         return None
-    
     value = KASKO_PDF_DATA[company].get(field)
-    if not value or value == "Нет инф." or value == "Не указан":
+    if not value or value in ["Нет инф.", "Не указан"]:
         return None
-    
     return {
         "value": value,
         "source": {
             "level": 6,
-            "type": "memory",
-            "name": "PDF: КАСКО Сравнение с конкурентами (июль 2026)",
+            "name": "Внутренняя база (PDF)",
             "url": None,
             "found_at": "2026-09-04"
         }
     }
 
-# ==================== СБОР ДАННЫХ ДЛЯ ОДНОЙ КОМПАНИИ ====================
+# ==================== СБОР ДАННЫХ ====================
 
 def collect_company_data(company: str) -> Dict:
-    """Сбор данных для одной компании по всем 6 уровням"""
     print(f"\n🔍 {company}")
     print("━" * 50)
     
     result = {}
-    found_fields = set()
-    source_stats = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
+    found = set()
     
-    # УРОВЕНЬ 1: Официальный сайт
-    if company in OFFICIAL_URLS:
-        official_data = parse_official_site(company, OFFICIAL_URLS[company])
-        for field, data in official_data.items():
-            if field not in found_fields:
-                result[field] = data
-                found_fields.add(field)
-                source_stats[1] += 1
+    # Уровень 1: Страница КАСКО + PDF
+    if company in KASKO_PAGES:
+        data = parse_kasko_page(company, KASKO_PAGES[company])
+        for field, val in data.items():
+            if field not in found:
+                result[field] = val
+                found.add(field)
     
-    # УРОВЕНЬ 2: Агрегаторы (страницы компаний)
-    if company in AGGREGATOR_COMPANY_URLS:
-        for agg_name, url in AGGREGATOR_COMPANY_URLS[company].items():
-            if len(found_fields) >= len(KASKO_FIELDS):
-                break
-            print(f"  📂 Уровень 2: Агрегатор — {agg_name}")
-            agg_data = parse_aggregator_page(company, agg_name, url, 2)
-            for field, data in agg_data.items():
-                if field not in found_fields:
-                    result[field] = data
-                    found_fields.add(field)
-                    source_stats[2] += 1
-                    print(f"    ✅ Добавлено: {FIELD_LABELS.get(field, field)} (уровень 2)")
-    
-    # УРОВЕНЬ 3: Спец. агрегаторы (Инсмарт уже в списке выше)
-    # Дополнительные спец. агрегаторы
-    special_aggregators = [
-        ("Пампаду", "https://pampadu.ru/company/"),
-        ("Полис Онлайн", "https://polis.online/companies/"),
-    ]
-    
-    for agg_name, base_url in special_aggregators:
-        if len(found_fields) >= len(KASKO_FIELDS):
-            break
-        # Формируем URL для компании
-        company_slug = company.replace(" ", "-").lower()
-        url = f"{base_url}{company_slug}/"
-        print(f"  📂 Уровень 3: Спец. агрегатор — {agg_name}")
-        agg_data = parse_aggregator_page(company, agg_name, url, 3)
-        for field, data in agg_data.items():
-            if field not in found_fields:
-                result[field] = data
-                found_fields.add(field)
-                source_stats[3] += 1
-                print(f"    ✅ Добавлено: {FIELD_LABELS.get(field, field)} (уровень 3)")
-    
-    # УРОВЕНЬ 4: Рейтинги (простой вариант)
-    if "rating" not in found_fields:
-        print(f"  📂 Уровень 4: Рейтинг (Эксперт RA)")
-        # Пробуем найти рейтинг через быстрый поиск
-        try:
-            expert_url = "https://raexpert.ru/ratings/insurance/"
-            html = fetch_url(expert_url, timeout=10)
-            if html:
-                # Ищем упоминание компании
-                if company in html:
-                    # Пробуем найти рейтинг
-                    pattern = rf'{company}.*?([А-Я]{{2,5}}\+?)'
-                    match = re.search(pattern, html, re.IGNORECASE)
-                    if match:
-                        rating_text = match.group(0)
-                        result["rating"] = {
-                            "value": f"Рейтинг {company}: {rating_text[:50]}",
-                            "source": {
-                                "level": 4,
-                                "type": "rating",
-                                "name": "Эксперт RA",
-                                "url": expert_url,
-                                "found_at": datetime.now().isoformat()
-                            }
-                        }
-                        found_fields.add("rating")
-                        source_stats[4] += 1
-                        print(f"    ✅ Найдено: rating")
-        except Exception as e:
-            print(f"    ⚠️ Ошибка: {e}")
-    
-    # УРОВЕНЬ 5: Интернет-поиск
-    print(f"  📂 Уровень 5: Интернет-поиск")
+    # Уровень 6: Память (заполняем пропуски)
+    print(f"  📂 Уровень 6: Внутренняя база (PDF)")
     for field in KASKO_FIELDS:
-        if field in found_fields:
+        if field in found:
             continue
-        
-        search_result = search_internet(company, field)
-        if search_result:
-            result[field] = search_result
-            found_fields.add(field)
-            source_stats[5] += 1
-            print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
-        else:
-            # Не печатаем для каждого поля, чтобы не засорять логи
-            pass
-    
-    # УРОВЕНЬ 6: Память (PDF)
-    print(f"  📂 Уровень 6: Внутренняя память (PDF)")
-    memory_fields = []
-    for field in KASKO_FIELDS:
-        if field in found_fields:
-            continue
-        
         memory_data = get_from_memory(company, field)
         if memory_data:
             result[field] = memory_data
-            found_fields.add(field)
-            source_stats[6] += 1
-            memory_fields.append(field)
-            print(f"    ✅ Из PDF: {FIELD_LABELS.get(field, field)}")
+            found.add(field)
+            print(f"    ✅ Из памяти: {FIELD_LABELS.get(field, field)}")
     
-    if not memory_fields:
-        print(f"    ⚠️ Нет данных в PDF для недостающих полей")
-    
-    # ИТОГ
-    print(f"\n📊 {company}: собрано {len(found_fields)}/{len(KASKO_FIELDS)} полей")
-    for level, count in source_stats.items():
-        if count > 0:
-            info = get_source_level_info(level)
-            print(f"  {info['emoji']} {info['label']}: {count}")
-    
+    print(f"\n📊 {company}: собрано {len(found)}/{len(KASKO_FIELDS)} полей")
     return result
 
-# ==================== СБОР ВСЕХ ДАННЫХ ====================
-
 def collect_all_data() -> Dict:
-    """Сбор данных для всех компаний"""
     print("\n" + "=" * 60)
     print("📊 СБОР ДАННЫХ: КАСКО")
     print("=" * 60)
-    print(f"Компаний: {len(KASKO_PDF_DATA)}")
-    print(f"Поля: {len(KASKO_FIELDS)}")
-    print(f"Уровни: 6 (официальный → агрегаторы → спец.агрегаторы → рейтинги → поиск → память)")
-    print("=" * 60)
     
     all_data = {}
-    
     for company in KASKO_PDF_DATA.keys():
-        company_data = collect_company_data(company)
-        all_data[company] = company_data
-        time.sleep(1.5)  # Задержка между компаниями
+        all_data[company] = collect_company_data(company)
+        time.sleep(1)
     
     all_data["_last_updated"] = datetime.now().isoformat()
-    all_data["_product"] = "kasko"
-    all_data["_fields"] = KASKO_FIELDS
-    
-    print("\n" + "=" * 60)
-    print("✅ СБОР ЗАВЕРШЁН")
-    print("=" * 60)
-    
     return all_data
 
-# ==================== ЗАГРУЗКА / СОХРАНЕНИЕ ДАННЫХ ====================
+# ==================== ЗАГРУЗКА/СОХРАНЕНИЕ ====================
 
 DATA_FILE = "insurance_data.json"
 
@@ -792,70 +531,41 @@ def load_data() -> Dict:
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                print(f"📦 Загружено из кэша: {len(data) - 1} компаний")
+                print(f"📦 Загружено из кэша")
                 return data
-        except Exception as e:
-            print(f"⚠️ Ошибка загрузки кэша: {e}")
+        except:
+            pass
     
-    print("🔄 Данных нет, запускаем сбор...")
+    print("🔄 Сбор данных...")
     data = collect_all_data()
-    save_data(data)
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
     return data
 
-def save_data(data: Dict) -> None:
-    try:
-        with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"💾 Данные сохранены в {DATA_FILE}")
-    except Exception as e:
-        print(f"⚠️ Ошибка сохранения: {e}")
+# ==================== FLASK ====================
 
-# ==================== ЗАГРУЗКА ПРИ СТАРТЕ ====================
-
-print("🚀 Загрузка приложения...")
+print("🚀 Загрузка...")
 INSURANCE_DATA = load_data()
 ALL_COMPANIES = [c for c in INSURANCE_DATA.keys() if not c.startswith("_")]
-
-# ==================== FLASK МАРШРУТЫ ====================
 
 @app.route('/')
 def index():
     last_updated = INSURANCE_DATA.get("_last_updated", "неизвестно")
-    return render_template('index.html',
-                         companies=ALL_COMPANIES,
-                         last_updated=last_updated[:16] if last_updated != "неизвестно" else "неизвестно")
+    return render_template('index.html', companies=ALL_COMPANIES, last_updated=last_updated[:16] if last_updated != "неизвестно" else "неизвестно")
 
 @app.route('/compare', methods=['POST'])
 def compare():
-    company1 = request.form.get('company1')
-    company2 = request.form.get('company2')
+    c1 = request.form.get('company1')
+    c2 = request.form.get('company2')
+    if not c1 or not c2 or c1 == c2:
+        return "❌ Ошибка выбора <a href='/'>Назад</a>"
     
-    if not company1 or not company2:
-        return "❌ Выберите обе компании! <a href='/'>Назад</a>"
-    
-    if company1 == company2:
-        return "❌ Выберите разные компании! <a href='/'>Назад</a>"
-    
-    data1 = INSURANCE_DATA.get(company1, {})
-    data2 = INSURANCE_DATA.get(company2, {})
-    
-    # Подготовка источников
-    sources1 = {}
-    sources2 = {}
-    
-    for field in KASKO_FIELDS:
-        if field in data1 and 'source' in data1[field]:
-            sources1[field] = data1[field]['source']
-        if field in data2 and 'source' in data2[field]:
-            sources2[field] = data2[field]['source']
+    data1 = INSURANCE_DATA.get(c1, {})
+    data2 = INSURANCE_DATA.get(c2, {})
     
     return render_template('result.html',
-                         company1=company1,
-                         company2=company2,
-                         data1=data1,
-                         data2=data2,
-                         sources1=sources1,
-                         sources2=sources2,
+                         company1=c1, company2=c2,
+                         data1=data1, data2=data2,
                          fields=KASKO_FIELDS,
                          field_labels=FIELD_LABELS,
                          timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -863,224 +573,133 @@ def compare():
 @app.route('/update')
 def update():
     global INSURANCE_DATA, ALL_COMPANIES
-    print("🔄 Ручное обновление...")
     INSURANCE_DATA = collect_all_data()
-    save_data(INSURANCE_DATA)
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(INSURANCE_DATA, f, ensure_ascii=False, indent=2)
     ALL_COMPANIES = [c for c in INSURANCE_DATA.keys() if not c.startswith("_")]
     return "✅ Данные обновлены! <a href='/'>На главную</a>"
 
-# Заглушки для старых URL
 @app.route('/login')
 @app.route('/register')
 @app.route('/logout')
 @app.route('/payment')
-def old_routes():
+def old():
     return redirect('/')
 
 # ==================== ШАБЛОНЫ ====================
 
 os.makedirs('templates', exist_ok=True)
 
-# index.html
 with open('templates/index.html', 'w', encoding='utf-8') as f:
     f.write('''
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сравнение КАСКО</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #f0f2f5; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .container { background: #fff; padding: 40px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 520px; width: 100%; }
-        h1 { font-size: 24px; color: #1a1a2e; text-align: center; margin-bottom: 8px; }
-        .subtitle { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 30px; }
-        .update-info { text-align: center; font-size: 12px; color: #9ca3af; margin-bottom: 24px; padding: 8px; background: #f9fafb; border-radius: 8px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; font-weight: 600; font-size: 14px; color: #374151; margin-bottom: 6px; }
-        select { width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 15px; background: #fff; transition: border-color 0.2s; appearance: none; }
-        select:focus { outline: none; border-color: #2563eb; }
-        .vs { text-align: center; font-size: 20px; color: #9ca3af; margin: 8px 0; }
-        .btn { width: 100%; padding: 14px; background: #2563eb; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 8px; }
-        .btn:hover { background: #1d4ed8; }
-        .btn-update { background: #6b7280; margin-top: 12px; }
-        .btn-update:hover { background: #4b5563; }
-        .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 16px; }
-        .badge { display: inline-block; font-size: 11px; padding: 2px 10px; border-radius: 12px; background: #e5e7eb; color: #4b5563; margin-top: 8px; }
-    </style>
+<html>
+<head><meta charset="UTF-8"><title>Сравнение КАСКО</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:#f0f2f5;padding:20px;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.container{background:#fff;padding:40px;border-radius:16px;max-width:520px;width:100%}
+h1{font-size:24px;color:#1a1a2e;text-align:center}
+.subtitle{text-align:center;color:#6b7280;font-size:14px;margin:8px 0 24px}
+.update-info{text-align:center;font-size:12px;color:#9ca3af;padding:8px;background:#f9fafb;border-radius:8px;margin-bottom:24px}
+select{width:100%;padding:12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:15px;margin:6px 0}
+.btn{width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer}
+.btn-update{background:#6b7280;margin-top:10px}
+.vs{text-align:center;font-size:20px;color:#9ca3af;margin:8px 0}
+.footer{margin-top:20px;text-align:center;font-size:12px;color:#9ca3af}
+.badge{display:inline-block;font-size:11px;padding:2px 10px;border-radius:12px;background:#e5e7eb;color:#4b5563;margin:4px}
+</style>
 </head>
 <body>
 <div class="container">
     <h1>🚗 Сравнение КАСКО</h1>
     <p class="subtitle">Выберите две компании для сравнения</p>
     <div class="update-info">📅 Данные обновлены: {{ last_updated }}</div>
-    
-    <form action="/compare" method="POST">
-        <div class="form-group">
-            <label>🏢 Первая компания</label>
-            <select name="company1" required>
-                <option value="">— Выберите —</option>
-                {% for c in companies %}
-                <option value="{{ c }}">{{ c }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        
+    <form method="POST" action="/compare">
+        <select name="company1" required>
+            <option value="">— Первая компания —</option>
+            {% for c in companies %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
         <div class="vs">⚔️</div>
-        
-        <div class="form-group">
-            <label>🏢 Вторая компания</label>
-            <select name="company2" required>
-                <option value="">— Выберите —</option>
-                {% for c in companies %}
-                <option value="{{ c }}">{{ c }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        
+        <select name="company2" required>
+            <option value="">— Вторая компания —</option>
+            {% for c in companies %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
         <button type="submit" class="btn">📊 Сравнить</button>
     </form>
-    
-    <a href="/update"><button class="btn btn-update">🔄 Обновить данные сейчас</button></a>
-    
+    <a href="/update"><button class="btn btn-update">🔄 Обновить данные</button></a>
     <div class="footer">
         <span class="badge">11 компаний</span>
         <span class="badge">14 параметров</span>
-        <span class="badge">6 уровней поиска</span>
     </div>
 </div>
 </body>
 </html>
 ''')
 
-# result.html
 with open('templates/result.html', 'w', encoding='utf-8') as f:
     f.write('''
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сравнение КАСКО</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #f0f2f5; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
-        h1 { font-size: 22px; color: #1a1a2e; text-align: center; margin-bottom: 6px; }
-        .subtitle { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 24px; }
-        .vs-title { text-align: center; font-size: 16px; padding: 12px; background: #f8fafc; border-radius: 10px; margin-bottom: 24px; }
-        .main-badge { background: #2563eb; color: #fff; padding: 2px 14px; border-radius: 12px; font-size: 12px; margin-left: 8px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { background: #1a1a2e; color: #fff; padding: 10px 12px; text-align: left; }
-        td { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
-        .param { font-weight: 600; color: #374151; background: #f8fafc; width: 16%; }
-        .value { word-break: break-word; }
-        .source-icon { display: inline-block; font-size: 14px; margin-right: 4px; cursor: help; }
-        .source-tooltip { display: none; font-size: 11px; color: #6b7280; margin-top: 2px; }
-        .value:hover .source-tooltip { display: block; }
-        .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 16px; padding: 14px; background: #f8fafc; border-radius: 10px; font-size: 13px; }
-        .legend-item { display: flex; align-items: center; gap: 4px; }
-        .btn { display: inline-block; padding: 10px 24px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; }
-        .btn:hover { background: #1d4ed8; }
-        .btn-secondary { background: #6b7280; }
-        .btn-secondary:hover { background: #4b5563; }
-        .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
-        .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 16px; }
-        .missing { color: #9ca3af; font-style: italic; }
-        .source-url { font-size: 11px; color: #6b7280; word-break: break-all; }
-        .source-url a { color: #2563eb; text-decoration: none; }
-        .source-url a:hover { text-decoration: underline; }
-        @media (max-width: 768px) {
-            .container { padding: 16px; }
-            table { font-size: 12px; }
-            td, th { padding: 6px 8px; }
-            .param { width: 20%; }
-        }
-    </style>
+<html>
+<head><meta charset="UTF-8"><title>Результат сравнения</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:#f0f2f5;padding:20px}
+.container{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:16px}
+h1{font-size:22px;color:#1a1a2e;text-align:center}
+.subtitle{text-align:center;color:#6b7280;font-size:14px;margin-bottom:20px}
+.vs-title{text-align:center;font-size:16px;padding:12px;background:#f8fafc;border-radius:10px;margin-bottom:20px}
+.main-badge{background:#2563eb;color:#fff;padding:2px 14px;border-radius:12px;font-size:12px;margin-left:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#1a1a2e;color:#fff;padding:10px;text-align:left}
+td{padding:10px;border-bottom:1px solid #f0f2f5;vertical-align:top}
+.param{font-weight:600;color:#374151;background:#f8fafc;width:16%}
+.value{word-break:break-word}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0;padding:14px;background:#f8fafc;border-radius:10px;font-size:13px}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+.btn{padding:10px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-weight:600}
+.btn-secondary{background:#6b7280}
+.footer{margin-top:20px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;padding-top:16px}
+.missing{color:#9ca3af;font-style:italic}
+</style>
 </head>
 <body>
 <div class="container">
     <h1>📊 Сравнение КАСКО</h1>
-    <div class="subtitle">Сравнительный анализ условий страхования</div>
-    
-    <div class="vs-title">
-        🏆 {{ company1 }} <span class="main-badge">ОСНОВНАЯ</span>
-        &nbsp;⚔️&nbsp; {{ company2 }}
-    </div>
-    
+    <div class="vs-title">🏆 {{ company1 }} <span class="main-badge">ОСНОВНАЯ</span> ⚔️ {{ company2 }}</div>
     <div class="legend">
-        <span class="legend-item">🟢 Уровень 1 — Официальный сайт</span>
-        <span class="legend-item">🔵 Уровень 2 — Агрегатор</span>
-        <span class="legend-item">🟣 Уровень 3 — Спец. агрегатор</span>
-        <span class="legend-item">🟠 Уровень 4 — Рейтинг</span>
-        <span class="legend-item">🟡 Уровень 5 — Интернет-поиск</span>
-        <span class="legend-item">⚪ Уровень 6 — Внутренняя база</span>
+        <span>🟢 Официальный сайт</span>
+        <span>⚪ Внутренняя база</span>
     </div>
-    
     <table>
-        <thead>
-            <tr>
-                <th class="param">Параметр</th>
-                <th>{{ company1 }}</th>
-                <th>{{ company2 }}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for field in fields %}
-            <tr>
-                <td class="param">{{ field_labels.get(field, field) }}</td>
-                <td class="value">
-                    {% if field in data1 and data1[field] %}
-                        {% if data1[field] is mapping and 'value' in data1[field] %}
-                            {{ data1[field].value }}
-                        {% else %}
-                            {{ data1[field] }}
-                        {% endif %}
-                        {% if field in sources1 and sources1[field] %}
-                            {% set s = sources1[field] %}
-                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}🟢{% elif s.level == 2 %}🔵{% elif s.level == 3 %}🟣{% elif s.level == 4 %}🟠{% elif s.level == 5 %}🟡{% else %}⚪{% endif %}</span>
-                            <div class="source-tooltip">
-                                Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})
-                                {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
-                            </div>
-                        {% endif %}
-                    {% else %}
-                        <span class="missing">—</span>
+        <tr><th>Параметр</th><th>{{ company1 }}</th><th>{{ company2 }}</th></tr>
+        {% for field in fields %}
+        <tr>
+            <td class="param">{{ field_labels.get(field, field) }}</td>
+            <td class="value">
+                {% if field in data1 and data1[field] %}
+                    {{ data1[field].value if data1[field] is mapping and 'value' in data1[field] else data1[field] }}
+                    {% if data1[field] is mapping and 'source' in data1[field] %}
+                        <span>{% if data1[field].source.level == 1 %}🟢{% else %}⚪{% endif %}</span>
                     {% endif %}
-                </td>
-                <td class="value">
-                    {% if field in data2 and data2[field] %}
-                        {% if data2[field] is mapping and 'value' in data2[field] %}
-                            {{ data2[field].value }}
-                        {% else %}
-                            {{ data2[field] }}
-                        {% endif %}
-                        {% if field in sources2 and sources2[field] %}
-                            {% set s = sources2[field] %}
-                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}🟢{% elif s.level == 2 %}🔵{% elif s.level == 3 %}🟣{% elif s.level == 4 %}🟠{% elif s.level == 5 %}🟡{% else %}⚪{% endif %}</span>
-                            <div class="source-tooltip">
-                                Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})
-                                {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
-                            </div>
-                        {% endif %}
-                    {% else %}
-                        <span class="missing">—</span>
+                {% else %}<span class="missing">—</span>{% endif %}
+            </td>
+            <td class="value">
+                {% if field in data2 and data2[field] %}
+                    {{ data2[field].value if data2[field] is mapping and 'value' in data2[field] else data2[field] }}
+                    {% if data2[field] is mapping and 'source' in data2[field] %}
+                        <span>{% if data2[field].source.level == 1 %}🟢{% else %}⚪{% endif %}</span>
                     {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
+                {% else %}<span class="missing">—</span>{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
     </table>
-    
     <div class="actions">
         <a href="/" class="btn">← Новое сравнение</a>
-        <a href="/update" class="btn btn-secondary">🔄 Обновить данные</a>
+        <a href="/update" class="btn btn-secondary">🔄 Обновить</a>
     </div>
-    
-    <div class="footer">
-        Обновлено: {{ timestamp }}
-    </div>
+    <div class="footer">Обновлено: {{ timestamp }}</div>
 </div>
 </body>
 </html>
