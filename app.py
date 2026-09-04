@@ -1,812 +1,809 @@
-import os
+# app.py — МНОГОУРОВНЕВЫЙ ПАРСЕР КАСКО (6 УРОВНЕЙ) С ИСТОЧНИКАМИ
+
+from flask import Flask, render_template, request
+from datetime import datetime
 import json
+import os
+import requests
+import urllib3
+import re
 import time
 import random
-import re
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
-from flask import Flask, render_template, request, jsonify, session
-import cloudscraper
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from duckduckgo_search import DDGS
-import requests
-from urllib.parse import urlparse, quote_plus
+from typing import Dict, List, Optional, Any
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
-app.secret_key = 'insurance_agent_secret_key_2026'
 
 # ==================== КОНФИГУРАЦИЯ ====================
 
-class Config:
-    # Кэширование
-    CACHE_FILE = 'insurance_cache.json'
-    CACHE_DAYS = 7
-    
-    # Временные задержки (чтобы не блокировали)
-    MIN_DELAY = 1.0
-    MAX_DELAY = 3.0
-    
-    # User-Agent ротация
-    USER_AGENTS = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
-    ]
-    
-    # Прокси (если есть - добавить)
-    PROXIES = []
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edge/120.0.0.0 Safari/537.36",
+]
 
-# ==================== СТРУКТУРА ДАННЫХ ====================
+# ==================== ДАННЫЕ ИЗ PDF (УРОВЕНЬ 6 — ПАМЯТЬ) ====================
 
-@dataclass
-class SourceInfo:
-    """Информация об источнике данных"""
-    name: str
-    url: str
-    level: int  # 1-6
-    source_type: str  # official, aggregator, rating, search, memory
-    found_at: str
-    
-    def to_dict(self):
-        return asdict(self)
-
-@dataclass
-class FieldValue:
-    """Значение поля с источником"""
-    value: str
-    source: SourceInfo
-    
-    def to_dict(self):
-        return {
-            'value': self.value,
-            'source': self.source.to_dict()
-        }
-
-# ==================== КЭШИРОВАНИЕ ====================
-
-class SmartCache:
-    def __init__(self, cache_file=Config.CACHE_FILE):
-        self.cache_file = cache_file
-        self.data = self._load()
-    
-    def _load(self):
-        try:
-            with open(self.cache_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
-    
-    def _save(self):
-        with open(self.cache_file, 'w', encoding='utf-8') as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=2)
-    
-    def get(self, key):
-        if key in self.data:
-            entry = self.data[key]
-            cache_time = datetime.fromisoformat(entry['timestamp'])
-            if datetime.now() - cache_time < timedelta(days=Config.CACHE_DAYS):
-                return entry['value']
-        return None
-    
-    def set(self, key, value):
-        self.data[key] = {
-            'value': value,
-            'timestamp': datetime.now().isoformat()
-        }
-        self._save()
-
-cache = SmartCache()
-
-# ==================== АНТИДЕТЕКТ-ПАРСИНГ ====================
-
-class AntiDetectParser:
-    """Парсер с маскировкой под реального пользователя"""
-    
-    def __init__(self):
-        self.scraper = cloudscraper.create_scraper(
-            browser={
-                'browser': 'chrome',
-                'platform': 'windows',
-                'mobile': False
-            }
-        )
-        self.session = requests.Session()
-    
-    def _get_headers(self):
-        return {
-            'User-Agent': random.choice(Config.USER_AGENTS),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0'
-        }
-    
-    def _delay(self):
-        time.sleep(random.uniform(Config.MIN_DELAY, Config.MAX_DELAY))
-    
-    def fetch_html(self, url: str, use_selenium: bool = False) -> Optional[str]:
-        """Загружает HTML с маскировкой"""
-        
-        # Проверяем кэш
-        cache_key = f"html_{url}"
-        cached = cache.get(cache_key)
-        if cached:
-            return cached
-        
-        self._delay()
-        headers = self._get_headers()
-        
-        # Стратегия 1: CloudScraper
-        try:
-            response = self.scraper.get(url, headers=headers, timeout=30)
-            if response.status_code == 200:
-                html = response.text
-                cache.set(cache_key, html)
-                return html
-        except Exception as e:
-            print(f"CloudScraper error for {url}: {e}")
-        
-        # Стратегия 2: Selenium (для сложных сайтов)
-        if use_selenium:
-            try:
-                html = self._fetch_with_selenium(url)
-                if html:
-                    cache.set(cache_key, html)
-                    return html
-            except Exception as e:
-                print(f"Selenium error for {url}: {e}")
-        
-        return None
-    
-    def _fetch_with_selenium(self, url: str) -> Optional[str]:
-        """Загрузка через Selenium с маскировкой"""
-        options = Options()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--window-size=1920,1080')
-        options.add_argument(f'user-agent={random.choice(Config.USER_AGENTS)}')
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_experimental_option('excludeSwitches', ['enable-automation'])
-        options.add_experimental_option('useAutomationExtension', False)
-        
-        driver = None
-        try:
-            driver = webdriver.Chrome(options=options)
-            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                'source': '''
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                    Object.defineProperty(navigator, 'plugins', {
-                        get: () => [1, 2, 3, 4, 5]
-                    });
-                    Object.defineProperty(navigator, 'languages', {
-                        get: () => ['ru-RU', 'ru', 'en-US', 'en']
-                    });
-                '''
-            })
-            driver.get(url)
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            time.sleep(random.uniform(2, 4))
-            return driver.page_source
-        except Exception as e:
-            print(f"Selenium error: {e}")
-            return None
-        finally:
-            if driver:
-                driver.quit()
-
-parser = AntiDetectParser()
-
-# ==================== ПОИСКОВЫЕ СИСТЕМЫ ====================
-
-class SearchEngine:
-    """Поиск через DuckDuckGo"""
-    
-    @staticmethod
-    def search(query: str, max_results: int = 5) -> List[Dict]:
-        """Поиск с кэшированием"""
-        cache_key = f"search_{query}"
-        cached = cache.get(cache_key)
-        if cached:
-            return cached
-        
-        try:
-            with DDGS() as ddgs:
-                results = []
-                for r in ddgs.text(query, max_results=max_results):
-                    results.append({
-                        'title': r.get('title', ''),
-                        'snippet': r.get('body', ''),
-                        'url': r.get('href', '')
-                    })
-                cache.set(cache_key, results)
-                return results
-        except Exception as e:
-            print(f"Search error: {e}")
-            return []
-    
-    @staticmethod
-    def search_question(question: str, company: str, product: str) -> List[Dict]:
-        """Формирует поисковый запрос как вопрос"""
-        query = f"{question} {company} {product}"
-        return SearchEngine.search(query)
-
-# ==================== КОНФИГУРАЦИЯ ПРОДУКТОВ ====================
-
-PRODUCTS = {
-    "kasko": {
-        "name": "КАСКО",
-        "icon": "🚗",
-        "fields": {
-            "total_loss": {
-                "name": "Тотал (%)",
-                "question": "Какой процент тотала у КАСКО"
-            },
-            "franchise": {
-                "name": "Франшиза",
-                "question": "Какая франшиза у КАСКО"
-            },
-            "gap": {
-                "name": "GAP",
-                "question": "Есть ли GAP в КАСКО"
-            },
-            "drone": {
-                "name": "БПЛА",
-                "question": "Покрывает ли ущерб от БПЛА"
-            },
-            "fire": {
-                "name": "Самовозгорание",
-                "question": "Покрывает ли самовозгорание"
-            },
-            "without_certificates": {
-                "name": "Выплата без справок",
-                "question": "Выплата без справок по КАСКО"
-            },
-            "evacuator": {
-                "name": "Эвакуатор (лимит)",
-                "question": "Какой лимит эвакуатора"
-            },
-            "repair_type": {
-                "name": "Тип ремонта",
-                "question": "Какой тип ремонта"
-            },
-            "payment_terms": {
-                "name": "Срок выплаты (дни)",
-                "question": "Какой срок выплаты по КАСКО"
-            },
-            "rating": {
-                "name": "Рейтинг",
-                "question": "Какой рейтинг у КАСКО"
-            }
-        },
-        "official_urls": [
-            "https://www.reso.ru/",
-            "https://www.reso.ru/insurance/auto/kasko/"
-        ],
-        "search_suffix": "РЕСО-Гарантия"
+KASKO_PDF_DATA = {
+    "РЕСО-Гарантия": {
+        "franchise": "Безусловная \\ Условно-безусловная (с 1-го или со 2-го случая). Не применяется к риску 'Хищение'.",
+        "without_certificates": "Стекла без ограничений (включая стеклянную крышу и люк); 1 раз в год 1 кузовной элемент (для VIP 2 раза/год). Камеры входят в состав элемента: зеркала, крышки багажника, облицовки бампера.",
+        "gap": "Отдельный риск",
+        "total_loss": "75% от СС",
+        "fire": "Входит",
+        "terrorism": "Входит",
+        "drone": "Лимит 1% СС по риску «Ущерб»",
+        "tow_truck": "1% от СС",
+        "repair_type": "Ремонт у официального дилера",
+        "payment_terms": "5 рабочих дней",
+        "advantages": "Ремонт у дилера, быстрая выплата, без учета износа, VIP-условия",
+        "weak_points": "Требуется уточнение условий по телефону",
+        "rating": "4.5",
+        "offices": "1200+"
     },
-    "osago": {
-        "name": "ОСАГО",
-        "icon": "🛡️",
-        "fields": {
-            "base_rate": {
-                "name": "Базовый тариф",
-                "question": "Какой базовый тариф ОСАГО"
-            },
-            "bm": {
-                "name": "Коэффициент бонус-малус",
-                "question": "Какой коэффициент бонус-малус"
-            },
-            "territory_coef": {
-                "name": "Территориальный коэффициент",
-                "question": "Какой территориальный коэффициент"
-            },
-            "power_coef": {
-                "name": "Коэффициент мощности",
-                "question": "Какой коэффициент мощности"
-            },
-            "age_coef": {
-                "name": "Возрастной коэффициент",
-                "question": "Какой возрастной коэффициент"
-            },
-            "period_coef": {
-                "name": "Коэффициент периода",
-                "question": "Какой коэффициент периода использования"
-            },
-            "rating": {
-                "name": "Рейтинг",
-                "question": "Какой рейтинг ОСАГО"
-            }
-        },
-        "official_urls": [
-            "https://www.reso.ru/",
-            "https://www.reso.ru/insurance/auto/osago/"
-        ],
-        "search_suffix": "РЕСО-Гарантия"
+    "ВСК": {
+        "franchise": "Условно-безусловная. Может не применяться по отдельным рискам.",
+        "without_certificates": "Стекла: 5% СС (неагрегатная). Прочие элементы: 3% СС (агрегатная). Панорамная крыша, стеклянная крыша и камеры не покрываются.",
+        "gap": "Включен, если указан 1 период страхования (1 год). Если страховые суммы разбиты по кварталам – GAP отсутствует.",
+        "total_loss": "75% от СС",
+        "fire": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+        "terrorism": "Особые условия включения",
+        "drone": "Включен при наличии в полисе GAP и отметки 'официальный дилер'",
+        "tow_truck": "Петковые ТС - лимит 5 000 руб. Прочие - лимит 15 000 руб.",
+        "repair_type": "Ремонт на СТОА страховщика",
+        "payment_terms": "10 рабочих дней",
+        "advantages": "Гибкие условия по справкам",
+        "weak_points": "Камеры не оплачиваются без справок. Самовозгорание исключено.",
+        "rating": "4.2",
+        "offices": "800+"
     },
-    "ifl": {
-        "name": "Имущественное страхование",
-        "icon": "🏠",
-        "fields": {
-            "fire": {
-                "name": "Пожар",
-                "question": "Покрывает ли страховка пожар"
-            },
-            "flood": {
-                "name": "Залив",
-                "question": "Покрывает ли страховка залив"
-            },
-            "theft": {
-                "name": "Кража",
-                "question": "Покрывает ли страховка кражу"
-            },
-            "liability": {
-                "name": "Гражданская ответственность",
-                "question": "Покрывает ли гражданскую ответственность"
-            },
-            "natural_disasters": {
-                "name": "Стихийные бедствия",
-                "question": "Покрывает ли стихийные бедствия"
-            },
-            "rating": {
-                "name": "Рейтинг",
-                "question": "Какой рейтинг страхования имущества"
-            }
-        },
-        "official_urls": [
-            "https://www.reso.ru/",
-            "https://www.reso.ru/insurance/property/"
-        ],
-        "search_suffix": "РЕСО-Гарантия"
+    "Ингосстрах": {
+        "franchise": "Условная\\условно-безусловная. По каждому случаю или со 2-го случая (Авто-профи).",
+        "without_certificates": "Базовый вариант: 1 раз в год – 1 из вариантов: ЛКП не более 1-й детали; остекление кузова (ИСКЛЮЧАЯ стеклянную крышу); внешние световые приборы; зеркала; антенна.",
+        "gap": "Включен при отметке «Постоянная страховая сумма».",
+        "total_loss": "75% от СС",
+        "fire": "Входит",
+        "terrorism": "За доп. плату, тариф 0,3%.",
+        "drone": "Включен, но лимит 0,3%.",
+        "tow_truck": "По запросу",
+        "repair_type": "Ремонт на СТОА страховщика",
+        "payment_terms": "10 рабочих дней",
+        "advantages": "Широкая сеть офисов",
+        "weak_points": "Без справок – только ЛКП 1 детали. Возможны ограничения по пробегу и СТОА.",
+        "rating": "4.4",
+        "offices": "900+"
+    },
+    "Ренессанс": {
+        "franchise": "11 видов франшиз. Чаще всего: Франшиза виновника, Безусловная, Франшиза со 2-го случая.",
+        "without_certificates": "Вариативно: стекла 1 раз в год \\ стекла без ограничений \\ до 5% СС 2 раза \\ до 3% СС 1 раз \\ не предусмотрено.",
+        "gap": "Отдельный риск",
+        "total_loss": "75% от СС",
+        "fire": "Только для электромобилей",
+        "terrorism": "За доп. плату, 0,5% от СС на легковые ТС",
+        "drone": "За доп. плату, 0,5% от СС на легковые",
+        "tow_truck": "Петковые ТС - лимит 10 000 руб.",
+        "repair_type": "Ремонт или выплата",
+        "payment_terms": "10 рабочих дней",
+        "advantages": "Много вариантов франшизы",
+        "weak_points": "Франшиза по хищению. Эвакуация за доп. плату.",
+        "rating": "4.3",
+        "offices": "500+"
+    },
+    "АльфаСтрахование": {
+        "franchise": "Условно-безусловная. Применяется к Хищению.",
+        "without_certificates": "Базовый вариант: стекла без ограничений + 1 кузовной элемент 2 раза в год",
+        "gap": "Включен по умолчанию",
+        "total_loss": "75% от СС",
+        "fire": "За доп. плату, 0,8% от СС",
+        "terrorism": "За доп. плату, 0,2-0,3% от СС",
+        "drone": "За доп. плату",
+        "tow_truck": "Петковые ТС - лимит 5 000 руб. Прочие - лимит 10 000 руб.",
+        "repair_type": "Ремонт на СТОА страховщика",
+        "payment_terms": "7 рабочих дней",
+        "advantages": "Без справок с бонусами",
+        "weak_points": "Франшиза на Хищение, самовозгорание - за доп. плату",
+        "rating": "4.6",
+        "offices": "600+"
+    },
+    "Т-Страхование": {
+        "franchise": "Условно-безусловная. Для ТС старше 5 лет - обязательные франшизы",
+        "without_certificates": "Стекла: неогранич. кол-во раз – ИСКЛЮЧАЯ стеклянную крышу. Кузовные элементы: 1 раз в год - до 3% от СС",
+        "gap": "Отдельный риск",
+        "total_loss": "65% от СС",
+        "fire": "Нет инф.",
+        "terrorism": "Нет инф.",
+        "drone": "Нет инф.",
+        "tow_truck": "Лимит 10 000 руб.",
+        "repair_type": "Ремонт или выплата",
+        "payment_terms": "5 рабочих дней",
+        "advantages": "Онлайн-оформление, без справок",
+        "weak_points": "Ниже порог тотала (65%). Обязательные франшизы.",
+        "rating": "4.7",
+        "offices": "онлайн"
+    },
+    "РГС": {
+        "franchise": "Безусловная – по умолчанию. Возможны динамическая, условно-безусловная, агрегатная.",
+        "without_certificates": "Стекла: неограниченное кол-во раз - ИСКЛЮЧАЯ стеклянную крышу. Кузовные элементы: 1 раз в год.",
+        "gap": "Включен, если СС индексируемая. Не включен, если не индексируемая.",
+        "total_loss": "75% от СС",
+        "fire": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+        "terrorism": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+        "drone": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+        "tow_truck": "Петковые ТС - лимит 7 000 руб. Грузовые ТС - лимит 10 000 руб.",
+        "repair_type": "Ремонт на СТОА страховщика",
+        "payment_terms": "10 рабочих дней",
+        "advantages": "Гибкие условия",
+        "weak_points": "Самовозгорание и Терроризм исключены. Износ за 1-ый месяц - 7% (у РЕСО - 3%).",
+        "rating": "4.1",
+        "offices": "700+"
+    },
+    "Югория": {
+        "franchise": "Условно-безусловная франшиза. При пролонгации возможна доп. франшиза.",
+        "without_certificates": "Стекла: 1 раз, за исключением панорамной крыши и люка",
+        "gap": "Неагрегатная - изменяющаяся",
+        "total_loss": "Не указан",
+        "fire": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+        "terrorism": "Нет инф.",
+        "drone": "Входит",
+        "tow_truck": "Лимит 5% от СС, но не более 15 000 руб.",
+        "repair_type": "Ремонт или выплата",
+        "payment_terms": "10 рабочих дней",
+        "advantages": "Гибкие условия пролонгации",
+        "weak_points": "При пролонгации доп. франшиза. Самовозгорание исключено.",
+        "rating": "3.9",
+        "offices": "400+"
+    },
+    "СберСтрахование": {
+        "franchise": "6 видов франшиз: условная, безусловная, безусловная при ДТП, динамическая, безусловная со 2-го случая, агрегатная.",
+        "without_certificates": "Вариантно: 1 раз - 1 деталь кузова + стекла. Только стекла.",
+        "gap": "Включен, если СС индексируемая. Не включен, если не индексируемая.",
+        "total_loss": "70% от СС",
+        "fire": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+        "terrorism": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+        "drone": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+        "tow_truck": "Петковые ТС - лимит 6 000 руб. Грузовые ТС - лимит 12 000 руб.",
+        "repair_type": "Ремонт или выплата",
+        "payment_terms": "7 рабочих дней",
+        "advantages": "Много вариантов франшизы",
+        "weak_points": "Тотал 70%. Самовозгорание и Терроризм исключены.",
+        "rating": "4.0",
+        "offices": "1000+"
+    },
+    "Согласие": {
+        "franchise": "Условно-безусловная \\ динамическая",
+        "without_certificates": "Стандартно: Неограниченно стекла (искл. крыша и люк) + 1 раз любой элемент",
+        "gap": "В разделе 'Условия страхования' указывается как риск ГЭП",
+        "total_loss": "70% от СС",
+        "fire": "За доп. плату, 1.15 для ФЛ и 1.05 для ЮЛ",
+        "terrorism": "За доп. плату, тариф 1.1% только для МСК и МО",
+        "drone": "За доп. плату, только для МСК и МО",
+        "tow_truck": "5 000 руб. (до 3,5 т). 10 000 руб. (свыше 3,5 т и за рубежом)",
+        "repair_type": "Ремонт или выплата",
+        "payment_terms": "10 рабочих дней",
+        "advantages": "Гибкие условия",
+        "weak_points": "Тотал 70%. Эвакуатор 5 000 руб. (ниже РЕСО).",
+        "rating": "4.2",
+        "offices": "300+"
+    },
+    "Совкомбанк Страхование": {
+        "franchise": "Условно-безусловная. Обязательная франшиза 25% (при не уведомлении о смене региона)",
+        "without_certificates": "Только ремонт или замена ветрового стекла",
+        "gap": "Нет инф.",
+        "total_loss": "75% от СС",
+        "fire": "Входит в группу событий №2",
+        "terrorism": "ИСКЛЮЧЕНИЕ из покрытия",
+        "drone": "ИСКЛЮЧЕНИЕ из покрытия",
+        "tow_truck": "6 500 руб.",
+        "repair_type": "Ремонт или выплата",
+        "payment_terms": "10 рабочих дней",
+        "advantages": "Группы событий",
+        "weak_points": "Терроризм исключен. Обязательная франшиза.",
+        "rating": "3.8",
+        "offices": "200+"
     }
 }
 
-# ==================== АГРЕГАТОРЫ ====================
+# ==================== ОФИЦИАЛЬНЫЕ САЙТЫ (УРОВЕНЬ 1) ====================
+
+OFFICIAL_URLS = {
+    "РЕСО-Гарантия": "https://reso.ru/",
+    "ВСК": "https://www.vsk.ru/",
+    "Ингосстрах": "https://www.ingos.ru/",
+    "Ренессанс": "https://www.renins.ru/",
+    "АльфаСтрахование": "https://www.alfastrah.ru/",
+    "Т-Страхование": "https://tbank.ru/insurance/",
+    "РГС": "https://www.rgs.ru/",
+    "Югория": "https://ugsk.ru/",
+    "СберСтрахование": "https://sberbankins.ru/",
+    "Согласие": "https://soglasie.ru/",
+    "Совкомбанк Страхование": "https://sovcomins.ru/"
+}
+
+# ==================== АГРЕГАТОРЫ (УРОВНИ 2-3) ====================
 
 AGGREGATORS = [
-    {
-        "name": "Сравни.ру",
-        "url": "https://www.sravni.ru/",
-        "type": "aggregator",
-        "level": 2
-    },
-    {
-        "name": "Банки.ру",
-        "url": "https://www.banki.ru/",
-        "type": "aggregator",
-        "level": 2
-    },
-    {
-        "name": "Финуслуги",
-        "url": "https://finuslugi.ru/",
-        "type": "aggregator",
-        "level": 2
-    },
-    {
-        "name": "Инсмарт",
-        "url": "https://insmart.ru/",
-        "type": "aggregator",
-        "level": 3
-    },
-    {
-        "name": "Пампаду",
-        "url": "https://pampadu.ru/",
-        "type": "aggregator",
-        "level": 3
-    },
-    {
-        "name": "Полис Онлайн",
-        "url": "https://polis.online/",
-        "type": "aggregator",
-        "level": 3
-    }
+    {"name": "Сравни.ру", "url": "https://www.sravni.ru/strahovanie/", "level": 2},
+    {"name": "Банки.ру", "url": "https://www.banki.ru/insurance/", "level": 2},
+    {"name": "Финуслуги", "url": "https://finuslugi.ru/insurance", "level": 2},
+    {"name": "Инсмарт", "url": "https://insmart.ru/", "level": 3},
+    {"name": "Пампаду", "url": "https://pampadu.ru/", "level": 3},
+    {"name": "Полис Онлайн", "url": "https://polis.online/", "level": 3},
 ]
 
-RATING_SOURCES = [
-    {
-        "name": "Эксперт РА",
-        "url": "https://raexpert.ru/",
-        "type": "rating",
-        "level": 4
-    },
-    {
-        "name": "ЦБ РФ",
-        "url": "https://cbr.ru/",
-        "type": "rating",
-        "level": 4
-    }
+# ==================== ПОИСКОВЫЕ ЗАПРОСЫ (УРОВЕНЬ 5) ====================
+
+SEARCH_QUERIES = {
+    "franchise": "Какая франшиза у КАСКО {company}",
+    "without_certificates": "Выплата без справок по КАСКО {company}",
+    "gap": "Есть ли GAP в КАСКО {company}",
+    "total_loss": "Какой процент тотала у КАСКО {company}",
+    "fire": "Покрывает ли КАСКО {company} самовозгорание",
+    "terrorism": "Покрывает ли КАСКО {company} терроризм",
+    "drone": "Покрывает ли КАСКО {company} ущерб от БПЛА",
+    "tow_truck": "Лимит эвакуатора в КАСКО {company}",
+    "repair_type": "Где ремонтируют по КАСКО {company}",
+    "payment_terms": "Срок выплаты по КАСКО {company}"
+}
+
+# ==================== ПОЛЯ КАСКО ====================
+
+KASKO_FIELDS = [
+    "franchise",
+    "without_certificates",
+    "gap",
+    "total_loss",
+    "fire",
+    "terrorism",
+    "drone",
+    "tow_truck",
+    "repair_type",
+    "payment_terms",
+    "advantages",
+    "weak_points",
+    "rating",
+    "offices"
 ]
 
-# ==================== ОСНОВНАЯ ЛОГИКА ПОИСКА ====================
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
-class InsuranceAgent:
-    """Главный агент для поиска страховых данных"""
-    
-    def __init__(self):
-        self.cache = SmartCache()
-        self.parser = AntiDetectParser()
-        self.search = SearchEngine()
-    
-    def find_value(self, company: str, product: str, field_key: str, field_config: Dict) -> FieldValue:
-        """
-        Многоуровневый поиск значения поля
-        Уровни:
-        1. Официальный сайт
-        2. Агрегаторы (крупные)
-        3. Специализированные агрегаторы
-        4. Рейтинговые агентства
-        5. Интернет-поиск
-        6. Внутренняя память (fallback)
-        """
-        
-        product_config = PRODUCTS.get(product)
-        if not product_config:
-            return self._fallback_value(field_key, "Продукт не найден")
-        
-        field_name = field_config.get('name', field_key)
-        question = field_config.get('question', '')
-        search_suffix = product_config.get('search_suffix', '')
-        
-        # Проверяем кэш
-        cache_key = f"value_{company}_{product}_{field_key}"
-        cached = self.cache.get(cache_key)
-        if cached:
-            return FieldValue(
-                value=cached['value'],
-                source=SourceInfo(
-                    name=cached['source']['name'],
-                    url=cached['source']['url'],
-                    level=cached['source']['level'],
-                    source_type=cached['source']['source_type'],
-                    found_at=cached['source']['found_at']
-                )
+def get_headers() -> Dict:
+    """Получить случайные заголовки для обхода блокировки"""
+    return {
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+    }
+
+def fetch_url(url: str, timeout: int = 15) -> Optional[str]:
+    """Загрузить URL с обходом блокировок"""
+    try:
+        response = requests.get(
+            url,
+            headers=get_headers(),
+            timeout=timeout,
+            verify=False,
+            allow_redirects=True
+        )
+        if response.status_code == 200:
+            return response.text
+        else:
+            return None
+    except requests.exceptions.SSLError:
+        # Повтор без проверки сертификата
+        try:
+            response = requests.get(
+                url,
+                headers=get_headers(),
+                timeout=timeout,
+                verify=False,
+                allow_redirects=True
             )
-        
-        # Уровень 1: Официальный сайт
-        official_result = self._search_official(company, product, field_key, field_config)
-        if official_result and official_result.value != "не найдено":
-            self.cache.set(cache_key, official_result.to_dict())
-            return official_result
-        
-        # Уровень 2-3: Агрегаторы
-        for aggregator in AGGREGATORS:
-            agg_result = self._search_aggregator(aggregator, company, product, field_key, field_config)
-            if agg_result and agg_result.value != "не найдено":
-                self.cache.set(cache_key, agg_result.to_dict())
-                return agg_result
-            time.sleep(random.uniform(0.5, 1.5))
-        
-        # Уровень 4: Рейтинги
-        for rating in RATING_SOURCES:
-            rating_result = self._search_rating(rating, company, product, field_key, field_config)
-            if rating_result and rating_result.value != "не найдено":
-                self.cache.set(cache_key, rating_result.to_dict())
-                return rating_result
-        
-        # Уровень 5: Интернет-поиск
-        if question:
-            search_result = self._search_internet(question, company, search_suffix)
-            if search_result and search_result.value != "не найдено":
-                self.cache.set(cache_key, search_result.to_dict())
-                return search_result
-        
-        # Уровень 6: Fallback (внутренняя память)
-        fallback = self._get_fallback(company, product, field_key)
-        if fallback:
-            self.cache.set(cache_key, fallback.to_dict())
-            return fallback
-        
-        # Если ничего не найдено
-        return self._fallback_value(field_key, "Данные не найдены")
-    
-    def _search_official(self, company: str, product: str, field_key: str, field_config: Dict) -> Optional[FieldValue]:
-        """Поиск на официальном сайте"""
-        product_config = PRODUCTS.get(product)
-        if not product_config:
-            return None
-        
-        for url in product_config.get('official_urls', []):
-            html = self.parser.fetch_html(url)
-            if not html:
-                continue
-            
-            # Пытаемся извлечь информацию через BeautifulSoup
-            soup = BeautifulSoup(html, 'html.parser')
-            
-            # Ищем по ключевым словам
-            field_name = field_config.get('name', field_key)
-            keywords = [field_name.lower(), field_key.lower()]
-            
-            # Поиск в тексте
-            text = soup.get_text()
-            for keyword in keywords:
-                pattern = rf'{keyword}.*?([0-9]+[%]?|да|нет|есть|отсутствует|[0-9]+[\s]*дней?|[0-9]+[\s]*руб\.?)'
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
-                    value = match.group(1).strip()
-                    if value:
-                        return FieldValue(
-                            value=value,
-                            source=SourceInfo(
-                                name=f"Официальный сайт {company}",
-                                url=url,
-                                level=1,
-                                source_type="official",
-                                found_at=datetime.now().isoformat()
-                            )
-                        )
-        
+            if response.status_code == 200:
+                return response.text
+        except:
+            pass
         return None
+    except Exception as e:
+        print(f"      ⚠️ Ошибка загрузки {url}: {type(e).__name__}")
+        return None
+
+def clean_text(text: str) -> str:
+    """Очистка текста"""
+    if not text:
+        return ""
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+def get_source_level_info(level: int) -> Dict:
+    """Информация об уровне источника"""
+    levels = {
+        1: {"type": "official", "label": "Официальный сайт", "emoji": "🟢"},
+        2: {"type": "aggregator", "label": "Агрегатор", "emoji": "🔵"},
+        3: {"type": "special", "label": "Спец. агрегатор", "emoji": "🟣"},
+        4: {"type": "rating", "label": "Рейтинг", "emoji": "🟠"},
+        5: {"type": "search", "label": "Интернет-поиск", "emoji": "🟡"},
+        6: {"type": "memory", "label": "Внутренняя база", "emoji": "⚪"},
+    }
+    return levels.get(level, {"type": "unknown", "label": "Неизвестно", "emoji": "⬜"})
+
+# ==================== УРОВЕНЬ 1: ОФИЦИАЛЬНЫЙ САЙТ ====================
+
+def parse_official_site(company: str, url: str) -> Dict[str, Dict]:
+    """Парсинг официального сайта"""
+    print(f"  📂 Уровень 1: Официальный сайт")
+    print(f"    🔗 {url}")
     
-    def _search_aggregator(self, aggregator: Dict, company: str, product: str, field_key: str, field_config: Dict) -> Optional[FieldValue]:
-        """Поиск на агрегаторах"""
-        # Формируем поисковый запрос для агрегатора
-        query = f"{company} {PRODUCTS.get(product, {}).get('name', '')} {field_config.get('name', field_key)}"
-        search_url = f"{aggregator['url']}search/?q={quote_plus(query)}"
-        
-        html = self.parser.fetch_html(search_url)
-        if not html:
-            return None
-        
+    result = {}
+    html = fetch_url(url)
+    
+    if not html:
+        print(f"    ⚠️ Не удалось загрузить страницу")
+        return result
+    
+    try:
         soup = BeautifulSoup(html, 'html.parser')
-        text = soup.get_text()
         
-        # Ищем значения
-        patterns = [
-            r'([0-9]+[%]?)',
-            r'(да|нет|есть|отсутствует)',
-            r'([0-9]+[\s]*дней?)',
-            r'([0-9]+[\s]*руб\.?)'
-        ]
+        # Ищем текст на странице
+        for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header"]):
+            tag.decompose()
         
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                value = match.group(1).strip()
-                if value:
-                    return FieldValue(
-                        value=value,
-                        source=SourceInfo(
-                            name=f"Агрегатор {aggregator['name']}",
-                            url=search_url,
-                            level=aggregator.get('level', 2),
-                            source_type="aggregator",
-                            found_at=datetime.now().isoformat()
-                        )
-                    )
+        text = clean_text(soup.get_text())
         
-        return None
-    
-    def _search_rating(self, rating: Dict, company: str, product: str, field_key: str, field_config: Dict) -> Optional[FieldValue]:
-        """Поиск в рейтинговых агентствах"""
-        # Для рейтингов используем поиск
-        query = f"{company} рейтинг {field_config.get('name', field_key)}"
-        results = self.search.search(query, max_results=3)
-        
-        for result in results:
-            snippet = result.get('snippet', '')
-            # Ищем числовые значения в сниппете
-            match = re.search(r'([0-9]+[%]?|[A-Za-z]+[A-Z]+|[0-9]+\.[0-9])', snippet)
-            if match:
-                value = match.group(1).strip()
-                if value:
-                    return FieldValue(
-                        value=value,
-                        source=SourceInfo(
-                            name=f"Рейтинговое агентство {rating['name']}",
-                            url=result.get('url', rating['url']),
-                            level=rating.get('level', 4),
-                            source_type="rating",
-                            found_at=datetime.now().isoformat()
-                        )
-                    )
-        
-        return None
-    
-    def _search_internet(self, question: str, company: str, search_suffix: str) -> Optional[FieldValue]:
-        """Поиск в интернете через DuckDuckGo"""
-        full_query = f"{question} {company} {search_suffix}"
-        results = self.search.search_question(question, company, search_suffix)
-        
-        for result in results:
-            snippet = result.get('snippet', '')
-            # Ищем ответ на вопрос
-            patterns = [
-                r'([0-9]+[%]?)',
-                r'(да|нет|есть|отсутствует)',
-                r'([0-9]+[\s]*дней?)',
-                r'([0-9]+[\s]*руб\.?)',
-                r'(от\s*[0-9]+[%]?)',
-                r'(до\s*[0-9]+[%]?)'
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, snippet, re.IGNORECASE)
-                if match:
-                    value = match.group(1).strip()
-                    if value:
-                        return FieldValue(
-                            value=value,
-                            source=SourceInfo(
-                                name="Интернет-поиск (DuckDuckGo)",
-                                url=result.get('url', ''),
-                                level=5,
-                                source_type="search",
-                                found_at=datetime.now().isoformat()
-                            )
-                        )
-        
-        return None
-    
-    def _get_fallback(self, company: str, product: str, field_key: str) -> Optional[FieldValue]:
-        """Внутренняя память (fallback данные)"""
-        fallback_data = {
-            "РЕСО-Гарантия": {
-                "kasko": {
-                    "total_loss": {"value": "75%", "url": "https://www.reso.ru/"},
-                    "franchise": {"value": "От 0% до 10%", "url": "https://www.reso.ru/"},
-                    "gap": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "drone": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "fire": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "without_certificates": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "evacuator": {"value": "3000 руб.", "url": "https://www.reso.ru/"},
-                    "repair_type": {"value": "На СТОА", "url": "https://www.reso.ru/"},
-                    "payment_terms": {"value": "30 дней", "url": "https://www.reso.ru/"},
-                    "rating": {"value": "ruAA", "url": "https://raexpert.ru/"}
-                },
-                "osago": {
-                    "base_rate": {"value": "от 2 500 руб.", "url": "https://www.reso.ru/"},
-                    "bm": {"value": "0.5-2.45", "url": "https://www.reso.ru/"},
-                    "territory_coef": {"value": "0.6-2.0", "url": "https://www.reso.ru/"},
-                    "power_coef": {"value": "0.6-1.6", "url": "https://www.reso.ru/"},
-                    "age_coef": {"value": "0.8-1.8", "url": "https://www.reso.ru/"},
-                    "period_coef": {"value": "0.5-1.0", "url": "https://www.reso.ru/"},
-                    "rating": {"value": "ruAA", "url": "https://raexpert.ru/"}
-                },
-                "ifl": {
-                    "fire": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "flood": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "theft": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "liability": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "natural_disasters": {"value": "Есть", "url": "https://www.reso.ru/"},
-                    "rating": {"value": "ruAA", "url": "https://raexpert.ru/"}
-                }
-            }
+        # Ищем ключевые слова для каждого поля
+        field_keywords = {
+            "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
+            "without_certificates": ["без справок", "без документ", "без предостав"],
+            "gap": ["gap", "гэп", "gар"],
+            "total_loss": ["тотал", "полная гибель", "конструктивн", "гибел"],
+            "fire": ["самовозгоран", "возгоран", "пожар"],
+            "terrorism": ["терроризм", "терр. акт", "теракт"],
+            "drone": ["бпла", "беспилот", "дрон"],
+            "tow_truck": ["эвакуа"],
+            "repair_type": ["ремонт", "стоа", "дилер"],
+            "payment_terms": ["срок выплат", "рабочих дней", "дней"]
         }
         
-        company_data = fallback_data.get(company, {}).get(product, {})
-        field_data = company_data.get(field_key)
+        for field, keywords in field_keywords.items():
+            for keyword in keywords:
+                if keyword in text.lower():
+                    # Находим предложение с ключевым словом
+                    sentences = re.split(r'[.!?]', text)
+                    for sentence in sentences:
+                        if keyword in sentence.lower():
+                            result[field] = {
+                                "value": clean_text(sentence),
+                                "source": {
+                                    "level": 1,
+                                    "type": "official",
+                                    "name": f"Официальный сайт {company}",
+                                    "url": url,
+                                    "found_at": datetime.now().isoformat()
+                                }
+                            }
+                            print(f"    ✅ Найдено: {field} = '{clean_text(sentence)[:50]}...'")
+                            break
+                    if field in result:
+                        break
         
-        if field_data:
-            return FieldValue(
-                value=field_data['value'],
-                source=SourceInfo(
-                    name="Внутренняя память (проверенные данные)",
-                    url=field_data.get('url', ''),
-                    level=6,
-                    source_type="memory",
-                    found_at=datetime.now().isoformat()
-                )
-            )
+        print(f"    📊 Найдено {len(result)} полей на официальном сайте")
         
+    except Exception as e:
+        print(f"    ⚠️ Ошибка парсинга: {e}")
+    
+    return result
+
+# ==================== УРОВЕНЬ 2-3: АГРЕГАТОРЫ ====================
+
+def parse_aggregator(company: str, aggregator: Dict) -> Dict[str, Dict]:
+    """Парсинг агрегатора"""
+    level = aggregator["level"]
+    level_label = "Уровень 2: Агрегатор" if level == 2 else "Уровень 3: Спец. агрегатор"
+    print(f"  📂 {level_label}")
+    print(f"    🔗 {aggregator['url']}")
+    
+    result = {}
+    html = fetch_url(aggregator["url"])
+    
+    if not html:
+        print(f"    ⚠️ Не удалось загрузить страницу")
+        return result
+    
+    try:
+        soup = BeautifulSoup(html, 'html.parser')
+        text = clean_text(soup.get_text())
+        
+        # Ищем упоминание компании
+        if company.lower() not in text.lower():
+            print(f"    ⚠️ Компания не найдена на странице")
+            return result
+        
+        # Ищем ключевые слова
+        keywords = {
+            "franchise": ["франшиз", "франшиза"],
+            "without_certificates": ["без справок"],
+            "gap": ["gap", "гэп"],
+            "total_loss": ["тотал", "гибель"],
+            "fire": ["самовозгоран", "возгоран"],
+            "terrorism": ["терроризм"],
+            "drone": ["бпла", "беспилот"],
+            "tow_truck": ["эвакуа"],
+            "payment_terms": ["срок", "дней"]
+        }
+        
+        for field, kw_list in keywords.items():
+            for kw in kw_list:
+                if kw in text.lower():
+                    # Находим контекст
+                    idx = text.lower().find(kw)
+                    start = max(0, idx - 100)
+                    end = min(len(text), idx + 200)
+                    context = text[start:end]
+                    result[field] = {
+                        "value": clean_text(context),
+                        "source": {
+                            "level": level,
+                            "type": "aggregator" if level == 2 else "special",
+                            "name": f"{aggregator['name']}",
+                            "url": aggregator['url'],
+                            "found_at": datetime.now().isoformat()
+                        }
+                    }
+                    print(f"    ✅ Найдено: {field} (контекст найден)")
+                    break
+        
+        print(f"    📊 Найдено {len(result)} полей на {aggregator['name']}")
+        
+    except Exception as e:
+        print(f"    ⚠️ Ошибка парсинга: {e}")
+    
+    return result
+
+# ==================== УРОВЕНЬ 4: РЕЙТИНГИ ====================
+
+def parse_rating_sites(company: str) -> Dict[str, Dict]:
+    """Парсинг рейтингов (Эксперт RA, ЦБ РФ)"""
+    print(f"  📂 Уровень 4: Рейтинги")
+    
+    result = {}
+    
+    # Эксперт RA — пробуем найти рейтинг
+    try:
+        # Простой поиск: ищем в тексте страницы Эксперт RA
+        expert_url = "https://raexpert.ru/ratings/insurance/"
+        html = fetch_url(expert_url)
+        if html and company.lower() in html.lower():
+            # Ищем рейтинг компании
+            pattern = rf'{company}.*?([А-Я]{{2,5}}[+])?'
+            match = re.search(pattern, html, re.IGNORECASE)
+            if match:
+                rating_text = match.group(0)
+                result["rating"] = {
+                    "value": clean_text(rating_text[:100]),
+                    "source": {
+                        "level": 4,
+                        "type": "rating",
+                        "name": "Эксперт RA",
+                        "url": expert_url,
+                        "found_at": datetime.now().isoformat()
+                    }
+                }
+                print(f"    ✅ Найдено: rating")
+    except Exception as e:
+        print(f"    ⚠️ Ошибка получения рейтинга: {e}")
+    
+    # ЦБ РФ — проверка наличия лицензии
+    try:
+        cbr_url = "https://cbr.ru/insurance/"
+        html = fetch_url(cbr_url)
+        if html and company.lower() in html.lower():
+            result["rating"] = result.get("rating", {
+                "value": "Лицензия действует",
+                "source": {
+                    "level": 4,
+                    "type": "rating",
+                    "name": "ЦБ РФ",
+                    "url": cbr_url,
+                    "found_at": datetime.now().isoformat()
+                }
+            })
+            print(f"    ✅ Подтверждена лицензия ЦБ РФ")
+    except Exception as e:
+        print(f"    ⚠️ Ошибка проверки лицензии: {e}")
+    
+    return result
+
+# ==================== УРОВЕНЬ 5: ИНТЕРНЕТ-ПОИСК ====================
+
+def search_internet(company: str, field: str) -> Optional[Dict]:
+    """Поиск в интернете через DuckDuckGo"""
+    query = SEARCH_QUERIES.get(field, "").format(company=company)
+    print(f"    🔍 Запрос: '{query}'")
+    
+    # Используем DuckDuckGo (HTML версия)
+    search_url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
+    
+    html = fetch_url(search_url)
+    if not html:
+        print(f"    ⚠️ Не удалось выполнить поиск")
         return None
     
-    def _fallback_value(self, field_key: str, message: str) -> FieldValue:
-        """Значение по умолчанию"""
-        return FieldValue(
-            value=message,
-            source=SourceInfo(
-                name="Система",
-                url="",
-                level=6,
-                source_type="memory",
-                found_at=datetime.now().isoformat()
-            )
-        )
+    try:
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Ищем результаты
+        results = soup.find_all('a', class_='result__a')
+        for result in results[:3]:
+            title = clean_text(result.get_text())
+            link = result.get('href')
+            if link and not link.startswith('//'):
+                link = 'https:' + link if link.startswith('//') else link
+            
+            # Пробуем загрузить результат
+            if link and link.startswith('http'):
+                page_html = fetch_url(link, timeout=10)
+                if page_html:
+                    page_soup = BeautifulSoup(page_html, 'html.parser')
+                    page_text = clean_text(page_soup.get_text())
+                    
+                    # Ищем ответ на вопрос
+                    for sentence in re.split(r'[.!?]', page_text):
+                        if any(kw in sentence.lower() for kw in ['%', 'руб', 'дней', 'тыс']):
+                            return {
+                                "value": clean_text(sentence[:200]),
+                                "source": {
+                                    "level": 5,
+                                    "type": "search",
+                                    "name": f"Интернет-поиск: {title[:50]}",
+                                    "url": link,
+                                    "found_at": datetime.now().isoformat()
+                                }
+                            }
+    except Exception as e:
+        print(f"    ⚠️ Ошибка парсинга поиска: {e}")
+    
+    return None
 
-# ==================== ВЕБ-ИНТЕРФЕЙС ====================
+# ==================== УРОВЕНЬ 6: ПАМЯТЬ (PDF) ====================
 
-agent = InsuranceAgent()
+def get_from_memory(company: str, field: str) -> Optional[Dict]:
+    """Получение данных из памяти (PDF)"""
+    if company not in KASKO_PDF_DATA:
+        return None
+    
+    value = KASKO_PDF_DATA[company].get(field)
+    if not value or value == "Нет инф." or value == "Не указан":
+        return None
+    
+    return {
+        "value": value,
+        "source": {
+            "level": 6,
+            "type": "memory",
+            "name": "PDF: КАСКО Сравнение с конкурентами (июль 2026)",
+            "url": None,
+            "found_at": "2026-09-04"
+        }
+    }
+
+# ==================== СБОР ДАННЫХ ДЛЯ ОДНОЙ КОМПАНИИ ====================
+
+def collect_company_data(company: str, verbose: bool = True) -> Dict:
+    """Сбор данных для одной компании по всем 6 уровням"""
+    print(f"\n🔍 {company}")
+    print("━" * 50)
+    
+    result = {}
+    found_fields = set()
+    
+    # УРОВЕНЬ 1: Официальный сайт
+    if company in OFFICIAL_URLS:
+        official_data = parse_official_site(company, OFFICIAL_URLS[company])
+        for field, data in official_data.items():
+            if field not in found_fields:
+                result[field] = data
+                found_fields.add(field)
+    
+    # УРОВЕНЬ 2-3: Агрегаторы
+    for aggregator in AGGREGATORS:
+        if len(found_fields) >= len(KASKO_FIELDS):
+            break
+        
+        agg_data = parse_aggregator(company, aggregator)
+        for field, data in agg_data.items():
+            if field not in found_fields:
+                result[field] = data
+                found_fields.add(field)
+                print(f"    ✅ Добавлено: {field} (уровень {data['source']['level']})")
+    
+    # УРОВЕНЬ 4: Рейтинги
+    if "rating" not in found_fields:
+        rating_data = parse_rating_sites(company)
+        for field, data in rating_data.items():
+            if field not in found_fields:
+                result[field] = data
+                found_fields.add(field)
+    
+    # УРОВЕНЬ 5: Интернет-поиск
+    print(f"  📂 Уровень 5: Интернет-поиск")
+    for field in KASKO_FIELDS:
+        if field in found_fields:
+            continue
+        
+        search_result = search_internet(company, field)
+        if search_result:
+            result[field] = search_result
+            found_fields.add(field)
+            print(f"    ✅ Найдено: {field}")
+        else:
+            print(f"    ❌ Не найдено: {field}")
+    
+    # УРОВЕНЬ 6: Память (PDF)
+    print(f"  📂 Уровень 6: Внутренняя память (PDF)")
+    memory_fields = []
+    for field in KASKO_FIELDS:
+        if field in found_fields:
+            continue
+        
+        memory_data = get_from_memory(company, field)
+        if memory_data:
+            result[field] = memory_data
+            found_fields.add(field)
+            memory_fields.append(field)
+            print(f"    ✅ Найдено: {field}")
+    
+    if memory_fields:
+        print(f"    📊 Из PDF взято: {', '.join(memory_fields)}")
+    else:
+        print(f"    ⚠️ Нет данных в PDF для недостающих полей")
+    
+    # ИТОГ
+    print(f"\n📊 {company}: собрано {len(found_fields)}/{len(KASKO_FIELDS)} полей")
+    
+    # Статистика по источникам
+    source_stats = {}
+    for field, data in result.items():
+        level = data['source']['level']
+        source_stats[level] = source_stats.get(level, 0) + 1
+    
+    for level in sorted(source_stats.keys()):
+        info = get_source_level_info(level)
+        print(f"  {info['emoji']} {info['label']}: {source_stats[level]}")
+    
+    return result
+
+# ==================== СБОР ВСЕХ ДАННЫХ ====================
+
+def collect_all_data(verbose: bool = True) -> Dict:
+    """Сбор данных для всех компаний"""
+    print("\n" + "=" * 60)
+    print("📊 СБОР ДАННЫХ: КАСКО")
+    print("=" * 60)
+    print(f"Компаний: {len(KASKO_PDF_DATA)}")
+    print(f"Поля: {len(KASKO_FIELDS)}")
+    print(f"Уровни: 6 (официальный → агрегаторы → спец.агрегаторы → рейтинги → поиск → память)")
+    print("=" * 60)
+    
+    all_data = {}
+    
+    for company in KASKO_PDF_DATA.keys():
+        company_data = collect_company_data(company, verbose)
+        all_data[company] = company_data
+        time.sleep(1)  # Задержка между компаниями
+    
+    all_data["_last_updated"] = datetime.now().isoformat()
+    all_data["_product"] = "kasko"
+    all_data["_fields"] = KASKO_FIELDS
+    
+    print("\n" + "=" * 60)
+    print("✅ СБОР ЗАВЕРШЁН")
+    print("=" * 60)
+    
+    return all_data
+
+# ==================== ЗАГРУЗКА / СОХРАНЕНИЕ ДАННЫХ ====================
+
+DATA_FILE = "insurance_data.json"
+
+def load_data() -> Dict:
+    """Загрузка данных из файла"""
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                print(f"📦 Загружено из кэша: {len(data) - 1} компаний")
+                return data
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки кэша: {e}")
+    
+    print("🔄 Данных нет, запускаем сбор...")
+    data = collect_all_data()
+    save_data(data)
+    return data
+
+def save_data(data: Dict) -> None:
+    """Сохранение данных в файл"""
+    try:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"💾 Данные сохранены в {DATA_FILE}")
+    except Exception as e:
+        print(f"⚠️ Ошибка сохранения: {e}")
+
+# ==================== ЗАГРУЗКА ПРИ СТАРТЕ ====================
+
+print("🚀 Загрузка приложения...")
+INSURANCE_DATA = load_data()
+ALL_COMPANIES = [c for c in INSURANCE_DATA.keys() if not c.startswith("_")]
+
+# ==================== FLASK МАРШРУТЫ ====================
 
 @app.route('/')
 def index():
     """Главная страница"""
-    companies = ["РЕСО-Гарантия", "Согаз", "Ингосстрах", "АльфаСтрахование", "ВСК"]
-    products = list(PRODUCTS.keys())
-    return render_template('index.html', companies=companies, products=products)
+    last_updated = INSURANCE_DATA.get("_last_updated", "неизвестно")
+    return render_template('index.html',
+                         companies=ALL_COMPANIES,
+                         last_updated=last_updated[:16] if last_updated != "неизвестно" else "неизвестно")
 
 @app.route('/compare', methods=['POST'])
 def compare():
     """Сравнение двух компаний"""
     company1 = request.form.get('company1')
     company2 = request.form.get('company2')
-    product = request.form.get('product')
     
-    if not company1 or not company2 or not product:
-        return jsonify({'error': 'Не выбраны компании или продукт'}), 400
+    if not company1 or not company2:
+        return "❌ Выберите обе компании! <a href='/'>Назад</a>"
     
-    product_config = PRODUCTS.get(product)
-    if not product_config:
-        return jsonify({'error': 'Продукт не найден'}), 400
+    if company1 == company2:
+        return "❌ Выберите разные компании! <a href='/'>Назад</a>"
     
-    results = {
-        'product': product,
-        'product_name': product_config['name'],
-        'company1': company1,
-        'company2': company2,
-        'fields': {},
-        'sources': {
-            'company1': {},
-            'company2': {}
-        }
-    }
+    data1 = INSURANCE_DATA.get(company1, {})
+    data2 = INSURANCE_DATA.get(company2, {})
     
-    for field_key, field_config in product_config['fields'].items():
-        field_name = field_config['name']
-        
-        # Поиск для первой компании
-        val1 = agent.find_value(company1, product, field_key, field_config)
-        # Поиск для второй компании
-        val2 = agent.find_value(company2, product, field_key, field_config)
-        
-        results['fields'][field_key] = {
-            'name': field_name,
-            'company1': val1.to_dict(),
-            'company2': val2.to_dict()
-        }
-        
-        results['sources']['company1'][field_key] = val1.source.to_dict()
-        results['sources']['company2'][field_key] = val2.source.to_dict()
+    # Подготовка источников
+    sources1 = {}
+    sources2 = {}
     
-    # Добавляем информацию об источниках для отображения
-    source_levels = {
-        1: {'icon': '🟢', 'label': 'Официальный сайт'},
-        2: {'icon': '🔵', 'label': 'Агрегатор'},
-        3: {'icon': '🟦', 'label': 'Специализированный агрегатор'},
-        4: {'icon': '🟡', 'label': 'Рейтинговое агентство'},
-        5: {'icon': '🟣', 'label': 'Интернет-поиск'},
-        6: {'icon': '⚪', 'label': 'Внутренняя память'}
-    }
+    for field in KASKO_FIELDS:
+        if field in data1 and 'source' in data1[field]:
+            sources1[field] = data1[field]['source']
+        if field in data2 and 'source' in data2[field]:
+            sources2[field] = data2[field]['source']
     
-    results['source_levels'] = source_levels
-    
-    return jsonify(results)
+    return render_template('result.html',
+                         company1=company1,
+                         company2=company2,
+                         data1=data1,
+                         data2=data2,
+                         sources1=sources1,
+                         sources2=sources2,
+                         fields=KASKO_FIELDS,
+                         timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-@app.route('/update', methods=['POST'])
+@app.route('/update')
 def update():
-    """Принудительное обновление кэша"""
-    # Очищаем кэш
-    if os.path.exists(Config.CACHE_FILE):
-        os.remove(Config.CACHE_FILE)
-    
-    return jsonify({'status': 'ok', 'message': 'Кэш очищен, данные будут обновлены'})
+    """Принудительное обновление данных"""
+    global INSURANCE_DATA, ALL_COMPANIES
+    print("🔄 Ручное обновление...")
+    INSURANCE_DATA = collect_all_data()
+    save_data(INSURANCE_DATA)
+    ALL_COMPANIES = [c for c in INSURANCE_DATA.keys() if not c.startswith("_")]
+    return "✅ Данные обновлены! <a href='/'>На главную</a>"
 
 # ==================== ШАБЛОНЫ ====================
 
-# Создаем папку templates если её нет
-if not os.path.exists('templates'):
-    os.makedirs('templates')
+os.makedirs('templates', exist_ok=True)
 
-# Шаблон index.html
+# index.html
 with open('templates/index.html', 'w', encoding='utf-8') as f:
     f.write('''
 <!DOCTYPE html>
@@ -814,249 +811,214 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Страховой агент - сравнение</title>
+    <title>Сравнение КАСКО</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 20px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.08); }
-        h1 { font-size: 32px; color: #1a2332; margin-bottom: 8px; }
-        .subtitle { color: #6b7a8f; margin-bottom: 30px; }
-        .form-group { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
-        .form-group label { font-weight: 500; color: #1a2332; display: block; margin-bottom: 5px; }
-        .form-group select { width: 100%; padding: 12px 16px; border: 2px solid #e1e8f0; border-radius: 12px; font-size: 16px; background: white; transition: border-color 0.2s; }
-        .form-group select:focus { outline: none; border-color: #2d6bff; }
-        .form-group .field { flex: 1; min-width: 200px; }
-        .btn { padding: 14px 40px; background: #2d6bff; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-        .btn:hover { background: #1a56e8; }
-        .btn-secondary { background: #e1e8f0; color: #1a2332; }
-        .btn-secondary:hover { background: #d0d9e5; }
-        .results { margin-top: 40px; }
-        .table-wrapper { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th { background: #f8fafc; padding: 14px 16px; text-align: left; font-weight: 600; color: #1a2332; border-bottom: 2px solid #e1e8f0; }
-        td { padding: 12px 16px; border-bottom: 1px solid #eef2f7; }
-        tr:hover td { background: #f8fafc; }
-        .source-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; background: #f0f4ff; color: #2d6bff; }
-        .source-badge .icon { font-size: 14px; }
-        .sources-section { margin-top: 30px; padding: 20px; background: #f8fafc; border-radius: 12px; }
-        .sources-section h3 { color: #1a2332; margin-bottom: 12px; }
-        .source-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; color: #4a5a72; }
-        .source-item .url { color: #2d6bff; text-decoration: none; font-size: 12px; }
-        .source-item .url:hover { text-decoration: underline; }
-        .loading { text-align: center; padding: 40px; color: #6b7a8f; }
-        .error { color: #dc3545; padding: 20px; text-align: center; }
-        .update-btn { margin-left: 20px; padding: 8px 16px; font-size: 13px; }
-        @media (max-width: 768px) { .container { padding: 20px; } .form-group { flex-direction: column; } }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #f0f2f5; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .container { background: #fff; padding: 40px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 520px; width: 100%; }
+        h1 { font-size: 24px; color: #1a1a2e; text-align: center; margin-bottom: 8px; }
+        .subtitle { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 30px; }
+        .update-info { text-align: center; font-size: 12px; color: #9ca3af; margin-bottom: 24px; padding: 8px; background: #f9fafb; border-radius: 8px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; font-size: 14px; color: #374151; margin-bottom: 6px; }
+        select { width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 15px; background: #fff; transition: border-color 0.2s; appearance: none; }
+        select:focus { outline: none; border-color: #2563eb; }
+        .vs { text-align: center; font-size: 20px; color: #9ca3af; margin: 8px 0; }
+        .btn { width: 100%; padding: 14px; background: #2563eb; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 8px; }
+        .btn:hover { background: #1d4ed8; }
+        .btn-update { background: #6b7280; margin-top: 12px; }
+        .btn-update:hover { background: #4b5563; }
+        .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 16px; }
+        .badge { display: inline-block; font-size: 11px; padding: 2px 10px; border-radius: 12px; background: #e5e7eb; color: #4b5563; margin-top: 8px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔍 Страховой агент</h1>
-        <p class="subtitle">Сравнение страховых продуктов с указанием источников</p>
-        
-        <form id="compareForm">
-            <div class="form-group">
-                <div class="field">
-                    <label>Продукт</label>
-                    <select id="product" name="product">
-                        {% for key, product in products.items() %}
-                            <option value="{{ key }}">{{ product.icon }} {{ product.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Компания 1</label>
-                    <select id="company1" name="company1">
-                        {% for company in companies %}
-                            <option value="{{ company }}">{{ company }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Компания 2</label>
-                    <select id="company2" name="company2">
-                        {% for company in companies %}
-                            <option value="{{ company }}">{{ company }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field" style="display: flex; align-items: flex-end;">
-                    <button type="submit" class="btn">Сравнить</button>
-                    <button type="button" class="btn btn-secondary update-btn" onclick="updateCache()">🔄 Обновить</button>
-                </div>
-            </div>
-        </form>
-        
-        <div id="results" class="results"></div>
-    </div>
+<div class="container">
+    <h1>🚗 Сравнение КАСКО</h1>
+    <p class="subtitle">Выберите две компании для сравнения</p>
+    <div class="update-info">📅 Данные обновлены: {{ last_updated }}</div>
     
-    <script>
-        document.getElementById('compareForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '<div class="loading">⏳ Поиск данных...</div>';
-            
-            try {
-                const response = await fetch('/compare', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.error) {
-                    resultsDiv.innerHTML = `<div class="error">❌ ${data.error}</div>`;
-                    return;
-                }
-                
-                resultsDiv.innerHTML = renderResults(data);
-            } catch (error) {
-                resultsDiv.innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
-            }
-        });
+    <form action="/compare" method="POST">
+        <div class="form-group">
+            <label>🏢 Первая компания</label>
+            <select name="company1" required>
+                <option value="">— Выберите —</option>
+                {% for c in companies %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
         
-        function renderResults(data) {
-            const levels = data.source_levels;
-            const fields = data.fields;
-            
-            let html = `
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Параметр</th>
-                                <th>${data.company1}</th>
-                                <th>${data.company2}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-            
-            for (const [key, field] of Object.entries(fields)) {
-                const c1 = field.company1;
-                const c2 = field.company2;
-                const level1 = levels[c1.source.level] || { icon: '⚪', label: 'Неизвестно' };
-                const level2 = levels[c2.source.level] || { icon: '⚪', label: 'Неизвестно' };
-                
-                html += `
-                    <tr>
-                        <td><strong>${field.name}</strong></td>
-                        <td>
-                            ${c1.value}
-                            <span class="source-badge">
-                                <span class="icon">${level1.icon}</span>
-                                ${level1.label}
-                            </span>
-                        </td>
-                        <td>
-                            ${c2.value}
-                            <span class="source-badge">
-                                <span class="icon">${level2.icon}</span>
-                                ${level2.label}
-                            </span>
-                        </td>
-                    </tr>
-                `;
-            }
-            
-            html += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            
-            // Блок источников
-            html += `
-                <div class="sources-section">
-                    <h3>📋 Детальная информация об источниках</h3>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                        <div>
-                            <h4 style="color: #1a2332; margin-bottom: 8px;">${data.company1}</h4>
-                            ${renderSources(data.sources.company1, levels)}
-                        </div>
-                        <div>
-                            <h4 style="color: #1a2332; margin-bottom: 8px;">${data.company2}</h4>
-                            ${renderSources(data.sources.company2, levels)}
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            return html;
-        }
+        <div class="vs">⚔️</div>
         
-        function renderSources(sources, levels) {
-            let html = '';
-            for (const [key, source] of Object.entries(sources)) {
-                const level = levels[source.level] || { icon: '⚪', label: 'Неизвестно' };
-                html += `
-                    <div class="source-item">
-                        <span>${level.icon}</span>
-                        <span>${source.name}</span>
-                        ${source.url ? `<a href="${source.url}" target="_blank" class="url">🔗 ссылка</a>` : ''}
-                        <span style="color: #6b7a8f; font-size: 11px;">${new Date(source.found_at).toLocaleDateString()}</span>
-                    </div>
-                `;
-            }
-            return html || '<div style="color: #6b7a8f; font-size: 13px;">Нет данных</div>';
-        }
+        <div class="form-group">
+            <label>🏢 Вторая компания</label>
+            <select name="company2" required>
+                <option value="">— Выберите —</option>
+                {% for c in companies %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
         
-        async function updateCache() {
-            const btn = document.querySelector('.update-btn');
-            btn.textContent = '⏳ Обновление...';
-            btn.disabled = true;
-            
-            try {
-                const response = await fetch('/update', { method: 'POST' });
-                const data = await response.json();
-                alert('✅ ' + data.message);
-            } catch (error) {
-                alert('❌ Ошибка: ' + error.message);
-            } finally {
-                btn.textContent = '🔄 Обновить';
-                btn.disabled = false;
-            }
-        }
-    </script>
+        <button type="submit" class="btn">📊 Сравнить</button>
+    </form>
+    
+    <a href="/update"><button class="btn btn-update">🔄 Обновить данные сейчас</button></a>
+    
+    <div class="footer">
+        <span class="badge">11 компаний</span>
+        <span class="badge">14 параметров</span>
+        <span class="badge">6 уровней поиска</span>
+    </div>
+</div>
 </body>
 </html>
-    ''')
+''')
+
+# result.html
+with open('templates/result.html', 'w', encoding='utf-8') as f:
+    f.write('''
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сравнение КАСКО</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #f0f2f5; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+        h1 { font-size: 22px; color: #1a1a2e; text-align: center; margin-bottom: 6px; }
+        .subtitle { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+        .vs-title { text-align: center; font-size: 16px; padding: 12px; background: #f8fafc; border-radius: 10px; margin-bottom: 24px; }
+        .main-badge { background: #2563eb; color: #fff; padding: 2px 14px; border-radius: 12px; font-size: 12px; margin-left: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { background: #1a1a2e; color: #fff; padding: 10px 12px; text-align: left; }
+        td { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+        .param { font-weight: 600; color: #374151; background: #f8fafc; width: 16%; }
+        .value { word-break: break-word; }
+        .source-icon { display: inline-block; font-size: 14px; margin-right: 4px; cursor: help; }
+        .source-tooltip { display: none; font-size: 11px; color: #6b7280; margin-top: 2px; }
+        .value:hover .source-tooltip { display: block; }
+        .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 16px; padding: 14px; background: #f8fafc; border-radius: 10px; font-size: 13px; }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        .btn { display: inline-block; padding: 10px 24px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; }
+        .btn:hover { background: #1d4ed8; }
+        .btn-secondary { background: #6b7280; }
+        .btn-secondary:hover { background: #4b5563; }
+        .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+        .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 16px; }
+        .missing { color: #9ca3af; font-style: italic; }
+        .source-url { font-size: 11px; color: #6b7280; word-break: break-all; }
+        .source-url a { color: #2563eb; text-decoration: none; }
+        .source-url a:hover { text-decoration: underline; }
+        @media (max-width: 768px) {
+            .container { padding: 16px; }
+            table { font-size: 12px; }
+            td, th { padding: 6px 8px; }
+            .param { width: 20%; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Сравнение КАСКО</h1>
+    <div class="subtitle">Сравнительный анализ условий страхования</div>
+    
+    <div class="vs-title">
+        🏆 {{ company1 }} <span class="main-badge">ОСНОВНАЯ</span>
+        &nbsp;⚔️&nbsp; {{ company2 }}
+    </div>
+    
+    <div class="legend">
+        <span class="legend-item">🟢 Уровень 1 — Официальный сайт</span>
+        <span class="legend-item">🔵 Уровень 2 — Агрегатор</span>
+        <span class="legend-item">🟣 Уровень 3 — Спец. агрегатор</span>
+        <span class="legend-item">🟠 Уровень 4 — Рейтинг</span>
+        <span class="legend-item">🟡 Уровень 5 — Интернет-поиск</span>
+        <span class="legend-item">⚪ Уровень 6 — Внутренняя база</span>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th class="param">Параметр</th>
+                <th>{{ company1 }}</th>
+                <th>{{ company2 }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set field_labels = {
+                'franchise': 'Франшиза',
+                'without_certificates': 'Без справок',
+                'gap': 'GAP',
+                'total_loss': 'Тотал',
+                'fire': 'Самовозгорание',
+                'terrorism': 'Терроризм',
+                'drone': 'БПЛА',
+                'tow_truck': 'Эвакуатор',
+                'repair_type': 'Тип ремонта',
+                'payment_terms': 'Срок выплаты',
+                'advantages': 'Преимущества',
+                'weak_points': 'Слабые места',
+                'rating': 'Рейтинг',
+                'offices': 'Офисы'
+            } %}
+            
+            {% for field in fields %}
+            <tr>
+                <td class="param">{{ field_labels.get(field, field) }}</td>
+                <td class="value">
+                    {% if field in data1 and data1[field] %}
+                        {{ data1[field].value if data1[field] is mapping and 'value' in data1[field] else data1[field] }}
+                        {% if field in sources1 and sources1[field] %}
+                            {% set s = sources1[field] %}
+                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }}">{% if s.level == 1 %}🟢{% elif s.level == 2 %}🔵{% elif s.level == 3 %}🟣{% elif s.level == 4 %}🟠{% elif s.level == 5 %}🟡{% else %}⚪{% endif %}</span>
+                            <div class="source-tooltip">
+                                Источник: {{ s.label if s.label else s.type }}
+                                {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <span class="missing">—</span>
+                    {% endif %}
+                </td>
+                <td class="value">
+                    {% if field in data2 and data2[field] %}
+                        {{ data2[field].value if data2[field] is mapping and 'value' in data2[field] else data2[field] }}
+                        {% if field in sources2 and sources2[field] %}
+                            {% set s = sources2[field] %}
+                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }}">{% if s.level == 1 %}🟢{% elif s.level == 2 %}🔵{% elif s.level == 3 %}🟣{% elif s.level == 4 %}🟠{% elif s.level == 5 %}🟡{% else %}⚪{% endif %}</span>
+                            <div class="source-tooltip">
+                                Источник: {{ s.label if s.label else s.type }}
+                                {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <span class="missing">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="actions">
+        <a href="/" class="btn">← Новое сравнение</a>
+        <a href="/update" class="btn btn-secondary">🔄 Обновить данные</a>
+    </div>
+    
+    <div class="footer">
+        Обновлено: {{ timestamp }}
+    </div>
+</div>
+</body>
+</html>
+''')
 
 # ==================== ЗАПУСК ====================
 
 if __name__ == '__main__':
-    # Создаем шаблоны
-    if not os.path.exists('templates'):
-        os.makedirs('templates')
-    
-    # Проверяем наличие index.html
-    if not os.path.exists('templates/index.html'):
-        with open('templates/index.html', 'w', encoding='utf-8') as f:
-            f.write('''
-<!DOCTYPE html>
-<html>
-<head><title>Страховой агент</title></head>
-<body>
-    <h1>Страховой агент</h1>
-    <p>Шаблон не найден. Пожалуйста, перезапустите приложение.</p>
-</body>
-</html>
-            ''')
-    
-    print("""
-    ╔═══════════════════════════════════════════════════════════╗
-    ║          🚀 СТРАХОВОЙ АГЕНТ ЗАПУЩЕН                       ║
-    ╠═══════════════════════════════════════════════════════════╣
-    ║  Доступно по адресу: http://127.0.0.1:5000               ║
-    ║                                                           ║
-    ║  Уровни источников:                                       ║
-    ║  🟢 Уровень 1: Официальный сайт                          ║
-    ║  🔵 Уровень 2: Агрегатор                                 ║
-    ║  🟦 Уровень 3: Специализированный агрегатор              ║
-    ║  🟡 Уровень 4: Рейтинговое агентство                     ║
-    ║  🟣 Уровень 5: Интернет-поиск                            ║
-    ║  ⚪ Уровень 6: Внутренняя память                         ║
-    ╚═══════════════════════════════════════════════════════════╝
-    """)
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
