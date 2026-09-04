@@ -838,4 +838,225 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
         tr:hover td { background: #f8fafc; }
         .source-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; background: #f0f4ff; color: #2d6bff; }
         .source-badge .icon { font-size: 14px; }
-        .sources-section { margin-top: 30px; padding: 20px; background: #f8fafc; border-radius: 12px;
+        .sources-section { margin-top: 30px; padding: 20px; background: #f8fafc; border-radius: 12px; }
+        .sources-section h3 { color: #1a2332; margin-bottom: 12px; }
+        .source-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; color: #4a5a72; }
+        .source-item .url { color: #2d6bff; text-decoration: none; font-size: 12px; }
+        .source-item .url:hover { text-decoration: underline; }
+        .loading { text-align: center; padding: 40px; color: #6b7a8f; }
+        .error { color: #dc3545; padding: 20px; text-align: center; }
+        .update-btn { margin-left: 20px; padding: 8px 16px; font-size: 13px; }
+        @media (max-width: 768px) { .container { padding: 20px; } .form-group { flex-direction: column; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Страховой агент</h1>
+        <p class="subtitle">Сравнение страховых продуктов с указанием источников</p>
+        
+        <form id="compareForm">
+            <div class="form-group">
+                <div class="field">
+                    <label>Продукт</label>
+                    <select id="product" name="product">
+                        {% for key, product in products.items() %}
+                            <option value="{{ key }}">{{ product.icon }} {{ product.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Компания 1</label>
+                    <select id="company1" name="company1">
+                        {% for company in companies %}
+                            <option value="{{ company }}">{{ company }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Компания 2</label>
+                    <select id="company2" name="company2">
+                        {% for company in companies %}
+                            <option value="{{ company }}">{{ company }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field" style="display: flex; align-items: flex-end;">
+                    <button type="submit" class="btn">Сравнить</button>
+                    <button type="button" class="btn btn-secondary update-btn" onclick="updateCache()">🔄 Обновить</button>
+                </div>
+            </div>
+        </form>
+        
+        <div id="results" class="results"></div>
+    </div>
+    
+    <script>
+        document.getElementById('compareForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">⏳ Поиск данных...</div>';
+            
+            try {
+                const response = await fetch('/compare', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div class="error">❌ ${data.error}</div>`;
+                    return;
+                }
+                
+                resultsDiv.innerHTML = renderResults(data);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Ошибка: ${error.message}</div>`;
+            }
+        });
+        
+        function renderResults(data) {
+            const levels = data.source_levels;
+            const fields = data.fields;
+            
+            let html = `
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Параметр</th>
+                                <th>${data.company1}</th>
+                                <th>${data.company2}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            for (const [key, field] of Object.entries(fields)) {
+                const c1 = field.company1;
+                const c2 = field.company2;
+                const level1 = levels[c1.source.level] || { icon: '⚪', label: 'Неизвестно' };
+                const level2 = levels[c2.source.level] || { icon: '⚪', label: 'Неизвестно' };
+                
+                html += `
+                    <tr>
+                        <td><strong>${field.name}</strong></td>
+                        <td>
+                            ${c1.value}
+                            <span class="source-badge">
+                                <span class="icon">${level1.icon}</span>
+                                ${level1.label}
+                            </span>
+                        </td>
+                        <td>
+                            ${c2.value}
+                            <span class="source-badge">
+                                <span class="icon">${level2.icon}</span>
+                                ${level2.label}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            // Блок источников
+            html += `
+                <div class="sources-section">
+                    <h3>📋 Детальная информация об источниках</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <h4 style="color: #1a2332; margin-bottom: 8px;">${data.company1}</h4>
+                            ${renderSources(data.sources.company1, levels)}
+                        </div>
+                        <div>
+                            <h4 style="color: #1a2332; margin-bottom: 8px;">${data.company2}</h4>
+                            ${renderSources(data.sources.company2, levels)}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+        
+        function renderSources(sources, levels) {
+            let html = '';
+            for (const [key, source] of Object.entries(sources)) {
+                const level = levels[source.level] || { icon: '⚪', label: 'Неизвестно' };
+                html += `
+                    <div class="source-item">
+                        <span>${level.icon}</span>
+                        <span>${source.name}</span>
+                        ${source.url ? `<a href="${source.url}" target="_blank" class="url">🔗 ссылка</a>` : ''}
+                        <span style="color: #6b7a8f; font-size: 11px;">${new Date(source.found_at).toLocaleDateString()}</span>
+                    </div>
+                `;
+            }
+            return html || '<div style="color: #6b7a8f; font-size: 13px;">Нет данных</div>';
+        }
+        
+        async function updateCache() {
+            const btn = document.querySelector('.update-btn');
+            btn.textContent = '⏳ Обновление...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/update', { method: 'POST' });
+                const data = await response.json();
+                alert('✅ ' + data.message);
+            } catch (error) {
+                alert('❌ Ошибка: ' + error.message);
+            } finally {
+                btn.textContent = '🔄 Обновить';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
+    ''')
+
+# ==================== ЗАПУСК ====================
+
+if __name__ == '__main__':
+    # Создаем шаблоны
+    if not os.path.exists('templates'):
+        os.makedirs('templates')
+    
+    # Проверяем наличие index.html
+    if not os.path.exists('templates/index.html'):
+        with open('templates/index.html', 'w', encoding='utf-8') as f:
+            f.write('''
+<!DOCTYPE html>
+<html>
+<head><title>Страховой агент</title></head>
+<body>
+    <h1>Страховой агент</h1>
+    <p>Шаблон не найден. Пожалуйста, перезапустите приложение.</p>
+</body>
+</html>
+            ''')
+    
+    print("""
+    ╔═══════════════════════════════════════════════════════════╗
+    ║          🚀 СТРАХОВОЙ АГЕНТ ЗАПУЩЕН                       ║
+    ╠═══════════════════════════════════════════════════════════╣
+    ║  Доступно по адресу: http://127.0.0.1:5000               ║
+    ║                                                           ║
+    ║  Уровни источников:                                       ║
+    ║  🟢 Уровень 1: Официальный сайт                          ║
+    ║  🔵 Уровень 2: Агрегатор                                 ║
+    ║  🟦 Уровень 3: Специализированный агрегатор              ║
+    ║  🟡 Уровень 4: Рейтинговое агентство                     ║
+    ║  🟣 Уровень 5: Интернет-поиск                            ║
+    ║  ⚪ Уровень 6: Внутренняя память                         ║
+    ╚═══════════════════════════════════════════════════════════╝
+    """)
+    
+    app.run(debug=True, host='0.0.0.0', port=5000)
