@@ -1,5 +1,4 @@
-Flask
+flask
+gunicorn
 requests
 beautifulsoup4
-ddgs
-gunicorn
