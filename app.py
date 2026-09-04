@@ -6,7 +6,10 @@ import json
 import os
 import hashlib
 import secrets
+import traceback
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from bs4 import BeautifulSoup
 import re
 import time
@@ -202,14 +205,14 @@ SOURCES = {
     "РЕСО-Гарантия": {"urls": ["https://reso.ru/individual/property/flat/"]},
     "Ингосстрах": {"urls": ["https://www.ingos.ru/property/flat"]},
     "Т-Страхование": {"urls": ["https://tbank.ru/insurance/help/estate/property/about/about-policy/"]},
-    "АльфаСтрахование": {"urls": ["https://alfastrahovanie.sddbk.ru/imushestvo/strahovanie-ot-bpla/"]},
+    "АльфаСтрахование": {"urls": ["https://www.alfastrah.ru/individuals/housing/flat/"]},
     "СберСтрахование": {"urls": ["https://sberbankins.ru/products/home-insurance-online/"]},
     "Согласие": {"urls": ["https://soglasie.ru/company/insurance-rules/"]},
     "Югория": {"urls": ["https://ugsk.ru/property/"]},
     "Совкомбанк Страхование": {"urls": ["https://sovcomins.ru/"]},
     "ВСК": {"urls": ["https://www.vsk.ru/o-kompanii/dlya-kliyentov?t=pravila_i_tarifi_strahovaniya&case=pravila"]},
     "СОГАЗ": {"urls": ["https://www.sogaz.ru/"]},
-    "Ренессанс": {"urls": ["https://renessans.sddbk.ru/imushestvo/kvartira/"]}
+    "Ренессанс": {"urls": ["https://www.renins.ru/property/flat/"]}
 }
 
 # ==================== УМНЫЙ ПАРСИНГ ====================
@@ -342,7 +345,16 @@ def parse_source_llm(url):
         return None
 
     try:
-        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        try:
+            response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        except requests.exceptions.SSLError:
+            # У некоторых сайтов (замечено на vsk.ru, sogaz.ru) битая цепочка
+            # сертификата на их стороне — не наша проблема, но и не повод
+            # совсем отказываться от источника. Отключаем проверку только
+            # для этого повторного запроса.
+            print(f"      ⚠️ {url}: проблема с SSL-сертификатом сайта, повтор без проверки сертификата")
+            response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'}, verify=False)
+
         soup = _clean_soup(BeautifulSoup(response.text, 'html.parser'))
         blocks = _text_blocks(soup)
 
@@ -350,9 +362,21 @@ def parse_source_llm(url):
             print(f"      ⚠️ {url}: мало контента, вероятно нужен JS-рендеринг — пропуск LLM-извлечения")
             return None
 
-        # Ограничиваем объём текста, который уходит в модель — экономия
-        # токенов и защита от случайно огромных страниц.
-        page_text = "\n".join(blocks)[:12000]
+        # Вместо того чтобы слать модели первые N символов страницы (можно
+        # легко упереться в лимит токенов на большой странице — так и
+        # случилось: 11424 токена при лимите 8000), сначала отбираем только
+        # блоки, где вообще может быть что-то по нашим темам — по тем же
+        # маркерам, что использует keyword-парсер. Это и меньше токенов,
+        # и меньше шанса, что модель утонет в нерелевантном тексте.
+        all_keywords = [w for words in KEYWORDS.values() for w in words]
+        candidate_blocks = [
+            b for b in blocks
+            if any(w in b.lower() for w in all_keywords) or UNIT_MARKERS.search(b)
+        ]
+        # Если по ключевым словам ничего не нашлось (нетипичная вёрстка) —
+        # не отказываемся совсем, берём начало страницы как раньше.
+        source_blocks = candidate_blocks if candidate_blocks else blocks
+        page_text = "\n".join(source_blocks)[:4000]
 
         llm_response = requests.post(
             provider["url"],
@@ -398,7 +422,8 @@ def parse_source_llm(url):
         }
         return data or None
     except Exception as e:
-        print(f"      ⚠️ LLM-извлечение не удалось для {url}: {e}")
+        print(f"      ⚠️ LLM-извлечение не удалось для {url}: {type(e).__name__}: {e}")
+        traceback.print_exc()
         return None
 
 
