@@ -1,4 +1,4 @@
-# app.py — PDF + Groq (ИИ-анализ)
+# app.py — ФИНАЛЬНАЯ ВЕРСИЯ С ПРЯМЫМИ ССЫЛКАМИ НА PDF
 
 from flask import Flask, render_template, request, redirect
 from datetime import datetime
@@ -15,6 +15,7 @@ from urllib.parse import urljoin, quote_plus
 import io
 import logging
 
+# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -29,7 +30,7 @@ app = Flask(__name__)
 # ==================== КОНФИГУРАЦИЯ ====================
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.3-70b-versatile"  # или "mixtral-8x7b-32768"
+GROQ_MODEL = "llama-3.1-70b-versatile"  # Исправленная модель
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
@@ -38,20 +39,65 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edge/120.0.0.0 Safari/537.36",
 ]
 
-# ==================== УРЛЫ СТРАНИЦ КАСКО ====================
+# ==================== ПРЯМЫЕ ССЫЛКИ НА PDF И СТРАНИЦЫ С ДОКУМЕНТАМИ ====================
 
-KASKO_PAGES = {
-    "РЕСО-Гарантия": "https://reso.ru/individual/auto/kasko/",
-    "ВСК": "https://www.vsk.ru/klientam/avto/kasko/",
-    "Ингосстрах": "https://www.ingos.ru/auto/kasko/",
-    "Ренессанс": "https://www.renins.ru/auto/kasko/",
-    "АльфаСтрахование": "https://www.alfastrah.ru/individuals/auto/kasko/",
-    "Согласие": "https://www.soglasie.ru/individuals/avto/kasko/",
-    "РГС": "https://www.rgs.ru/auto/ekasko/",
-    "Т-Страхование": "https://www.tbank.ru/insurance/kasko/",
-    "СберСтрахование": "https://sberbankins.ru/products/kasko/",
-    "Югория": "https://ugsk.ru/auto/kasko/",
-    "Совкомбанк Страхование": "https://sovcomins.ru/product/kasko/"
+# Для каждой компании — либо прямая ссылка на PDF, либо страница с документами
+COMPANY_SOURCES = {
+    "РЕСО-Гарантия": {
+        "type": "page",
+        "url": "https://reso.ru/individual/auto/kasko/",
+        "note": "На странице есть ссылка на PDF 'Правила страхования средств автотранспорта'"
+    },
+    "ВСК": {
+        "type": "page",
+        "url": "https://www.vsk.ru/klientam/avto/kasko/",
+        "note": "Внизу страницы 'Документы' — Правила № 125.4"
+    },
+    "Ингосстрах": {
+        "type": "page",
+        "url": "https://www.ingos.ru/auto/kasko/",
+        "note": "Внизу страницы 'Правила страхования автотранспортных средств'"
+    },
+    "Ренессанс": {
+        "type": "page",
+        "url": "https://www.renins.ru/auto/kasko/",
+        "note": "Кнопка 'Документы' — Правила комбинированного страхования ТС"
+    },
+    "АльфаСтрахование": {
+        "type": "page",
+        "url": "https://www.alfastrah.ru/individuals/auto/kasko/",
+        "note": "Внизу страницы документы с PDF"
+    },
+    "Согласие": {
+        "type": "direct",
+        "url": "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
+        "note": "Прямая страница с правилами страхования ТС"
+    },
+    "РГС": {
+        "type": "page",
+        "url": "https://www.rgs.ru/auto/ekasko/",
+        "note": "Внизу страницы 'Ключевой информационный документ (КИД)'"
+    },
+    "Т-Страхование": {
+        "type": "page",
+        "url": "https://www.tbank.ru/insurance/kasko/",
+        "note": "На странице есть ссылки на PDF с правилами"
+    },
+    "СберСтрахование": {
+        "type": "page",
+        "url": "https://sberbankins.ru/products/kasko/",
+        "note": "На странице есть раздел с документами"
+    },
+    "Югория": {
+        "type": "html",
+        "url": "https://ugsk.ru/auto/kasko/",
+        "note": "Нет PDF, но вся информация на странице"
+    },
+    "Совкомбанк Страхование": {
+        "type": "direct",
+        "url": "https://sovcomins.ru/about/rules-and-tariffs/",
+        "note": "Страница с правилами и тарифами"
+    }
 }
 
 # ==================== ПОЛЯ КАСКО ====================
@@ -148,10 +194,11 @@ def get_source_info(level: int) -> Dict:
     levels = {
         1: {"emoji": "📄", "label": "PDF правила", "type": "pdf"},
         2: {"emoji": "🤖", "label": "Groq-LLM анализ", "type": "llm"},
+        3: {"emoji": "🔍", "label": "HTML страница", "type": "html"},
     }
     return levels.get(level, {"emoji": "⬜", "label": "Неизвестно", "type": "unknown"})
 
-# ==================== ПОИСК PDF ====================
+# ==================== ПОИСК PDF НА СТРАНИЦЕ ====================
 
 def find_pdf_links(html: str, base_url: str) -> List[str]:
     """Найти все ссылки на PDF на странице"""
@@ -175,21 +222,12 @@ def find_pdf_links(html: str, base_url: str) -> List[str]:
                 if full_url not in pdf_links:
                     pdf_links.append(full_url)
     
-    # 3. onclick
-    for tag in soup.find_all(attrs={'onclick': True}):
-        onclick = tag.get('onclick', '')
-        match = re.search(r"['\"]([^'\"]+\.pdf)['\"]", onclick)
-        if match:
-            full_url = urljoin(base_url, match.group(1))
-            if full_url not in pdf_links:
-                pdf_links.append(full_url)
-    
-    # 4. Ссылки с текстом "правила", "условия"
+    # 3. Ссылки с текстом "правила", "условия", "документы"
     for link in soup.find_all('a', href=True):
         text = link.get_text().lower()
-        if any(kw in text for kw in ['правила', 'условия', 'полис', 'тарифы']):
+        if any(kw in text for kw in ['правила', 'условия', 'полис', 'тарифы', 'документ']):
             href = link.get('href', '')
-            if href and ('.pdf' in href or '?download' in href):
+            if href and ('.pdf' in href or '?download' in href or 'file=' in href):
                 full_url = urljoin(base_url, href)
                 if full_url not in pdf_links:
                     pdf_links.append(full_url)
@@ -241,8 +279,8 @@ def extract_text_from_pdf(pdf_data: bytes) -> Optional[str]:
 
 # ==================== АНАЛИЗ PDF ЧЕРЕЗ GROQ ====================
 
-def analyze_with_groq(pdf_text: str, field: str, company: str) -> Optional[str]:
-    """Отправить текст PDF в Groq для анализа"""
+def analyze_with_groq(text: str, field: str, company: str, source_type: str = "PDF") -> Optional[str]:
+    """Отправить текст в Groq для анализа"""
     if not GROQ_API_KEY:
         logger.error(f"    ❌ GROQ_API_KEY не задан")
         return None
@@ -252,8 +290,9 @@ def analyze_with_groq(pdf_text: str, field: str, company: str) -> Optional[str]:
         logger.error(f"    ❌ Нет промпта для поля {field}")
         return None
     
-    # Обрезаем текст до 3000 символов (чтобы не превысить лимит)
-    truncated_text = pdf_text[:3000] if len(pdf_text) > 3000 else pdf_text
+    # Обрезаем текст
+    if len(text) > 4000:
+        text = text[:4000]
     
     logger.info(f"    🤖 Groq анализирует: {FIELD_LABELS.get(field, field)}")
     
@@ -269,11 +308,11 @@ def analyze_with_groq(pdf_text: str, field: str, company: str) -> Optional[str]:
                 "messages": [
                     {
                         "role": "system", 
-                        "content": "Ты — эксперт по страхованию. Анализируй текст PDF и давай точные, краткие ответы. Если информация не найдена — пиши 'Не указано'. Отвечай только по существу, без лишней воды."
+                        "content": "Ты — эксперт по страхованию. Анализируй текст и давай точные, краткие ответы. Если информация не найдена — пиши 'Не указано'. Отвечай только по существу, без лишней воды."
                     },
                     {
                         "role": "user",
-                        "content": f"Текст PDF: \n\n{truncated_text}\n\nВопрос: {prompt}\n\nОтвет:"
+                        "content": f"Текст ({source_type}): \n\n{text}\n\nВопрос: {prompt}\n\nОтвет:"
                     }
                 ],
                 "temperature": 0.1,
@@ -299,28 +338,45 @@ def analyze_with_groq(pdf_text: str, field: str, company: str) -> Optional[str]:
         logger.error(f"      ❌ Ошибка Groq: {str(e)[:80]}")
         return None
 
+# ==================== ПАРСИНГ HTML ДЛЯ ЮГОРИИ ====================
+
+def parse_html_page(html: str, url: str) -> Dict[str, str]:
+    """Парсинг HTML страницы (для Югории и других без PDF)"""
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    # Удаляем мусор
+    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header"]):
+        tag.decompose()
+    
+    text = clean_text(soup.get_text())
+    
+    # Возвращаем весь текст для анализа Groq
+    return {"full_text": text}
+
 # ==================== СБОР ДАННЫХ ДЛЯ ОДНОЙ КОМПАНИИ ====================
 
 def collect_company_data(company: str) -> Dict:
-    """Сбор данных для одной компании через PDF + Groq"""
+    """Сбор данных для одной компании"""
     logger.info(f"\n🔍 {company}")
     logger.info("━" * 50)
     
     result = {}
     
-    url = KASKO_PAGES.get(company)
-    if not url:
-        logger.error(f"  ❌ Нет URL для {company}")
+    source = COMPANY_SOURCES.get(company)
+    if not source:
+        logger.error(f"  ❌ Нет источника для {company}")
         return {}
     
-    # Шаг 1: Загружаем страницу и ищем PDF
-    logger.info(f"  📂 Поиск PDF на странице КАСКО")
-    logger.info(f"  🔗 {url}")
+    source_type = source.get("type")
+    url = source.get("url")
     
+    logger.info(f"  📂 Источник: {source_type} — {url}")
+    
+    # ==================== ЗАГРУЖАЕМ СТРАНИЦУ ====================
     response = fetch_url(url)
     
     if not response or not response.get("success"):
-        logger.error(f"  ❌ Не удалось загрузить страницу")
+        logger.error(f"  ❌ Не удалось загрузить страницу: {response.get('error') if response else 'Нет ответа'}")
         return {}
     
     html = response.get("text")
@@ -328,15 +384,55 @@ def collect_company_data(company: str) -> Dict:
         logger.error(f"  ❌ Нет HTML")
         return {}
     
+    # ==================== ЕСЛИ ИСТОЧНИК — HTML (Югория) ====================
+    if source_type == "html":
+        logger.info(f"  🔍 Парсим HTML страницу (без PDF)")
+        parsed = parse_html_page(html, url)
+        text = parsed.get("full_text", "")
+        
+        if not text:
+            logger.error(f"  ❌ Не удалось извлечь текст из HTML")
+            return {}
+        
+        # Анализируем через Groq
+        for field in KASKO_FIELDS:
+            answer = analyze_with_groq(text, field, company, "HTML страница")
+            if answer:
+                result[field] = {
+                    "value": answer,
+                    "source": {
+                        "level": 3,
+                        "name": f"HTML страница {company}",
+                        "url": url,
+                        "found_at": datetime.now().isoformat()
+                    }
+                }
+                logger.info(f"    ✅ {FIELD_LABELS.get(field, field)}: {answer[:80]}...")
+            else:
+                result[field] = {
+                    "value": "Не найдено",
+                    "source": {
+                        "level": 0,
+                        "name": "Информация не найдена",
+                        "url": None,
+                        "found_at": datetime.now().isoformat()
+                    }
+                }
+                logger.warning(f"    ❌ Не найдено: {FIELD_LABELS.get(field, field)}")
+        
+        return result
+    
+    # ==================== ЕСЛИ ИСТОЧНИК — СТРАНИЦА С ДОКУМЕНТАМИ ====================
+    # Ищем PDF на странице
     pdf_links = find_pdf_links(html, url)
     
     if not pdf_links:
-        logger.error(f"  ❌ PDF не найдены")
+        logger.error(f"  ❌ PDF не найдены на странице")
         return {}
     
-    # Шаг 2: Скачиваем и читаем PDF
+    # Пробуем каждый PDF
     pdf_text = None
-    for pdf_url in pdf_links[:5]:  # Ограничиваем 5 PDF
+    for pdf_url in pdf_links[:5]:
         if any(x in pdf_url.lower() for x in ['cookie', 'privacy', 'policy', 'logo']):
             continue
         
@@ -360,24 +456,22 @@ def collect_company_data(company: str) -> Dict:
         logger.error(f"  ❌ Не удалось прочитать ни один PDF")
         return {}
     
-    # Шаг 3: Анализируем PDF через Groq
+    # ==================== АНАЛИЗ PDF ЧЕРЕЗ GROQ ====================
     logger.info(f"  🤖 Анализ PDF через Groq-LLM")
     
     for field in KASKO_FIELDS:
-        logger.info(f"    🔍 {FIELD_LABELS.get(field, field)}")
-        answer = analyze_with_groq(pdf_text, field, company)
-        
+        answer = analyze_with_groq(pdf_text, field, company, "PDF")
         if answer:
             result[field] = {
                 "value": answer,
                 "source": {
                     "level": 2,
-                    "name": f"Groq-LLM (анализ PDF {company})",
+                    "name": f"Groq-LLM (PDF {company})",
                     "url": pdf_links[0] if pdf_links else None,
                     "found_at": datetime.now().isoformat()
                 }
             }
-            logger.info(f"      ✅ {answer[:100]}...")
+            logger.info(f"    ✅ {FIELD_LABELS.get(field, field)}: {answer[:80]}...")
         else:
             result[field] = {
                 "value": "Не найдено",
@@ -388,11 +482,7 @@ def collect_company_data(company: str) -> Dict:
                     "found_at": datetime.now().isoformat()
                 }
             }
-            logger.warning(f"      ❌ Не найдено")
-    
-    # Итог
-    found = [f for f in KASKO_FIELDS if result.get(f, {}).get("value") != "Не найдено"]
-    logger.info(f"\n📊 {company}: собрано {len(found)}/{len(KASKO_FIELDS)} полей через Groq")
+            logger.warning(f"    ❌ Не найдено: {FIELD_LABELS.get(field, field)}")
     
     return result
 
@@ -401,7 +491,7 @@ def collect_all_data() -> Dict:
     logger.info("\n" + "=" * 60)
     logger.info("📊 СБОР ДАННЫХ: КАСКО (PDF + Groq-LLM)")
     logger.info("=" * 60)
-    logger.info(f"Компаний: {len(KASKO_PAGES)}")
+    logger.info(f"Компаний: {len(COMPANY_SOURCES)}")
     logger.info(f"Поля: {len(KASKO_FIELDS)}")
     logger.info(f"Модель: {GROQ_MODEL}")
     if GROQ_API_KEY:
@@ -411,7 +501,7 @@ def collect_all_data() -> Dict:
     logger.info("=" * 60)
     
     all_data = {}
-    for company in KASKO_PAGES.keys():
+    for company in COMPANY_SOURCES.keys():
         all_data[company] = collect_company_data(company)
         time.sleep(1)
     
@@ -629,8 +719,9 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
     </div>
     
     <div class="legend">
-        <span class="legend-item">📄 Уровень 1 — PDF</span>
+        <span class="legend-item">📄 Уровень 1 — PDF правила</span>
         <span class="legend-item">🤖 Уровень 2 — Groq-LLM анализ</span>
+        <span class="legend-item">🔍 Уровень 3 — HTML страница</span>
         <span class="legend-item">⬜ Информация не найдена</span>
     </div>
     
@@ -659,7 +750,7 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
                         {% endif %}
                         {% if data1[field] is mapping and 'source' in data1[field] %}
                             {% set s = data1[field].source %}
-                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}📄{% elif s.level == 2 %}🤖{% else %}⬜{% endif %}</span>
+                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}📄{% elif s.level == 2 %}🤖{% elif s.level == 3 %}🔍{% else %}⬜{% endif %}</span>
                             <div class="source-tooltip">
                                 Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})
                                 {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
@@ -682,7 +773,7 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
                         {% endif %}
                         {% if data2[field] is mapping and 'source' in data2[field] %}
                             {% set s = data2[field].source %}
-                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}📄{% elif s.level == 2 %}🤖{% else %}⬜{% endif %}</span>
+                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}📄{% elif s.level == 2 %}🤖{% elif s.level == 3 %}🔍{% else %}⬜{% endif %}</span>
                             <div class="source-tooltip">
                                 Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})
                                 {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
