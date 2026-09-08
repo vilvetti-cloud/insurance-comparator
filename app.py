@@ -30,7 +30,7 @@ app = Flask(__name__)
 # ==================== КОНФИГУРАЦИЯ ====================
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = "mixtral-8x7b-32768"  # вместо llama-3.1-70b-versatile
+GROQ_MODEL = "gemma2-9b-it"
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
