@@ -1,4 +1,4 @@
-# app.py — ФИНАЛЬНАЯ ВЕРСИЯ C DUCKDUCKGO + GROQ
+# app.py — PDF + ИНТЕРНЕТ-ПОИСК (БЕЗ ПАМЯТИ)
 
 from flask import Flask, render_template, request, redirect
 from datetime import datetime
@@ -11,7 +11,7 @@ import time
 import random
 from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import urljoin, quote_plus
 import io
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -27,10 +27,6 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edge/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36",
 ]
-
-# Groq API Key — задаётся в Render как переменная окружения GROQ_API_KEY
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.3-70b-versatile"  # или "mixtral-8x7b-32768"
 
 # ==================== УРЛЫ СТРАНИЦ КАСКО ====================
 
@@ -48,193 +44,11 @@ KASKO_PAGES = {
     "Совкомбанк Страхование": "https://sovcomins.ru/product/kasko/"
 }
 
-# ==================== ДАННЫЕ ПАМЯТИ (УРОВЕНЬ 4) ====================
-
-KASKO_MEMORY_DATA = {
-    "РЕСО-Гарантия": {
-        "franchise": "Безусловная \\ Условно-безусловная (с 1-го или со 2-го случая). Не применяется к риску 'Хищение'.",
-        "without_certificates": "Стекла без ограничений (включая стеклянную крышу и люк); 1 раз в год 1 кузовной элемент (для VIP 2 раза/год). Камеры входят в состав элемента: зеркала, крышки багажника, облицовки бампера.",
-        "gap": "Отдельный риск",
-        "total_loss": "75% от СС",
-        "fire": "Входит",
-        "terrorism": "Входит",
-        "drone": "Лимит 1% СС по риску «Ущерб»",
-        "tow_truck": "Лимит 1% СС",
-        "repair_type": "Ремонт у официального дилера",
-        "payment_terms": "5 рабочих дней",
-        "advantages": "Ремонт у дилера, быстрая выплата, без учета износа, VIP-условия",
-        "weak_points": "Требуется уточнение условий по телефону",
-        "rating": "4.5",
-        "offices": "1200+"
-    },
-    "ВСК": {
-        "franchise": "Условно-безусловная. Может не применяться по отдельным рискам.",
-        "without_certificates": "Стекла: 5% СС (неагрегатная). Прочие элементы: 3% СС (агрегатная). Панорамная крыша, стеклянная крыша и камеры не покрываются.",
-        "gap": "Включен, если указан 1 период страхования (1 год). Если страховые суммы разбиты по кварталам – GAP отсутствует.",
-        "total_loss": "75% от СС",
-        "fire": "ИСКЛЮЧЕНИЕ из страхового покрытия",
-        "terrorism": "Особые условия включения",
-        "drone": "Включен при наличии в полисе GAP и отметки 'официальный дилер'",
-        "tow_truck": "Петковые ТС - лимит 5 000 руб. Прочие - лимит 15 000 руб.",
-        "repair_type": "Ремонт на СТОА страховщика",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Гибкие условия по справкам",
-        "weak_points": "Камеры не оплачиваются без справок. Самовозгорание исключено.",
-        "rating": "4.2",
-        "offices": "800+"
-    },
-    "Ингосстрах": {
-        "franchise": "Условная\\условно-безусловная. По каждому случаю или со 2-го случая (Авто-профи).",
-        "without_certificates": "Базовый вариант: 1 раз в год – 1 из вариантов: ЛКП не более 1-й детали; остекление кузова (ИСКЛЮЧАЯ стеклянную крышу); внешние световые приборы; зеркала; антенна.",
-        "gap": "Включен при отметке «Постоянная страховая сумма».",
-        "total_loss": "75% от СС",
-        "fire": "Входит",
-        "terrorism": "За доп. плату, тариф 0,3%.",
-        "drone": "Включен, но лимит 0,3%.",
-        "tow_truck": "По запросу",
-        "repair_type": "Ремонт на СТОА страховщика",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Широкая сеть офисов",
-        "weak_points": "Без справок – только ЛКП 1 детали. Возможны ограничения по пробегу и СТОА.",
-        "rating": "4.4",
-        "offices": "900+"
-    },
-    "Ренессанс": {
-        "franchise": "11 видов франшиз. Чаще всего: Франшиза виновника, Безусловная, Франшиза со 2-го случая.",
-        "without_certificates": "Вариативно: стекла 1 раз в год \\ стекла без ограничений \\ до 5% СС 2 раза \\ до 3% СС 1 раз \\ не предусмотрено.",
-        "gap": "Отдельный риск",
-        "total_loss": "75% от СС",
-        "fire": "Только для электромобилей",
-        "terrorism": "За доп. плату, 0,5% от СС на легковые ТС",
-        "drone": "За доп. плату, 0,5% от СС на легковые",
-        "tow_truck": "Петковые ТС - лимит 10 000 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Много вариантов франшизы",
-        "weak_points": "Франшиза по хищению. Эвакуация за доп. плату.",
-        "rating": "4.3",
-        "offices": "500+"
-    },
-    "АльфаСтрахование": {
-        "franchise": "Условно-безусловная. Применяется к Хищению.",
-        "without_certificates": "Базовый вариант: стекла без ограничений + 1 кузовной элемент 2 раза в год",
-        "gap": "Включен по умолчанию",
-        "total_loss": "75% от СС",
-        "fire": "За доп. плату, 0,8% от СС",
-        "terrorism": "За доп. плату, 0,2-0,3% от СС",
-        "drone": "За доп. плату",
-        "tow_truck": "Петковые ТС - лимит 5 000 руб. Прочие - лимит 10 000 руб.",
-        "repair_type": "Ремонт на СТОА страховщика",
-        "payment_terms": "7 рабочих дней",
-        "advantages": "Без справок с бонусами",
-        "weak_points": "Франшиза на Хищение, самовозгорание - за доп. плату",
-        "rating": "4.6",
-        "offices": "600+"
-    },
-    "Т-Страхование": {
-        "franchise": "Условно-безусловная. Для ТС старше 5 лет - обязательные франшизы",
-        "without_certificates": "Стекла: неогранич. кол-во раз – ИСКЛЮЧАЯ стеклянную крышу. Кузовные элементы: 1 раз в год - до 3% от СС",
-        "gap": "Отдельный риск",
-        "total_loss": "65% от СС",
-        "fire": "Нет инф.",
-        "terrorism": "Нет инф.",
-        "drone": "Нет инф.",
-        "tow_truck": "Лимит 10 000 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "5 рабочих дней",
-        "advantages": "Онлайн-оформление, без справок",
-        "weak_points": "Ниже порог тотала (65%). Обязательные франшизы.",
-        "rating": "4.7",
-        "offices": "онлайн"
-    },
-    "РГС": {
-        "franchise": "Безусловная – по умолчанию. Возможны динамическая, условно-безусловная, агрегатная.",
-        "without_certificates": "Стекла: неограниченное кол-во раз - ИСКЛЮЧАЯ стеклянную крышу. Кузовные элементы: 1 раз в год.",
-        "gap": "Включен, если СС индексируемая. Не включен, если не индексируемая.",
-        "total_loss": "75% от СС",
-        "fire": "ИСКЛЮЧЕНИЕ из страхового покрытия",
-        "terrorism": "ИСКЛЮЧЕНИЕ из страхового покрытия",
-        "drone": "ИСКЛЮЧЕНИЕ из страхового покрытия",
-        "tow_truck": "Петковые ТС - лимит 7 000 руб. Грузовые ТС - лимит 10 000 руб.",
-        "repair_type": "Ремонт на СТОА страховщика",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Гибкие условия",
-        "weak_points": "Самовозгорание и Терроризм исключены. Износ за 1-ый месяц - 7% (у РЕСО - 3%).",
-        "rating": "4.1",
-        "offices": "700+"
-    },
-    "Югория": {
-        "franchise": "Условно-безусловная франшиза. При пролонгации возможна доп. франшиза.",
-        "without_certificates": "Стекла: 1 раз, за исключением панорамной крыши и люка",
-        "gap": "Неагрегатная - изменяющаяся",
-        "total_loss": "Не указан",
-        "fire": "ИСКЛЮЧЕНИЕ из страхового покрытия",
-        "terrorism": "Нет инф.",
-        "drone": "Входит",
-        "tow_truck": "Лимит 5% от СС, но не более 15 000 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Гибкие условия пролонгации",
-        "weak_points": "При пролонгации доп. франшиза. Самовозгорание исключено.",
-        "rating": "3.9",
-        "offices": "400+"
-    },
-    "СберСтрахование": {
-        "franchise": "6 видов франшиз: условная, безусловная, безусловная при ДТП, динамическая, безусловная со 2-го случая, агрегатная.",
-        "without_certificates": "Вариантно: 1 раз - 1 деталь кузова + стекла. Только стекла.",
-        "gap": "Включен, если СС индексируемая. Не включен, если не индексируемая.",
-        "total_loss": "70% от СС",
-        "fire": "ИСКЛЮЧЕНИЕ из страхового покрытия",
-        "terrorism": "ИСКЛЮЧЕНИЕ из страхового покрытия",
-        "drone": "ИСКЛЮЧЕНИЕ из страхового покрытия",
-        "tow_truck": "Петковые ТС - лимит 6 000 руб. Грузовые ТС - лимит 12 000 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "7 рабочих дней",
-        "advantages": "Много вариантов франшизы",
-        "weak_points": "Тотал 70%. Самовозгорание и Терроризм исключены.",
-        "rating": "4.0",
-        "offices": "1000+"
-    },
-    "Согласие": {
-        "franchise": "Условно-безусловная \\ динамическая",
-        "without_certificates": "Стандартно: Неограниченно стекла (искл. крыша и люк) + 1 раз любой элемент",
-        "gap": "В разделе 'Условия страхования' указывается как риск ГЭП",
-        "total_loss": "70% от СС",
-        "fire": "За доп. плату, 1.15 для ФЛ и 1.05 для ЮЛ",
-        "terrorism": "За доп. плату, тариф 1.1% только для МСК и МО",
-        "drone": "За доп. плату, только для МСК и МО",
-        "tow_truck": "5 000 руб. (до 3,5 т). 10 000 руб. (свыше 3,5 т и за рубежом)",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Гибкие условия",
-        "weak_points": "Тотал 70%. Эвакуатор 5 000 руб. (ниже РЕСО).",
-        "rating": "4.2",
-        "offices": "300+"
-    },
-    "Совкомбанк Страхование": {
-        "franchise": "Условно-безусловная. Обязательная франшиза 25% (при не уведомлении о смене региона)",
-        "without_certificates": "Только ремонт или замена ветрового стекла",
-        "gap": "Нет инф.",
-        "total_loss": "75% от СС",
-        "fire": "Входит в группу событий №2",
-        "terrorism": "ИСКЛЮЧЕНИЕ из покрытия",
-        "drone": "ИСКЛЮЧЕНИЕ из покрытия",
-        "tow_truck": "6 500 руб.",
-        "repair_type": "Ремонт или выплата",
-        "payment_terms": "10 рабочих дней",
-        "advantages": "Группы событий",
-        "weak_points": "Терроризм исключен. Обязательная франшиза.",
-        "rating": "3.8",
-        "offices": "200+"
-    }
-}
-
 # ==================== ПОЛЯ КАСКО ====================
 
 KASKO_FIELDS = [
     "franchise", "without_certificates", "gap", "total_loss", "fire", "terrorism",
-    "drone", "tow_truck", "repair_type", "payment_terms", "advantages",
-    "weak_points", "rating", "offices"
+    "drone", "tow_truck", "repair_type", "payment_terms"
 ]
 
 FIELD_LABELS = {
@@ -247,11 +61,7 @@ FIELD_LABELS = {
     "drone": "БПЛА",
     "tow_truck": "Эвакуатор",
     "repair_type": "Тип ремонта",
-    "payment_terms": "Срок выплаты",
-    "advantages": "Преимущества",
-    "weak_points": "Слабые места",
-    "rating": "Рейтинг",
-    "offices": "Офисы"
+    "payment_terms": "Срок выплаты"
 }
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
@@ -287,149 +97,74 @@ def fetch_url(url: str, timeout: int = 25) -> Optional[str]:
 def clean_text(text: str) -> str:
     if not text:
         return ""
-    return re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 def get_source_info(level: int) -> Dict:
     levels = {
-        1: {"emoji": "🟢", "label": "Официальный сайт", "type": "official"},
-        2: {"emoji": "📄", "label": "PDF правила", "type": "pdf"},
-        3: {"emoji": "🤖", "label": "Groq-LLM (поиск)", "type": "llm"},
-        4: {"emoji": "⚪", "label": "Внутренняя база", "type": "memory"},
+        1: {"emoji": "📄", "label": "PDF правила", "type": "pdf"},
+        2: {"emoji": "🟡", "label": "Интернет-поиск", "type": "search"},
     }
     return levels.get(level, {"emoji": "⬜", "label": "Неизвестно", "type": "unknown"})
 
-# ==================== УРОВЕНЬ 1: HTML (ТОЛЬКО РАЗДЕЛЫ С УСЛОВИЯМИ) ====================
+# ==================== ПОИСК PDF НА СТРАНИЦЕ (ВСЕМИ СПОСОБАМИ) ====================
 
-def parse_html_page(company: str, url: str) -> Dict:
-    """Парсинг HTML — ищем ТОЛЬКО в разделах с условиями страхования"""
-    print(f"  📂 Уровень 1: Официальный сайт — {url}")
-    
-    result = {}
-    html = fetch_url(url)
-    
-    if not html:
-        print(f"    ⚠️ Не удалось загрузить страницу")
-        return result
-    
+def find_pdf_links(html: str, base_url: str) -> List[str]:
+    """Найти все ссылки на PDF на странице (всеми возможными способами)"""
     soup = BeautifulSoup(html, 'html.parser')
+    pdf_links = []
     
-    # Удаляем мусорные блоки
-    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header"]):
-        tag.decompose()
+    # 1. Обычные ссылки <a href="...pdf">
+    for link in soup.find_all('a', href=True):
+        href = link.get('href')
+        if href and '.pdf' in href.lower():
+            full_url = urljoin(base_url, href)
+            if full_url not in pdf_links:
+                pdf_links.append(full_url)
     
-    # Удаляем отзывы и новости
-    for tag in soup.find_all(['div', 'section'], class_=re.compile(r'review|feedback|comment|отзыв|news|article|новост|стать', re.I)):
-        tag.decompose()
+    # 2. data-атрибуты (data-href, data-url, data-file, data-pdf)
+    for tag in soup.find_all():
+        for attr in ['data-href', 'data-url', 'data-file', 'data-pdf', 'data-src']:
+            val = tag.get(attr)
+            if val and '.pdf' in val.lower():
+                full_url = urljoin(base_url, val)
+                if full_url not in pdf_links:
+                    pdf_links.append(full_url)
     
-    # Собираем разделы с условиями
-    sections = []
-    condition_keywords = ['услови', 'правил', 'покрыва', 'риск', 'страхов', 'тариф', 'что входит', 'как работает']
+    # 3. onclick атрибуты
+    for tag in soup.find_all(attrs={'onclick': True}):
+        onclick = tag.get('onclick', '')
+        # Ищем URL в onclick
+        match = re.search(r"['\"]([^'\"]+\.pdf)['\"]", onclick)
+        if match:
+            full_url = urljoin(base_url, match.group(1))
+            if full_url not in pdf_links:
+                pdf_links.append(full_url)
     
-    for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'strong', 'b']):
-        text = tag.get_text().lower()
-        if any(kw in text for kw in condition_keywords):
-            content_parts = []
-            next_tag = tag.find_next()
-            while next_tag and next_tag.name not in ['h1', 'h2', 'h3', 'h4', 'h5']:
-                if next_tag.name in ['p', 'li', 'td', 'div', 'span']:
-                    content_parts.append(next_tag.get_text())
-                next_tag = next_tag.find_next()
-            if content_parts:
-                sections.append(' '.join(content_parts))
+    # 4. Текст внутри тегов
+    for tag in soup.find_all(['p', 'div', 'li', 'td', 'span']):
+        text = tag.get_text()
+        if '.pdf' in text.lower():
+            # Ищем URL в тексте
+            match = re.search(r'https?://[^\s<>"\']+\.pdf', text)
+            if match:
+                full_url = match.group(0)
+                if full_url not in pdf_links:
+                    pdf_links.append(full_url)
     
-    # Таблицы
-    for table in soup.find_all('table'):
-        if any(kw in table.get_text().lower() for kw in ['франшиз', 'тотал', 'риск', 'страхов', 'выплат']):
-            sections.append(table.get_text())
-    
-    # Списки в разделах с условиями
-    for ul in soup.find_all('ul'):
-        parent = ul.find_parent()
-        if parent:
-            parent_text = parent.get_text().lower()
-            if any(kw in parent_text for kw in ['услови', 'риск', 'покрыва', 'входит']):
-                sections.append(ul.get_text())
-    
-    # FAQ
-    for tag in soup.find_all(['div', 'section'], class_=re.compile(r'faq|question|answer|accordion', re.I)):
-        sections.append(tag.get_text())
-    
-    all_text = clean_text(' '.join(sections))
-    
-    if not all_text:
-        print(f"    ⚠️ Не найдено разделов с условиями")
-        return result
-    
-    # Ищем данные
-    field_patterns = {
-        "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
-        "total_loss": ["тотал", "полная гибель", "гибель", "75%", "70%", "65%"],
-        "gap": ["gap", "гэп", "сохранение стоимости"],
-        "without_certificates": ["без справок", "без документ"],
-        "fire": ["самовозгоран", "возгоран", "пожар"],
-        "terrorism": ["терроризм", "терр. акт"],
-        "drone": ["бпла", "беспилот", "дрон"],
-        "tow_truck": ["эвакуа"],
-        "repair_type": ["ремонт", "стоа", "дилер"],
-        "payment_terms": ["срок выплат", "рабочих дней", "дней"]
-    }
-    
-    for field, keywords in field_patterns.items():
-        for kw in keywords:
-            if kw in all_text.lower():
-                sentences = re.split(r'[.!?]', all_text)
-                for sentence in sentences:
-                    if kw in sentence.lower():
-                        value = clean_text(sentence)
-                        if len(value) > 15 and len(value) < 300:
-                            if not any(x in value.lower() for x in ["отзыв", "рейтинг", "звезд", "спасиб", "доволен"]):
-                                result[field] = {
-                                    "value": value,
-                                    "source": {
-                                        "level": 1,
-                                        "name": f"Официальный сайт {company}",
-                                        "url": url,
-                                        "found_at": datetime.now().isoformat()
-                                    }
-                                }
-                                print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
-                                break
-                    if field in result:
-                        break
-            if field in result:
-                break
-    
-    print(f"    📊 Найдено в HTML: {len(result)} полей")
-    return result
-
-# ==================== УРОВЕНЬ 2: PDF ====================
-
-def find_rules_pdf(html: str, base_url: str) -> List[str]:
-    """Найти PDF с правилами страхования"""
-    soup = BeautifulSoup(html, 'html.parser')
-    candidates = []
-    priority_keywords = ['правила', 'условия', 'тарифы', 'полис', 'правило']
-    
+    # 5. Ищем в ссылках по тексту "правила", "условия", "полис"
     for link in soup.find_all('a', href=True):
         text = link.get_text().lower()
         href = link.get('href', '').lower()
-        
-        if any(kw in text for kw in priority_keywords) or any(kw in href for kw in priority_keywords):
-            if '.pdf' in href or '.pdf' in text:
+        if any(kw in text for kw in ['правила', 'условия', 'полис', 'тарифы']):
+            if href and ('.pdf' in href or '?download' in href):
                 full_url = urljoin(base_url, link.get('href'))
-                if full_url not in candidates and 'cookie' not in href and 'privacy' not in href:
-                    candidates.append(full_url)
+                if full_url not in pdf_links:
+                    pdf_links.append(full_url)
     
-    for tag in soup.find_all(['div', 'section', 'article', 'li']):
-        text = tag.get_text().lower()
-        if any(kw in text for kw in ['правила страхования', 'условия страхования', 'страховые правила']):
-            for link in tag.find_all('a', href=True):
-                if '.pdf' in link.get('href', '').lower():
-                    full_url = urljoin(base_url, link.get('href'))
-                    if full_url not in candidates and 'cookie' not in full_url.lower():
-                        candidates.append(full_url)
-    
-    return candidates
+    return pdf_links
+
+# ==================== ЧТЕНИЕ PDF ====================
 
 def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
     """Скачать PDF и извлечь текст"""
@@ -440,6 +175,7 @@ def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
         if response.status_code != 200:
             return None
         
+        # Проверяем, что это действительно PDF
         content_type = response.headers.get('Content-Type', '')
         if 'pdf' not in content_type.lower() and not pdf_url.lower().endswith('.pdf'):
             return None
@@ -465,6 +201,7 @@ def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
         except:
             pass
         
+        # Пробуем pypdf
         try:
             import pypdf
             pdf_bytes = io.BytesIO(response.content)
@@ -491,218 +228,105 @@ def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
         print(f"      ⚠️ Ошибка PDF: {e}")
         return None
 
-def parse_pdf_rules(company: str, html: str, base_url: str) -> Dict:
-    """Поиск и парсинг PDF с правилами"""
-    print(f"  📂 Уровень 2: PDF правила")
+# ==================== ИЗВЛЕЧЕНИЕ ДАННЫХ ИЗ ТЕКСТА ====================
+
+def extract_field_from_text(text: str, field: str) -> Optional[str]:
+    """Извлечь значение поля из текста по ключевым словам"""
+    if not text:
+        return None
     
-    result = {}
-    pdf_links = find_rules_pdf(html, base_url)
+    text_lower = text.lower()
     
-    if not pdf_links:
-        print(f"    ⚠️ PDF не найдены")
-        return result
-    
-    print(f"    📄 Найдено PDF: {len(pdf_links)}")
-    
-    field_patterns = {
+    # Ключевые слова для каждого поля
+    keywords = {
         "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
-        "total_loss": ["тотал", "полная гибель", "гибель", "75%", "70%", "65%"],
-        "gap": ["gap", "гэп"],
-        "without_certificates": ["без справок"],
-        "fire": ["самовозгоран", "возгоран"],
-        "terrorism": ["терроризм"],
-        "drone": ["бпла", "беспилот"],
+        "without_certificates": ["без справок", "без документ"],
+        "gap": ["gap", "гэп", "сохранение стоимости"],
+        "total_loss": ["тотал", "полная гибель", "гибель", "конструктивн"],
+        "fire": ["самовозгоран", "возгоран", "пожар"],
+        "terrorism": ["терроризм", "терр. акт"],
+        "drone": ["бпла", "беспилот", "дрон"],
         "tow_truck": ["эвакуа"],
-        "repair_type": ["ремонт", "стоа"],
-        "payment_terms": ["срок выплат", "рабочих дней"]
+        "repair_type": ["ремонт", "стоа", "дилер"],
+        "payment_terms": ["срок выплат", "рабочих дней", "дней"]
     }
     
-    for pdf_url in pdf_links[:5]:
-        if any(x in pdf_url.lower() for x in ['cookie', 'privacy', 'policy', 'logo', 'image']):
-            continue
-            
-        print(f"      📥 Читаем PDF: {pdf_url[:80]}...")
-        
-        pdf_text = extract_text_from_pdf(pdf_url)
-        if not pdf_text:
-            continue
-        
-        pdf_text_lower = pdf_text.lower()
-        found_in_pdf = set()
-        
-        for field, keywords in field_patterns.items():
-            if field in found_in_pdf:
-                continue
-                
-            for kw in keywords:
-                if kw in pdf_text_lower:
-                    sentences = re.split(r'[.!?]', pdf_text)
-                    for sentence in sentences:
-                        if kw in sentence.lower():
-                            value = clean_text(sentence)
-                            if len(value) > 15 and len(value) < 400:
-                                result[field] = {
-                                    "value": value,
-                                    "source": {
-                                        "level": 2,
-                                        "name": f"PDF {company}",
-                                        "url": pdf_url,
-                                        "found_at": datetime.now().isoformat()
-                                    }
-                                }
-                                found_in_pdf.add(field)
-                                print(f"      ✅ Из PDF: {FIELD_LABELS.get(field, field)}")
-                                break
-                        if field in result:
-                            break
-                if field in result:
-                    break
-        
-        if len(found_in_pdf) >= 8:
-            break
+    field_keywords = keywords.get(field, [])
     
-    print(f"    📊 Найдено в PDF: {len(result)} полей")
-    return result
+    for kw in field_keywords:
+        if kw in text_lower:
+            # Ищем предложение с ключевым словом
+            sentences = re.split(r'[.!?]', text)
+            for sentence in sentences:
+                if kw in sentence.lower():
+                    value = clean_text(sentence)
+                    if len(value) > 15 and len(value) < 400:
+                        # Проверяем, что это не мусор
+                        if not any(x in value.lower() for x in ["отзыв", "рейтинг", "звезд", "спасиб"]):
+                            return value
+    return None
 
-# ==================== УРОВЕНЬ 3: DUCKDUCKGO + GROQ-LLM ====================
+# ==================== ПОИСК В ИНТЕРНЕТЕ ====================
 
-def search_with_duckduckgo(query: str) -> List[str]:
-    """Поиск в DuckDuckGo, возвращает список URL"""
-    encoded_query = quote_plus(query)
-    url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
+def search_internet(company: str, field: str) -> Optional[Dict]:
+    """Поиск в интернете через Яндекс по запросу: Правила страхования КАСКО {company}"""
+    query = f"Правила страхования КАСКО {company}"
+    print(f"    🔍 Яндекс: '{query}'")
     
-    html = fetch_url(url, timeout=15)
+    search_url = f"https://yandex.ru/search/?text={quote_plus(query)}&lr=213"
+    
+    html = fetch_url(search_url, timeout=15)
     if not html:
-        return []
-    
-    soup = BeautifulSoup(html, 'html.parser')
-    links = []
-    
-    # DuckDuckGo HTML версия — ищем ссылки
-    for result in soup.find_all('a', class_='result__a'):
-        href = result.get('href')
-        if href and href.startswith('http'):
-            links.append(href)
-        elif href and href.startswith('/'):
-            links.append(f"https://duckduckgo.com{href}")
-    
-    # Альтернативный способ
-    for result in soup.find_all('a', href=True):
-        href = result.get('href')
-        if href and '://' in href and 'duckduckgo.com' not in href:
-            if any(x in href for x in ['http://', 'https://']):
-                if href not in links:
-                    links.append(href)
-    
-    return links[:5]
-
-def ask_groq(text: str, question: str) -> Optional[str]:
-    """Задать вопрос Groq на основе текста"""
-    if not GROQ_API_KEY:
+        print(f"    ⚠️ Яндекс не отвечает")
         return None
     
     try:
-        # Обрезаем текст, чтобы не превысить лимит токенов
-        if len(text) > 8000:
-            text = text[:8000]
+        soup = BeautifulSoup(html, 'html.parser')
         
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": GROQ_MODEL,
-                "messages": [
-                    {"role": "system", "content": "Ты — эксперт по страхованию. Отвечай кратко, только фактами. Если информация не найдена — скажи 'не найдено'."},
-                    {"role": "user", "content": f"На основе текста ниже ответь на вопрос: {question}\n\nТекст:\n{text}"}
-                ],
-                "temperature": 0.1,
-                "max_tokens": 100
-            },
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            answer = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-            if answer and answer.lower() not in ['не найдено', 'не указано', 'нет информации', 'no']:
-                return clean_text(answer)
+        # Ищем ссылки на результаты
+        for item in soup.find_all(['li', 'div'], class_=re.compile(r'result|serp-item|organic')):
+            link_tag = item.find('a')
+            if not link_tag:
+                continue
+            
+            href = link_tag.get('href', '')
+            if href.startswith('/'):
+                href = f"https://yandex.ru{href}"
+            
+            if not href.startswith('http'):
+                continue
+            
+            # Загружаем страницу
+            page_html = fetch_url(href, timeout=15)
+            if not page_html:
+                continue
+            
+            # Ищем в тексте страницы
+            soup_page = BeautifulSoup(page_html, 'html.parser')
+            for tag in soup_page.find_all(["script", "style", "noscript"]):
+                tag.decompose()
+            page_text = clean_text(soup_page.get_text())
+            
+            # Ищем поле в тексте
+            value = extract_field_from_text(page_text, field)
+            if value:
+                return {
+                    "value": value,
+                    "source": {
+                        "level": 2,
+                        "name": f"Интернет-поиск (Яндекс)",
+                        "url": href,
+                        "found_at": datetime.now().isoformat()
+                    }
+                }
         
         return None
         
     except Exception as e:
-        print(f"      ⚠️ Ошибка Groq: {e}")
+        print(f"    ⚠️ Ошибка поиска: {e}")
         return None
 
-def search_with_groq(company: str, field: str) -> Optional[Dict]:
-    """Поиск в интернете через DuckDuckGo + Groq-LLM"""
-    print(f"    🤖 Groq: {company} → {FIELD_LABELS.get(field, field)}")
-    
-    query = f"{company} КАСКО {FIELD_LABELS.get(field, field)}"
-    urls = search_with_duckduckgo(query)
-    
-    if not urls:
-        print(f"      ⚠️ DuckDuckGo не вернул результатов")
-        return None
-    
-    print(f"      🔗 Найдено {len(urls)} страниц")
-    
-    for url in urls[:3]:
-        print(f"      📖 Читаем: {url[:60]}...")
-        
-        html = fetch_url(url, timeout=15)
-        if not html:
-            continue
-        
-        try:
-            soup = BeautifulSoup(html, 'html.parser')
-            for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header"]):
-                tag.decompose()
-            page_text = clean_text(soup.get_text())
-            
-            if len(page_text) < 100:
-                continue
-            
-            # Задаём вопрос Groq
-            question = f"Что указано в условиях КАСКО компании {company} по параметру '{FIELD_LABELS.get(field, field)}'? Ответь кратко, только конкретное значение."
-            answer = ask_groq(page_text, question)
-            
-            if answer:
-                return {
-                    "value": answer,
-                    "source": {
-                        "level": 3,
-                        "name": f"Groq-LLM (DuckDuckGo)",
-                        "url": url,
-                        "found_at": datetime.now().isoformat()
-                    }
-                }
-        except Exception as e:
-            print(f"      ⚠️ Ошибка: {e}")
-    
-    return None
-
-# ==================== УРОВЕНЬ 4: ПАМЯТЬ ====================
-
-def get_from_memory(company: str, field: str) -> Optional[Dict]:
-    if company not in KASKO_MEMORY_DATA:
-        return None
-    value = KASKO_MEMORY_DATA[company].get(field)
-    if not value or value in ["Нет инф.", "Не указан"]:
-        return None
-    return {
-        "value": value,
-        "source": {
-            "level": 4,
-            "name": "Внутренняя база",
-            "url": None,
-            "found_at": "2026-09-04"
-        }
-    }
-
-# ==================== СБОР ДАННЫХ ====================
+# ==================== СБОР ДАННЫХ ДЛЯ ОДНОЙ КОМПАНИИ ====================
 
 def collect_company_data(company: str) -> Dict:
     print(f"\n🔍 {company}")
@@ -710,72 +334,110 @@ def collect_company_data(company: str) -> Dict:
     
     result = {}
     found = set()
-    source_stats = {1: 0, 2: 0, 3: 0, 4: 0}
+    source_stats = {1: 0, 2: 0}
     
-    # УРОВЕНЬ 1: HTML
-    if company in KASKO_PAGES:
-        html_data = parse_html_page(company, KASKO_PAGES[company])
-        for field, val in html_data.items():
-            if field not in found:
-                result[field] = val
-                found.add(field)
-                source_stats[1] += 1
+    # УРОВЕНЬ 1: PDF со страницы КАСКО
+    print(f"  📂 Уровень 1: Поиск PDF на странице КАСКО")
     
-    # УРОВЕНЬ 2: PDF
-    if company in KASKO_PAGES:
+    if company not in KASKO_PAGES:
+        print(f"    ⚠️ Нет URL для {company}")
+    else:
         url = KASKO_PAGES[company]
         html = fetch_url(url)
+        
         if html:
-            pdf_data = parse_pdf_rules(company, html, url)
-            for field, val in pdf_data.items():
-                if field not in found:
-                    result[field] = val
-                    found.add(field)
-                    source_stats[2] += 1
+            pdf_links = find_pdf_links(html, url)
+            
+            if pdf_links:
+                print(f"    📄 Найдено PDF: {len(pdf_links)}")
+                
+                # Пробуем читать каждый PDF
+                for pdf_url in pdf_links[:10]:  # Ограничиваем 10 PDF
+                    if any(x in pdf_url.lower() for x in ['cookie', 'privacy', 'policy', 'logo']):
+                        continue
+                    
+                    print(f"      📥 Читаем PDF: {pdf_url[:80]}...")
+                    
+                    pdf_text = extract_text_from_pdf(pdf_url)
+                    if not pdf_text:
+                        continue
+                    
+                    # Ищем все поля в этом PDF
+                    for field in KASKO_FIELDS:
+                        if field in found:
+                            continue
+                        
+                        value = extract_field_from_text(pdf_text, field)
+                        if value:
+                            result[field] = {
+                                "value": value,
+                                "source": {
+                                    "level": 1,
+                                    "name": f"PDF {company}",
+                                    "url": pdf_url,
+                                    "found_at": datetime.now().isoformat()
+                                }
+                            }
+                            found.add(field)
+                            source_stats[1] += 1
+                            print(f"      ✅ Из PDF: {FIELD_LABELS.get(field, field)}")
+                    
+                    # Если нашли все поля — выходим
+                    if len(found) >= len(KASKO_FIELDS):
+                        break
+            else:
+                print(f"    ⚠️ PDF не найдены на странице")
+        else:
+            print(f"    ⚠️ Не удалось загрузить страницу")
     
-    # УРОВЕНЬ 3: Groq-LLM (поиск через DuckDuckGo)
+    # УРОВЕНЬ 2: Интернет-поиск (для недостающих полей)
     missing_fields = [f for f in KASKO_FIELDS if f not in found]
-    if missing_fields and GROQ_API_KEY:
-        print(f"  📂 Уровень 3: Groq-LLM (DuckDuckGo)")
-        for field in missing_fields[:5]:  # Ограничиваем 5 полей для скорости
-            search_result = search_with_groq(company, field)
+    if missing_fields:
+        print(f"  📂 Уровень 2: Интернет-поиск")
+        for field in missing_fields:
+            search_result = search_internet(company, field)
             if search_result:
                 result[field] = search_result
                 found.add(field)
-                source_stats[3] += 1
+                source_stats[2] += 1
                 print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
     
-    # УРОВЕНЬ 4: Память
-    missing_fields = [f for f in KASKO_FIELDS if f not in found]
-    if missing_fields:
-        print(f"  📂 Уровень 4: Внутренняя база")
-        for field in missing_fields:
-            memory_data = get_from_memory(company, field)
-            if memory_data:
-                result[field] = memory_data
-                found.add(field)
-                source_stats[4] += 1
-                print(f"    ✅ Из памяти: {FIELD_LABELS.get(field, field)}")
-    
+    # ИТОГ
     print(f"\n📊 {company}: собрано {len(found)}/{len(KASKO_FIELDS)} полей")
     for level, count in source_stats.items():
         if count > 0:
             info = get_source_info(level)
             print(f"  {info['emoji']} {info['label']}: {count}")
     
+    # Для полей, которые не найдены — ставим "Не найдено"
+    for field in KASKO_FIELDS:
+        if field not in result:
+            result[field] = {
+                "value": "Не найдено",
+                "source": {
+                    "level": 0,
+                    "name": "Информация не найдена",
+                    "url": None,
+                    "found_at": datetime.now().isoformat()
+                }
+            }
+    
     return result
 
 def collect_all_data() -> Dict:
     print("\n" + "=" * 60)
-    print("📊 СБОР ДАННЫХ: КАСКО")
+    print("📊 СБОР ДАННЫХ: КАСКО (ТОЛЬКО PDF + ИНТЕРНЕТ)")
+    print("=" * 60)
+    print("Поля:", ", ".join(FIELD_LABELS[f] for f in KASKO_FIELDS))
     print("=" * 60)
     
     all_data = {}
-    for company in KASKO_MEMORY_DATA.keys():
+    for company in KASKO_PAGES.keys():
         all_data[company] = collect_company_data(company)
         time.sleep(2)
     
     all_data["_last_updated"] = datetime.now().isoformat()
+    all_data["_fields"] = KASKO_FIELDS
     return all_data
 
 # ==================== ЗАГРУЗКА/СОХРАНЕНИЕ ====================
@@ -919,8 +581,8 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
     
     <div class="footer">
         <span class="badge">11 компаний</span>
-        <span class="badge">14 параметров</span>
-        <span class="badge">4 уровня поиска</span>
+        <span class="badge">10 параметров</span>
+        <span class="badge">PDF + Поиск</span>
     </div>
 </div>
 </body>
@@ -960,6 +622,7 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
         .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
         .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 16px; }
         .missing { color: #9ca3af; font-style: italic; }
+        .not-found { color: #e74c3c; font-style: italic; }
         .source-url { font-size: 11px; color: #6b7280; word-break: break-all; }
         .source-url a { color: #2563eb; text-decoration: none; }
         .source-url a:hover { text-decoration: underline; }
@@ -982,10 +645,9 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
     </div>
     
     <div class="legend">
-        <span class="legend-item">🟢 Уровень 1 — Официальный сайт</span>
-        <span class="legend-item">📄 Уровень 2 — PDF правила</span>
-        <span class="legend-item">🤖 Уровень 3 — Groq-LLM (поиск)</span>
-        <span class="legend-item">⚪ Уровень 4 — Внутренняя база</span>
+        <span class="legend-item">📄 Уровень 1 — PDF правила</span>
+        <span class="legend-item">🟡 Уровень 2 — Интернет-поиск</span>
+        <span class="legend-item">⬜ Информация не найдена</span>
     </div>
     
     <table>
@@ -1003,13 +665,17 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
                 <td class="value">
                     {% if field in data1 and data1[field] %}
                         {% if data1[field] is mapping and 'value' in data1[field] %}
-                            {{ data1[field].value }}
+                            {% if data1[field].value == 'Не найдено' %}
+                                <span class="not-found">{{ data1[field].value }}</span>
+                            {% else %}
+                                {{ data1[field].value }}
+                            {% endif %}
                         {% else %}
                             {{ data1[field] }}
                         {% endif %}
                         {% if data1[field] is mapping and 'source' in data1[field] %}
                             {% set s = data1[field].source %}
-                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}🟢{% elif s.level == 2 %}📄{% elif s.level == 3 %}🤖{% else %}⚪{% endif %}</span>
+                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}📄{% elif s.level == 2 %}🟡{% else %}⬜{% endif %}</span>
                             <div class="source-tooltip">
                                 Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})
                                 {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
@@ -1022,13 +688,17 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
                 <td class="value">
                     {% if field in data2 and data2[field] %}
                         {% if data2[field] is mapping and 'value' in data2[field] %}
-                            {{ data2[field].value }}
+                            {% if data2[field].value == 'Не найдено' %}
+                                <span class="not-found">{{ data2[field].value }}</span>
+                            {% else %}
+                                {{ data2[field].value }}
+                            {% endif %}
                         {% else %}
                             {{ data2[field] }}
                         {% endif %}
                         {% if data2[field] is mapping and 'source' in data2[field] %}
                             {% set s = data2[field].source %}
-                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}🟢{% elif s.level == 2 %}📄{% elif s.level == 3 %}🤖{% else %}⚪{% endif %}</span>
+                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}📄{% elif s.level == 2 %}🟡{% else %}⬜{% endif %}</span>
                             <div class="source-tooltip">
                                 Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})
                                 {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
