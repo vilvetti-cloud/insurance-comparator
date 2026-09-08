@@ -1,3 +1,5 @@
+# app.py — ИСПРАВЛЕННАЯ ВЕРСИЯ С ОБРЕЗКОЙ ТЕКСТА ДО 3000 СИМВОЛОВ
+
 from flask import Flask, render_template, request, redirect
 from datetime import datetime
 import json
@@ -59,6 +61,9 @@ GROQ_RETRIES = 3
 # Таймаут Groq
 GROQ_CONNECT_TIMEOUT = 10
 GROQ_READ_TIMEOUT = 90
+
+# МАКСИМАЛЬНЫЙ РАЗМЕР ТЕКСТА ДЛЯ GROQ
+MAX_GROQ_TEXT_LENGTH = 3000
 
 
 # ============================================================
@@ -864,125 +869,75 @@ def extract_text_from_pdf(
 
 
 # ============================================================
-# РЕЛЕВАНТНЫЕ ФРАГМЕНТЫ
+# РЕЛЕВАНТНЫЕ ФРАГМЕНТЫ (ОБРЕЗКА ДО 3000 СИМВОЛОВ)
 # ============================================================
 
-def extract_relevant_sections(
-    text: str,
-    max_chars: int = 100000
-) -> str:
-
-    text = clean_text(
-        text
-    )
-
+def extract_relevant_sections(text: str, max_chars: int = MAX_GROQ_TEXT_LENGTH) -> str:
+    """
+    Извлекает релевантные фрагменты текста, не превышая max_chars.
+    Жёсткое ограничение — 3000 символов для Groq.
+    """
     if not text:
         return ""
+
+    text = clean_text(text)
 
     if len(text) <= max_chars:
         return text
 
-    logger.info(
-        "📚 Документ большой: %s символов. "
-        "Ищем релевантные разделы.",
-        len(text)
-    )
+    logger.info(f"📚 Документ большой: {len(text)} символов. Ищем ключевые фрагменты...")
 
+    # Ключевые слова для поиска
     keywords = [
-        "франшиз",
-        "справк",
-        "GAP",
-        "gap",
-        "полной гибел",
-        "тотал",
-        "пожар",
-        "возгора",
-        "самовозгора",
-        "коротк",
-        "террор",
-        "террорист",
-        "дрон",
-        "бпла",
-        "беспилот",
-        "эвакуатор",
-        "эвакуац",
-        "ремонт",
-        "стоа",
-        "дилер",
-        "выплат",
-        "урегулирован"
+        "франшиз", "справк", "gap", "gар", "тотал", "гибел",
+        "пожар", "возгора", "самовозгора", "террор", "дрон", "бпла",
+        "беспилот", "эвакуатор", "эвакуац", "ремонт", "стоа",
+        "дилер", "выплат", "урегулирован", "страховой случай",
+        "полис", "каско", "авто"
     ]
 
     lines = text.splitlines()
-
     chunks = []
+    window = 10  # строк до и после ключевого слова
 
-    window_before = 8
-    window_after = 18
-
-    for index, line in enumerate(lines):
-
+    for i, line in enumerate(lines):
         line_lower = line.lower()
+        if any(kw in line_lower for kw in keywords):
+            start = max(0, i - window)
+            end = min(len(lines), i + window + 1)
+            chunk = "\n".join(lines[start:end])
+            chunks.append(chunk)
 
-        if not any(
-            keyword.lower() in line_lower
-            for keyword in keywords
-        ):
-            continue
+    if not chunks:
+        # Если не нашли ключевых слов — берём начало документа
+        logger.info("⚠️ Ключевые слова не найдены, берём начало документа")
+        return text[:max_chars]
 
-        start = max(
-            0,
-            index - window_before
-        )
-
-        end = min(
-            len(lines),
-            index + window_after + 1
-        )
-
-        chunks.append(
-            "\n".join(
-                lines[start:end]
-            )
-        )
-
-    unique_chunks = []
+    # Объединяем уникальные фрагменты
     seen = set()
-
+    unique_chunks = []
     for chunk in chunks:
-
-        normalized = re.sub(
-            r"\s+",
-            " ",
-            chunk
-        ).strip()
-
+        normalized = re.sub(r"\s+", " ", chunk).strip()
         if not normalized:
             continue
-
-        key = normalized[:500]
-
+        key = normalized[:300]
         if key in seen:
             continue
+        seen.add(key)
+        unique_chunks.append(chunk)
 
-        seen.add(
-            key
-        )
+    result = "\n\n".join(unique_chunks)
 
-        unique_chunks.append(
-            chunk
-        )
+    # Жёсткая обрезка до max_chars
+    if len(result) > max_chars:
+        result = result[:max_chars]
+        # Обрезаем до последнего целого предложения
+        last_period = result.rfind('.')
+        if last_period > max_chars * 0.8:
+            result = result[:last_period + 1]
 
-    result = clean_text(
-        "\n\n--- РЕЛЕВАНТНЫЙ ФРАГМЕНТ ---\n\n".join(
-            unique_chunks
-        )
-    )
-
-    if not result:
-        result = text[:max_chars]
-
-    return result[:max_chars]
+    logger.info(f"📊 Извлечено {len(result)} символов (лимит {max_chars})")
+    return result
 
 
 # ============================================================
@@ -1162,7 +1117,7 @@ def try_parse_json(
 
 
 # ============================================================
-# GROQ
+# GROQ (С ОБРЕЗКОЙ ТЕКСТА)
 # ============================================================
 
 def analyze_company_with_groq(
@@ -1188,22 +1143,29 @@ def analyze_company_with_groq(
 
         return {}
 
-    # Защита от пустого HTML.
+    # ЖЁСТКАЯ ОБРЕЗКА ДО 3000 СИМВОЛОВ
+    relevant_text = extract_relevant_sections(
+        text,
+        max_chars=MAX_GROQ_TEXT_LENGTH
+    )
+
     if len(
-        clean_text(text)
+        clean_text(relevant_text)
     ) < 100:
 
         logger.warning(
             "⚠️ Слишком мало текста для анализа: "
             "%s | %s символов",
             company,
-            len(text)
+            len(relevant_text)
         )
 
         return {}
 
-    relevant_text = extract_relevant_sections(
-        text
+    logger.info(
+        "🤖 Отправляем в Groq: %s символов (обрезано до %s)",
+        len(relevant_text),
+        MAX_GROQ_TEXT_LENGTH
     )
 
     fields_description = "\n\n".join(
@@ -1403,9 +1365,6 @@ def analyze_company_with_groq(
                             len(KASKO_FIELDS)
                         )
 
-                        # ВАЖНО:
-                        # HTTP 200 сам по себе НЕ означает,
-                        # что документ был полезным.
                         if found == 0:
 
                             logger.warning(
@@ -1445,8 +1404,6 @@ def analyze_company_with_groq(
                         error_json
                     )
 
-                    # Модель может быть недоступна.
-                    # Переходим к следующей.
                     break
 
                 if status in (
@@ -1480,6 +1437,27 @@ def analyze_company_with_groq(
                             wait_time
                         )
 
+                        continue
+
+                    break
+
+                if status in (
+                    413
+                ):
+
+                    logger.error(
+                        "❌ Groq 413: запрос слишком большой. "
+                        "Уменьшаем текст до 2000 символов."
+                    )
+
+                    # Пробуем с ещё меньшим текстом
+                    if len(relevant_text) > 2000:
+                        relevant_text = relevant_text[:2000]
+                        # Обновляем user_prompt с новым текстом
+                        user_prompt = user_prompt.replace(
+                            relevant_text,
+                            relevant_text[:2000]
+                        )
                         continue
 
                     break
@@ -1840,7 +1818,7 @@ def collect_company_data(
             content
         )
 
-        if pdf_text:
+        if pdf_text and len(pdf_text) > 100:
 
             llm_data = analyze_company_with_groq(
                 pdf_text,
