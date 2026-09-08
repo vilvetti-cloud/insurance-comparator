@@ -1,4 +1,4 @@
-# app.py — PDF + ИНТЕРНЕТ-ПОИСК (БЕЗ ПАМЯТИ)
+# app.py — ФИНАЛЬНАЯ ВЕРСИЯ С ЛОГИРОВАНИЕМ И АНАЛИЗОМ
 
 from flask import Flask, render_template, request, redirect
 from datetime import datetime
@@ -13,6 +13,15 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 from urllib.parse import urljoin, quote_plus
 import io
+import logging
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -64,6 +73,98 @@ FIELD_LABELS = {
     "payment_terms": "Срок выплаты"
 }
 
+# ==================== КОНФИГУРАЦИЯ ПОЛЕЙ ДЛЯ АНАЛИЗА ====================
+
+FIELD_CONFIG = {
+    "franchise": {
+        "keywords": ["франшиз", "франшиза", "безусловн", "условн"],
+        "exclude": ["отзыв", "рейтинг", "звезд"],
+        "format": "text",
+        "max_length": 300
+    },
+    "without_certificates": {
+        "keywords": ["без справок", "без документ", "без предоставления", "лкп"],
+        "exclude": ["отзыв", "рейтинг"],
+        "format": "text",
+        "max_length": 350
+    },
+    "gap": {
+        "keywords": ["gap", "гэп", "сохранение стоимости", "дополнительные расходы"],
+        "exclude": [],
+        "format": "status",
+        "statuses": {
+            "present": "Есть",
+            "absent": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+            "paid": "За доп. плату",
+            "unknown": "Не указан"
+        }
+    },
+    "total_loss": {
+        "keywords": ["тотал", "полная гибель", "гибель", "конструктивн"],
+        "exclude": [],
+        "format": "percent",
+        "pattern": r'(\d{2,3})\s*%'
+    },
+    "fire": {
+        "keywords": ["самовозгоран", "возгоран", "пожар"],
+        "exclude": ["отзыв", "рейтинг"],
+        "format": "status",
+        "statuses": {
+            "present": "Входит",
+            "absent": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+            "paid": "За доп. плату",
+            "unknown": "Не указан"
+        }
+    },
+    "terrorism": {
+        "keywords": ["терроризм", "терр. акт", "теракт"],
+        "exclude": [],
+        "format": "status",
+        "statuses": {
+            "present": "Входит",
+            "absent": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+            "paid": "За доп. плату",
+            "regional": "За доп. плату, только для МСК и МО",
+            "unknown": "Не указан"
+        }
+    },
+    "drone": {
+        "keywords": ["бпла", "беспилот", "дрон"],
+        "exclude": [],
+        "format": "status_with_limit",
+        "statuses": {
+            "present": "Входит",
+            "absent": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+            "paid": "За доп. плату",
+            "limit": "Лимит {value}",
+            "unknown": "Не указан"
+        }
+    },
+    "tow_truck": {
+        "keywords": ["эвакуа", "эвакуатор"],
+        "exclude": [],
+        "format": "list",
+        "patterns": [
+            r'(петков.*?)\s*[-–]\s*(\d{1,3}\s*[\d\s]*руб)',
+            r'(легков.*?)\s*[-–]\s*(\d{1,3}\s*[\d\s]*руб)',
+            r'(грузов.*?)\s*[-–]\s*(\d{1,3}\s*[\d\s]*руб)',
+            r'(\d{1,3}\s*[\d\s]*руб)'
+        ]
+    },
+    "repair_type": {
+        "keywords": ["ремонт", "стоа", "дилер", "сто"],
+        "exclude": ["отзыв", "рейтинг"],
+        "format": "text",
+        "max_length": 150
+    },
+    "payment_terms": {
+        "keywords": ["срок выплат", "рабочих дней", "дней"],
+        "exclude": [],
+        "format": "text",
+        "max_length": 100
+    }
+}
+
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
 def get_headers() -> Dict:
@@ -71,28 +172,84 @@ def get_headers() -> Dict:
         'User-Agent': random.choice(USER_AGENTS),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
     }
 
-def fetch_url(url: str, timeout: int = 25) -> Optional[str]:
-    """Загрузить URL с обходом блокировок"""
-    for attempt in range(3):
+def fetch_url(url: str, timeout: int = 30, max_retries: int = 3) -> Optional[Dict]:
+    """
+    Загрузить URL с обходом блокировок.
+    Возвращает словарь с результатом и метаданными.
+    """
+    logger.info(f"  🔗 Загрузка: {url[:80]}...")
+    
+    for attempt in range(max_retries):
         try:
-            response = requests.get(url, headers=get_headers(), timeout=timeout, verify=False, allow_redirects=True)
+            headers = get_headers()
+            response = requests.get(
+                url, 
+                headers=headers, 
+                timeout=timeout, 
+                verify=False, 
+                allow_redirects=True,
+                stream=True
+            )
+            
+            # Проверяем статус
             if response.status_code == 200:
-                return response.text
+                content_type = response.headers.get('Content-Type', '')
+                content_length = len(response.content)
+                logger.info(f"    ✅ Успешно загружено: {content_length} байт, тип: {content_type[:50]}")
+                return {
+                    "success": True,
+                    "content": response.content,
+                    "text": response.text if 'text' in content_type else None,
+                    "headers": dict(response.headers),
+                    "status_code": response.status_code,
+                    "url": url,
+                    "attempts": attempt + 1
+                }
             elif response.status_code == 403:
-                time.sleep(2)
-                continue
+                logger.warning(f"    ⚠️ 403 Forbidden (попытка {attempt+1}/{max_retries})")
+                time.sleep(2 * (attempt + 1))
             elif response.status_code in [301, 302, 303, 307, 308]:
-                if 'Location' in response.headers:
-                    new_url = response.headers['Location']
+                new_url = response.headers.get('Location')
+                if new_url:
                     if not new_url.startswith('http'):
                         new_url = urljoin(url, new_url)
-                    return fetch_url(new_url, timeout)
-        except:
-            pass
-        time.sleep(1)
-    return None
+                    logger.info(f"    🔄 Редирект: {new_url[:80]}")
+                    return fetch_url(new_url, timeout, max_retries)
+                else:
+                    logger.warning(f"    ⚠️ Редирект без Location")
+                    return {"success": False, "error": "Редирект без Location", "status_code": response.status_code}
+            elif response.status_code == 404:
+                logger.warning(f"    ❌ 404 Not Found")
+                return {"success": False, "error": "404 Not Found", "status_code": 404}
+            elif response.status_code == 503:
+                logger.warning(f"    ⚠️ 503 Service Unavailable (попытка {attempt+1}/{max_retries})")
+                time.sleep(3 * (attempt + 1))
+            else:
+                logger.warning(f"    ⚠️ Статус {response.status_code} (попытка {attempt+1}/{max_retries})")
+                time.sleep(1)
+                
+        except requests.exceptions.SSLError as e:
+            logger.warning(f"    ⚠️ SSL ошибка (попытка {attempt+1}/{max_retries}): {str(e)[:50]}")
+            time.sleep(1)
+            
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"    ⚠️ Ошибка соединения (попытка {attempt+1}/{max_retries}): {str(e)[:50]}")
+            time.sleep(2 * (attempt + 1))
+            
+        except requests.exceptions.Timeout as e:
+            logger.warning(f"    ⚠️ Таймаут (попытка {attempt+1}/{max_retries}): {str(e)[:30]}")
+            time.sleep(2 * (attempt + 1))
+            
+        except Exception as e:
+            logger.warning(f"    ⚠️ Ошибка (попытка {attempt+1}/{max_retries}): {type(e).__name__}: {str(e)[:50]}")
+            time.sleep(1)
+    
+    return {"success": False, "error": "Не удалось загрузить после всех попыток"}
 
 def clean_text(text: str) -> str:
     if not text:
@@ -104,25 +261,29 @@ def get_source_info(level: int) -> Dict:
     levels = {
         1: {"emoji": "📄", "label": "PDF правила", "type": "pdf"},
         2: {"emoji": "🟡", "label": "Интернет-поиск", "type": "search"},
+        3: {"emoji": "🔍", "label": "HTML страница", "type": "html"},
+        4: {"emoji": "⚪", "label": "Внутренняя база", "type": "memory"},
     }
     return levels.get(level, {"emoji": "⬜", "label": "Неизвестно", "type": "unknown"})
 
-# ==================== ПОИСК PDF НА СТРАНИЦЕ (ВСЕМИ СПОСОБАМИ) ====================
+# ==================== ПОИСК PDF НА СТРАНИЦЕ ====================
 
 def find_pdf_links(html: str, base_url: str) -> List[str]:
-    """Найти все ссылки на PDF на странице (всеми возможными способами)"""
+    """Найти все ссылки на PDF на странице"""
     soup = BeautifulSoup(html, 'html.parser')
     pdf_links = []
+    found_by = []
     
-    # 1. Обычные ссылки <a href="...pdf">
+    # 1. Обычные ссылки
     for link in soup.find_all('a', href=True):
         href = link.get('href')
         if href and '.pdf' in href.lower():
             full_url = urljoin(base_url, href)
             if full_url not in pdf_links:
                 pdf_links.append(full_url)
+                found_by.append("href")
     
-    # 2. data-атрибуты (data-href, data-url, data-file, data-pdf)
+    # 2. data-атрибуты
     for tag in soup.find_all():
         for attr in ['data-href', 'data-url', 'data-file', 'data-pdf', 'data-src']:
             val = tag.get(attr)
@@ -130,247 +291,346 @@ def find_pdf_links(html: str, base_url: str) -> List[str]:
                 full_url = urljoin(base_url, val)
                 if full_url not in pdf_links:
                     pdf_links.append(full_url)
+                    found_by.append("data-attr")
     
-    # 3. onclick атрибуты
+    # 3. onclick
     for tag in soup.find_all(attrs={'onclick': True}):
         onclick = tag.get('onclick', '')
-        # Ищем URL в onclick
         match = re.search(r"['\"]([^'\"]+\.pdf)['\"]", onclick)
         if match:
             full_url = urljoin(base_url, match.group(1))
             if full_url not in pdf_links:
                 pdf_links.append(full_url)
+                found_by.append("onclick")
     
     # 4. Текст внутри тегов
     for tag in soup.find_all(['p', 'div', 'li', 'td', 'span']):
         text = tag.get_text()
         if '.pdf' in text.lower():
-            # Ищем URL в тексте
             match = re.search(r'https?://[^\s<>"\']+\.pdf', text)
             if match:
                 full_url = match.group(0)
                 if full_url not in pdf_links:
                     pdf_links.append(full_url)
+                    found_by.append("text")
     
-    # 5. Ищем в ссылках по тексту "правила", "условия", "полис"
+    # 5. Ссылки с текстом "правила", "условия"
     for link in soup.find_all('a', href=True):
         text = link.get_text().lower()
         href = link.get('href', '').lower()
         if any(kw in text for kw in ['правила', 'условия', 'полис', 'тарифы']):
-            if href and ('.pdf' in href or '?download' in href):
+            if href and ('.pdf' in href or '?download' in href or 'file=' in href):
                 full_url = urljoin(base_url, link.get('href'))
                 if full_url not in pdf_links:
                     pdf_links.append(full_url)
+                    found_by.append("rules_link")
+    
+    # Логируем результаты
+    if pdf_links:
+        logger.info(f"    📄 Найдено {len(pdf_links)} PDF (способы: {', '.join(set(found_by))})")
+    else:
+        logger.warning(f"    ⚠️ PDF не найдены")
     
     return pdf_links
 
 # ==================== ЧТЕНИЕ PDF ====================
 
-def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
-    """Скачать PDF и извлечь текст"""
+def extract_text_from_pdf(pdf_data: bytes) -> Optional[str]:
+    """Извлечь текст из PDF (пробуем разные библиотеки)"""
+    logger.info(f"      📖 Извлечение текста из PDF ({len(pdf_data)} байт)")
+    
+    # Пробуем PyPDF2
     try:
         import PyPDF2
+        logger.info(f"      🔧 Пробуем PyPDF2...")
+        pdf_bytes = io.BytesIO(pdf_data)
+        reader = PyPDF2.PdfReader(pdf_bytes)
         
-        response = requests.get(pdf_url, headers=get_headers(), timeout=30, verify=False)
-        if response.status_code != 200:
+        if len(reader.pages) == 0:
+            logger.warning(f"      ⚠️ PDF пустой (0 страниц)")
             return None
         
-        # Проверяем, что это действительно PDF
-        content_type = response.headers.get('Content-Type', '')
-        if 'pdf' not in content_type.lower() and not pdf_url.lower().endswith('.pdf'):
-            return None
+        text = ""
+        for i, page in enumerate(reader.pages):
+            try:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+            except Exception as e:
+                logger.warning(f"      ⚠️ Ошибка на странице {i+1}: {str(e)[:50]}")
         
-        try:
-            pdf_bytes = io.BytesIO(response.content)
-            reader = PyPDF2.PdfReader(pdf_bytes)
-            
-            if len(reader.pages) == 0:
-                return None
-            
-            text = ""
-            for page in reader.pages:
-                try:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-                except:
-                    continue
-            
-            if text.strip():
-                return text
-        except:
-            pass
-        
-        # Пробуем pypdf
-        try:
-            import pypdf
-            pdf_bytes = io.BytesIO(response.content)
-            reader = pypdf.PdfReader(pdf_bytes)
-            text = ""
-            for page in reader.pages:
-                try:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-                except:
-                    continue
-            if text.strip():
-                return text
-        except:
-            pass
-        
-        return None
-        
+        if text.strip():
+            logger.info(f"      ✅ PyPDF2: извлечено {len(text)} символов")
+            return text
+        else:
+            logger.warning(f"      ⚠️ PyPDF2: текст не извлечён")
     except ImportError:
-        print("      ⚠️ PyPDF2 не установлен")
-        return None
+        logger.warning(f"      ⚠️ PyPDF2 не установлен")
     except Exception as e:
-        print(f"      ⚠️ Ошибка PDF: {e}")
-        return None
-
-# ==================== ИЗВЛЕЧЕНИЕ ДАННЫХ ИЗ ТЕКСТА ====================
-
-def extract_field_from_text(text: str, field: str) -> Optional[str]:
-    """Извлечь значение поля из текста по ключевым словам"""
-    if not text:
-        return None
+        logger.warning(f"      ⚠️ PyPDF2 ошибка: {str(e)[:80]}")
     
-    text_lower = text.lower()
+    # Пробуем pypdf
+    try:
+        import pypdf
+        logger.info(f"      🔧 Пробуем pypdf...")
+        pdf_bytes = io.BytesIO(pdf_data)
+        reader = pypdf.PdfReader(pdf_bytes)
+        
+        if len(reader.pages) == 0:
+            logger.warning(f"      ⚠️ PDF пустой (0 страниц)")
+            return None
+        
+        text = ""
+        for i, page in enumerate(reader.pages):
+            try:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+            except Exception as e:
+                logger.warning(f"      ⚠️ Ошибка на странице {i+1}: {str(e)[:50]}")
+        
+        if text.strip():
+            logger.info(f"      ✅ pypdf: извлечено {len(text)} символов")
+            return text
+        else:
+            logger.warning(f"      ⚠️ pypdf: текст не извлечён")
+    except ImportError:
+        logger.warning(f"      ⚠️ pypdf не установлен")
+    except Exception as e:
+        logger.warning(f"      ⚠️ pypdf ошибка: {str(e)[:80]}")
     
-    # Ключевые слова для каждого поля
-    keywords = {
-        "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
-        "without_certificates": ["без справок", "без документ"],
-        "gap": ["gap", "гэп", "сохранение стоимости"],
-        "total_loss": ["тотал", "полная гибель", "гибель", "конструктивн"],
-        "fire": ["самовозгоран", "возгоран", "пожар"],
-        "terrorism": ["терроризм", "терр. акт"],
-        "drone": ["бпла", "беспилот", "дрон"],
-        "tow_truck": ["эвакуа"],
-        "repair_type": ["ремонт", "стоа", "дилер"],
-        "payment_terms": ["срок выплат", "рабочих дней", "дней"]
-    }
-    
-    field_keywords = keywords.get(field, [])
-    
-    for kw in field_keywords:
-        if kw in text_lower:
-            # Ищем предложение с ключевым словом
-            sentences = re.split(r'[.!?]', text)
-            for sentence in sentences:
-                if kw in sentence.lower():
-                    value = clean_text(sentence)
-                    if len(value) > 15 and len(value) < 400:
-                        # Проверяем, что это не мусор
-                        if not any(x in value.lower() for x in ["отзыв", "рейтинг", "звезд", "спасиб"]):
-                            return value
+    logger.error(f"      ❌ Не удалось извлечь текст из PDF (попробованы все библиотеки)")
     return None
 
-# ==================== ПОИСК В ИНТЕРНЕТЕ ====================
+# ==================== АНАЛИЗ ТЕКСТА ДЛЯ ПОЛЯ ====================
 
-def search_internet(company: str, field: str) -> Optional[Dict]:
-    """Поиск в интернете через Яндекс по запросу: Правила страхования КАСКО {company}"""
-    query = f"Правила страхования КАСКО {company}"
-    print(f"    🔍 Яндекс: '{query}'")
+def analyze_field(text: str, field: str) -> Dict:
+    """
+    Анализирует текст и возвращает структурированный ответ для поля
+    """
+    if not text:
+        return {"value": "Не найдено", "status": "unknown", "details": "Информация не найдена"}
     
-    search_url = f"https://yandex.ru/search/?text={quote_plus(query)}&lr=213"
+    text_lower = text.lower()
+    config = FIELD_CONFIG.get(field, {})
+    keywords = config.get("keywords", [])
+    exclude = config.get("exclude", [])
     
-    html = fetch_url(search_url, timeout=15)
-    if not html:
-        print(f"    ⚠️ Яндекс не отвечает")
-        return None
+    # Проверяем, есть ли ключевые слова
+    found_keyword = None
+    for kw in keywords:
+        if kw in text_lower:
+            found_keyword = kw
+            break
     
-    try:
-        soup = BeautifulSoup(html, 'html.parser')
+    if not found_keyword:
+        return {"value": "Не найдено", "status": "unknown", "details": "Ключевые слова не найдены"}
+    
+    # Ищем предложение с ключевым словом
+    sentences = re.split(r'[.!?]', text)
+    best_sentence = None
+    for sentence in sentences:
+        if found_keyword in sentence.lower():
+            # Проверяем на исключения
+            if exclude:
+                if any(x in sentence.lower() for x in exclude):
+                    continue
+            best_sentence = clean_text(sentence)
+            break
+    
+    if not best_sentence:
+        return {"value": "Не найдено", "status": "unknown", "details": "Подходящее предложение не найдено"}
+    
+    # Ограничиваем длину
+    max_length = config.get("max_length", 300)
+    if len(best_sentence) > max_length:
+        best_sentence = best_sentence[:max_length] + "..."
+    
+    # Анализируем в зависимости от формата
+    field_format = config.get("format", "text")
+    
+    if field_format == "text":
+        return {
+            "value": best_sentence,
+            "status": "present",
+            "details": "Найдено в тексте"
+        }
+    
+    elif field_format == "status":
+        statuses = config.get("statuses", {})
         
-        # Ищем ссылки на результаты
-        for item in soup.find_all(['li', 'div'], class_=re.compile(r'result|serp-item|organic')):
-            link_tag = item.find('a')
-            if not link_tag:
-                continue
-            
-            href = link_tag.get('href', '')
-            if href.startswith('/'):
-                href = f"https://yandex.ru{href}"
-            
-            if not href.startswith('http'):
-                continue
-            
-            # Загружаем страницу
-            page_html = fetch_url(href, timeout=15)
-            if not page_html:
-                continue
-            
-            # Ищем в тексте страницы
-            soup_page = BeautifulSoup(page_html, 'html.parser')
-            for tag in soup_page.find_all(["script", "style", "noscript"]):
-                tag.decompose()
-            page_text = clean_text(soup_page.get_text())
-            
-            # Ищем поле в тексте
-            value = extract_field_from_text(page_text, field)
-            if value:
-                return {
-                    "value": value,
-                    "source": {
-                        "level": 2,
-                        "name": f"Интернет-поиск (Яндекс)",
-                        "url": href,
-                        "found_at": datetime.now().isoformat()
-                    }
-                }
+        # Определяем статус
+        if "исключ" in text_lower or "не входит" in text_lower:
+            status = "absent"
+        elif "за доп. плату" in text_lower:
+            status = "paid"
+        elif "мск" in text_lower and "мо" in text_lower:
+            status = "regional"
+        else:
+            status = "present"
         
-        return None
+        return {
+            "value": statuses.get(status, best_sentence),
+            "status": status,
+            "details": f"Статус: {status}"
+        }
+    
+    elif field_format == "percent":
+        pattern = config.get("pattern", r'(\d{2,3})\s*%')
+        match = re.search(pattern, best_sentence)
+        if match:
+            percent = match.group(1)
+            return {
+                "value": f"{percent}% от СС",
+                "status": "present",
+                "details": f"Порог тотала: {percent}%"
+            }
+        else:
+            return {
+                "value": best_sentence,
+                "status": "unknown",
+                "details": "Процент не найден"
+            }
+    
+    elif field_format == "list":
+        # Ищем суммы
+        patterns = config.get("patterns", [])
+        found_values = []
+        for pattern in patterns:
+            matches = re.findall(pattern, best_sentence, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    found_values.append(" ".join(match))
+                else:
+                    found_values.append(match)
         
-    except Exception as e:
-        print(f"    ⚠️ Ошибка поиска: {e}")
-        return None
+        if found_values:
+            return {
+                "value": "; ".join(found_values[:3]),
+                "status": "present",
+                "details": f"Найдено {len(found_values)} значений"
+            }
+        else:
+            return {
+                "value": best_sentence,
+                "status": "present",
+                "details": "Суммы не найдены"
+            }
+    
+    elif field_format == "status_with_limit":
+        # Ищем лимит
+        limit_pattern = r'(\d{1,3}\s*%)\s*от\s*СС'
+        match = re.search(limit_pattern, text_lower)
+        if match:
+            limit = match.group(1)
+            return {
+                "value": f"Лимит {limit} от СС",
+                "status": "limit",
+                "details": f"Лимит: {limit} от СС"
+            }
+        
+        # Ищем статус
+        if "исключ" in text_lower:
+            return {
+                "value": "ИСКЛЮЧЕНИЕ из страхового покрытия",
+                "status": "absent",
+                "details": "Исключён из покрытия"
+            }
+        elif "за доп. плату" in text_lower:
+            return {
+                "value": "За доп. плату",
+                "status": "paid",
+                "details": "Добавляется за отдельную плату"
+            }
+        elif "входит" in text_lower:
+            return {
+                "value": "Входит",
+                "status": "present",
+                "details": "Включён в покрытие"
+            }
+        else:
+            return {
+                "value": best_sentence,
+                "status": "unknown",
+                "details": "Статус не определён"
+            }
+    
+    # По умолчанию
+    return {
+        "value": best_sentence,
+        "status": "present",
+        "details": "Найдено в тексте"
+    }
 
 # ==================== СБОР ДАННЫХ ДЛЯ ОДНОЙ КОМПАНИИ ====================
 
 def collect_company_data(company: str) -> Dict:
-    print(f"\n🔍 {company}")
-    print("━" * 50)
+    """Сбор данных для одной компании"""
+    logger.info(f"\n🔍 {company}")
+    logger.info("━" * 50)
     
     result = {}
     found = set()
-    source_stats = {1: 0, 2: 0}
+    source_stats = {}
     
-    # УРОВЕНЬ 1: PDF со страницы КАСКО
-    print(f"  📂 Уровень 1: Поиск PDF на странице КАСКО")
+    url = KASKO_PAGES.get(company)
+    if not url:
+        logger.error(f"  ❌ Нет URL для {company}")
+        return {}
     
-    if company not in KASKO_PAGES:
-        print(f"    ⚠️ Нет URL для {company}")
+    # ==================== УРОВЕНЬ 1: PDF со страницы ====================
+    logger.info(f"  📂 Уровень 1: Поиск PDF на странице КАСКО")
+    logger.info(f"  🔗 {url}")
+    
+    response = fetch_url(url)
+    
+    if not response or not response.get("success"):
+        error = response.get("error", "Неизвестная ошибка") if response else "Нет ответа"
+        logger.error(f"  ❌ Не удалось загрузить страницу: {error}")
+        # Переходим к следующему уровню
     else:
-        url = KASKO_PAGES[company]
-        html = fetch_url(url)
-        
+        html = response.get("text")
         if html:
             pdf_links = find_pdf_links(html, url)
             
             if pdf_links:
-                print(f"    📄 Найдено PDF: {len(pdf_links)}")
+                logger.info(f"    📄 Найдено PDF: {len(pdf_links)}")
                 
-                # Пробуем читать каждый PDF
-                for pdf_url in pdf_links[:10]:  # Ограничиваем 10 PDF
-                    if any(x in pdf_url.lower() for x in ['cookie', 'privacy', 'policy', 'logo']):
+                for pdf_url in pdf_links[:10]:
+                    # Фильтруем мусор
+                    if any(x in pdf_url.lower() for x in ['cookie', 'privacy', 'policy', 'logo', 'icon']):
+                        logger.info(f"      ⏭️ Пропускаем: {pdf_url[:60]} (мусор)")
                         continue
                     
-                    print(f"      📥 Читаем PDF: {pdf_url[:80]}...")
+                    logger.info(f"      📥 Загружаем PDF: {pdf_url[:80]}...")
+                    pdf_response = fetch_url(pdf_url, timeout=45)
                     
-                    pdf_text = extract_text_from_pdf(pdf_url)
+                    if not pdf_response or not pdf_response.get("success"):
+                        logger.warning(f"      ⚠️ Не удалось загрузить PDF: {pdf_response.get('error', 'Неизвестно') if pdf_response else 'Нет ответа'}")
+                        continue
+                    
+                    pdf_data = pdf_response.get("content")
+                    if not pdf_data:
+                        logger.warning(f"      ⚠️ PDF пустой")
+                        continue
+                    
+                    pdf_text = extract_text_from_pdf(pdf_data)
                     if not pdf_text:
+                        logger.warning(f"      ⚠️ Не удалось извлечь текст из PDF")
                         continue
                     
-                    # Ищем все поля в этом PDF
+                    # Анализируем каждое поле в этом PDF
+                    pdf_fields_found = 0
                     for field in KASKO_FIELDS:
                         if field in found:
                             continue
                         
-                        value = extract_field_from_text(pdf_text, field)
-                        if value:
+                        analysis = analyze_field(pdf_text, field)
+                        if analysis.get("status") != "unknown" and analysis.get("value") != "Не найдено":
                             result[field] = {
-                                "value": value,
+                                "value": analysis.get("value"),
+                                "status": analysis.get("status"),
+                                "details": analysis.get("details"),
                                 "source": {
                                     "level": 1,
                                     "name": f"PDF {company}",
@@ -379,44 +639,107 @@ def collect_company_data(company: str) -> Dict:
                                 }
                             }
                             found.add(field)
-                            source_stats[1] += 1
-                            print(f"      ✅ Из PDF: {FIELD_LABELS.get(field, field)}")
+                            pdf_fields_found += 1
+                            logger.info(f"      ✅ Из PDF: {FIELD_LABELS.get(field, field)} → {analysis.get('value')[:80]}...")
+                    
+                    if pdf_fields_found > 0:
+                        source_stats[1] = source_stats.get(1, 0) + pdf_fields_found
                     
                     # Если нашли все поля — выходим
                     if len(found) >= len(KASKO_FIELDS):
+                        logger.info(f"    ✅ Найдены все поля!")
                         break
             else:
-                print(f"    ⚠️ PDF не найдены на странице")
+                logger.warning(f"    ⚠️ PDF не найдены на странице")
         else:
-            print(f"    ⚠️ Не удалось загрузить страницу")
+            logger.warning(f"    ⚠️ Нет HTML для парсинга")
     
-    # УРОВЕНЬ 2: Интернет-поиск (для недостающих полей)
+    # ==================== УРОВЕНЬ 2: Интернет-поиск ====================
     missing_fields = [f for f in KASKO_FIELDS if f not in found]
     if missing_fields:
-        print(f"  📂 Уровень 2: Интернет-поиск")
+        logger.info(f"  📂 Уровень 2: Интернет-поиск (не хватает {len(missing_fields)} полей)")
         for field in missing_fields:
-            search_result = search_internet(company, field)
-            if search_result:
-                result[field] = search_result
-                found.add(field)
-                source_stats[2] += 1
-                print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
+            query = f"КАСКО {company} {FIELD_LABELS.get(field, field)}"
+            logger.info(f"    🔍 Поиск: '{query}'")
+            
+            # Пробуем Яндекс
+            search_url = f"https://yandex.ru/search/?text={quote_plus(query)}&lr=213"
+            search_response = fetch_url(search_url, timeout=15)
+            
+            if not search_response or not search_response.get("success"):
+                logger.warning(f"    ⚠️ Яндекс не отвечает: {search_response.get('error') if search_response else 'Нет ответа'}")
+                continue
+            
+            search_html = search_response.get("text")
+            if not search_html:
+                continue
+            
+            # Ищем результаты
+            soup = BeautifulSoup(search_html, 'html.parser')
+            found_in_search = False
+            
+            for item in soup.find_all(['li', 'div'], class_=re.compile(r'result|serp-item|organic')):
+                link_tag = item.find('a')
+                if not link_tag:
+                    continue
+                
+                href = link_tag.get('href', '')
+                if href.startswith('/'):
+                    href = f"https://yandex.ru{href}"
+                
+                if not href.startswith('http'):
+                    continue
+                
+                # Загружаем страницу результата
+                logger.info(f"      📖 Читаем: {href[:60]}...")
+                page_response = fetch_url(href, timeout=15)
+                
+                if not page_response or not page_response.get("success"):
+                    continue
+                
+                page_text = page_response.get("text")
+                if not page_text:
+                    continue
+                
+                # Анализируем поле
+                analysis = analyze_field(page_text, field)
+                if analysis.get("status") != "unknown" and analysis.get("value") != "Не найдено":
+                    result[field] = {
+                        "value": analysis.get("value"),
+                        "status": analysis.get("status"),
+                        "details": analysis.get("details"),
+                        "source": {
+                            "level": 2,
+                            "name": "Интернет-поиск (Яндекс)",
+                            "url": href,
+                            "found_at": datetime.now().isoformat()
+                        }
+                    }
+                    found.add(field)
+                    source_stats[2] = source_stats.get(2, 0) + 1
+                    logger.info(f"      ✅ Найдено: {FIELD_LABELS.get(field, field)} → {analysis.get('value')[:80]}...")
+                    found_in_search = True
+                    break
+            
+            if not found_in_search:
+                logger.warning(f"    ❌ Не найдено: {FIELD_LABELS.get(field, field)}")
     
-    # ИТОГ
-    print(f"\n📊 {company}: собрано {len(found)}/{len(KASKO_FIELDS)} полей")
+    # ==================== ИТОГ ====================
+    logger.info(f"\n📊 {company}: собрано {len(found)}/{len(KASKO_FIELDS)} полей")
     for level, count in source_stats.items():
-        if count > 0:
-            info = get_source_info(level)
-            print(f"  {info['emoji']} {info['label']}: {count}")
+        info = get_source_info(level)
+        logger.info(f"  {info['emoji']} {info['label']}: {count}")
     
     # Для полей, которые не найдены — ставим "Не найдено"
     for field in KASKO_FIELDS:
         if field not in result:
             result[field] = {
                 "value": "Не найдено",
+                "status": "unknown",
+                "details": "Информация не найдена ни в одном источнике",
                 "source": {
                     "level": 0,
-                    "name": "Информация не найдена",
+                    "name": "Не найдено",
                     "url": None,
                     "found_at": datetime.now().isoformat()
                 }
@@ -425,11 +748,13 @@ def collect_company_data(company: str) -> Dict:
     return result
 
 def collect_all_data() -> Dict:
-    print("\n" + "=" * 60)
-    print("📊 СБОР ДАННЫХ: КАСКО (ТОЛЬКО PDF + ИНТЕРНЕТ)")
-    print("=" * 60)
-    print("Поля:", ", ".join(FIELD_LABELS[f] for f in KASKO_FIELDS))
-    print("=" * 60)
+    """Сбор данных для всех компаний"""
+    logger.info("\n" + "=" * 60)
+    logger.info("📊 СБОР ДАННЫХ: КАСКО")
+    logger.info("=" * 60)
+    logger.info(f"Компаний: {len(KASKO_PAGES)}")
+    logger.info(f"Поля: {len(KASKO_FIELDS)}")
+    logger.info("=" * 60)
     
     all_data = {}
     for company in KASKO_PAGES.keys():
@@ -438,6 +763,11 @@ def collect_all_data() -> Dict:
     
     all_data["_last_updated"] = datetime.now().isoformat()
     all_data["_fields"] = KASKO_FIELDS
+    
+    logger.info("\n" + "=" * 60)
+    logger.info("✅ СБОР ЗАВЕРШЁН")
+    logger.info("=" * 60)
+    
     return all_data
 
 # ==================== ЗАГРУЗКА/СОХРАНЕНИЕ ====================
@@ -449,12 +779,12 @@ def load_data() -> Dict:
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                print(f"📦 Загружено из кэша: {len(data) - 1} компаний")
+                logger.info(f"📦 Загружено из кэша: {len(data) - 1} компаний")
                 return data
         except Exception as e:
-            print(f"⚠️ Ошибка загрузки кэша: {e}")
+            logger.warning(f"⚠️ Ошибка загрузки кэша: {e}")
     
-    print("🔄 Данных нет, запускаем сбор...")
+    logger.info("🔄 Данных нет, запускаем сбор...")
     data = collect_all_data()
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -463,6 +793,7 @@ def load_data() -> Dict:
 # ==================== FLASK ====================
 
 print("🚀 Загрузка приложения...")
+logger.info("🚀 Загрузка приложения...")
 INSURANCE_DATA = load_data()
 ALL_COMPANIES = [c for c in INSURANCE_DATA.keys() if not c.startswith("_")]
 
@@ -499,7 +830,7 @@ def compare():
 @app.route('/update')
 def update():
     global INSURANCE_DATA, ALL_COMPANIES
-    print("🔄 Ручное обновление...")
+    logger.info("🔄 Ручное обновление...")
     INSURANCE_DATA = collect_all_data()
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(INSURANCE_DATA, f, ensure_ascii=False, indent=2)
@@ -517,6 +848,7 @@ def old_routes():
 
 os.makedirs('templates', exist_ok=True)
 
+# index.html
 with open('templates/index.html', 'w', encoding='utf-8') as f:
     f.write('''
 <!DOCTYPE html>
@@ -589,6 +921,7 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
 </html>
 ''')
 
+# result.html
 with open('templates/result.html', 'w', encoding='utf-8') as f:
     f.write('''
 <!DOCTYPE html>
