@@ -1,4 +1,4 @@
-# app.py — ФИНАЛЬНАЯ ВЕРСИЯ С УМНЫМ ПОИСКОМ PDF
+# app.py — ФИНАЛЬНАЯ ВЕРСИЯ C DUCKDUCKGO + GROQ
 
 from flask import Flask, render_template, request, redirect
 from datetime import datetime
@@ -28,6 +28,10 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36",
 ]
 
+# Groq API Key — задаётся в Render как переменная окружения GROQ_API_KEY
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL = "llama-3.3-70b-versatile"  # или "mixtral-8x7b-32768"
+
 # ==================== УРЛЫ СТРАНИЦ КАСКО ====================
 
 KASKO_PAGES = {
@@ -44,7 +48,7 @@ KASKO_PAGES = {
     "Совкомбанк Страхование": "https://sovcomins.ru/product/kasko/"
 }
 
-# ==================== ДАННЫЕ ИЗ PDF (УРОВЕНЬ 4 — ПАМЯТЬ) ====================
+# ==================== ДАННЫЕ ПАМЯТИ (УРОВЕНЬ 4) ====================
 
 KASKO_MEMORY_DATA = {
     "РЕСО-Гарантия": {
@@ -289,12 +293,116 @@ def get_source_info(level: int) -> Dict:
     levels = {
         1: {"emoji": "🟢", "label": "Официальный сайт", "type": "official"},
         2: {"emoji": "📄", "label": "PDF правила", "type": "pdf"},
-        3: {"emoji": "🟡", "label": "Интернет-поиск", "type": "search"},
+        3: {"emoji": "🤖", "label": "Groq-LLM (поиск)", "type": "llm"},
         4: {"emoji": "⚪", "label": "Внутренняя база", "type": "memory"},
     }
     return levels.get(level, {"emoji": "⬜", "label": "Неизвестно", "type": "unknown"})
 
-# ==================== УМНЫЙ ПОИСК PDF ====================
+# ==================== УРОВЕНЬ 1: HTML (ТОЛЬКО РАЗДЕЛЫ С УСЛОВИЯМИ) ====================
+
+def parse_html_page(company: str, url: str) -> Dict:
+    """Парсинг HTML — ищем ТОЛЬКО в разделах с условиями страхования"""
+    print(f"  📂 Уровень 1: Официальный сайт — {url}")
+    
+    result = {}
+    html = fetch_url(url)
+    
+    if not html:
+        print(f"    ⚠️ Не удалось загрузить страницу")
+        return result
+    
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    # Удаляем мусорные блоки
+    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header"]):
+        tag.decompose()
+    
+    # Удаляем отзывы и новости
+    for tag in soup.find_all(['div', 'section'], class_=re.compile(r'review|feedback|comment|отзыв|news|article|новост|стать', re.I)):
+        tag.decompose()
+    
+    # Собираем разделы с условиями
+    sections = []
+    condition_keywords = ['услови', 'правил', 'покрыва', 'риск', 'страхов', 'тариф', 'что входит', 'как работает']
+    
+    for tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'strong', 'b']):
+        text = tag.get_text().lower()
+        if any(kw in text for kw in condition_keywords):
+            content_parts = []
+            next_tag = tag.find_next()
+            while next_tag and next_tag.name not in ['h1', 'h2', 'h3', 'h4', 'h5']:
+                if next_tag.name in ['p', 'li', 'td', 'div', 'span']:
+                    content_parts.append(next_tag.get_text())
+                next_tag = next_tag.find_next()
+            if content_parts:
+                sections.append(' '.join(content_parts))
+    
+    # Таблицы
+    for table in soup.find_all('table'):
+        if any(kw in table.get_text().lower() for kw in ['франшиз', 'тотал', 'риск', 'страхов', 'выплат']):
+            sections.append(table.get_text())
+    
+    # Списки в разделах с условиями
+    for ul in soup.find_all('ul'):
+        parent = ul.find_parent()
+        if parent:
+            parent_text = parent.get_text().lower()
+            if any(kw in parent_text for kw in ['услови', 'риск', 'покрыва', 'входит']):
+                sections.append(ul.get_text())
+    
+    # FAQ
+    for tag in soup.find_all(['div', 'section'], class_=re.compile(r'faq|question|answer|accordion', re.I)):
+        sections.append(tag.get_text())
+    
+    all_text = clean_text(' '.join(sections))
+    
+    if not all_text:
+        print(f"    ⚠️ Не найдено разделов с условиями")
+        return result
+    
+    # Ищем данные
+    field_patterns = {
+        "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
+        "total_loss": ["тотал", "полная гибель", "гибель", "75%", "70%", "65%"],
+        "gap": ["gap", "гэп", "сохранение стоимости"],
+        "without_certificates": ["без справок", "без документ"],
+        "fire": ["самовозгоран", "возгоран", "пожар"],
+        "terrorism": ["терроризм", "терр. акт"],
+        "drone": ["бпла", "беспилот", "дрон"],
+        "tow_truck": ["эвакуа"],
+        "repair_type": ["ремонт", "стоа", "дилер"],
+        "payment_terms": ["срок выплат", "рабочих дней", "дней"]
+    }
+    
+    for field, keywords in field_patterns.items():
+        for kw in keywords:
+            if kw in all_text.lower():
+                sentences = re.split(r'[.!?]', all_text)
+                for sentence in sentences:
+                    if kw in sentence.lower():
+                        value = clean_text(sentence)
+                        if len(value) > 15 and len(value) < 300:
+                            if not any(x in value.lower() for x in ["отзыв", "рейтинг", "звезд", "спасиб", "доволен"]):
+                                result[field] = {
+                                    "value": value,
+                                    "source": {
+                                        "level": 1,
+                                        "name": f"Официальный сайт {company}",
+                                        "url": url,
+                                        "found_at": datetime.now().isoformat()
+                                    }
+                                }
+                                print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
+                                break
+                    if field in result:
+                        break
+            if field in result:
+                break
+    
+    print(f"    📊 Найдено в HTML: {len(result)} полей")
+    return result
+
+# ==================== УРОВЕНЬ 2: PDF ====================
 
 def find_rules_pdf(html: str, base_url: str) -> List[str]:
     """Найти PDF с правилами страхования"""
@@ -302,7 +410,6 @@ def find_rules_pdf(html: str, base_url: str) -> List[str]:
     candidates = []
     priority_keywords = ['правила', 'условия', 'тарифы', 'полис', 'правило']
     
-    # 1. Ищем по тексту ссылки
     for link in soup.find_all('a', href=True):
         text = link.get_text().lower()
         href = link.get('href', '').lower()
@@ -313,7 +420,6 @@ def find_rules_pdf(html: str, base_url: str) -> List[str]:
                 if full_url not in candidates and 'cookie' not in href and 'privacy' not in href:
                     candidates.append(full_url)
     
-    # 2. Ищем в блоках с заголовками
     for tag in soup.find_all(['div', 'section', 'article', 'li']):
         text = tag.get_text().lower()
         if any(kw in text for kw in ['правила страхования', 'условия страхования', 'страховые правила']):
@@ -325,10 +431,8 @@ def find_rules_pdf(html: str, base_url: str) -> List[str]:
     
     return candidates
 
-# ==================== РАБОТА С PDF (УЛУЧШЕННАЯ) ====================
-
 def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
-    """Скачать PDF и извлечь текст (с поддержкой разных методов)"""
+    """Скачать PDF и извлечь текст"""
     try:
         import PyPDF2
         
@@ -336,12 +440,10 @@ def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
         if response.status_code != 200:
             return None
         
-        # Проверяем, что это PDF
         content_type = response.headers.get('Content-Type', '')
         if 'pdf' not in content_type.lower() and not pdf_url.lower().endswith('.pdf'):
             return None
         
-        # Пробуем PyPDF2
         try:
             pdf_bytes = io.BytesIO(response.content)
             reader = PyPDF2.PdfReader(pdf_bytes)
@@ -363,7 +465,6 @@ def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
         except:
             pass
         
-        # Пробуем pypdf (если установлен)
         try:
             import pypdf
             pdf_bytes = io.BytesIO(response.content)
@@ -390,76 +491,11 @@ def extract_text_from_pdf(pdf_url: str) -> Optional[str]:
         print(f"      ⚠️ Ошибка PDF: {e}")
         return None
 
-# ==================== ПАРСИНГ HTML СТРАНИЦЫ ====================
-
-def parse_html_page(company: str, url: str) -> Dict:
-    """Парсинг HTML страницы КАСКО"""
-    print(f"  📂 Уровень 1: Официальный сайт — {url}")
-    
-    result = {}
-    html = fetch_url(url)
-    
-    if not html:
-        print(f"    ⚠️ Не удалось загрузить страницу")
-        return result
-    
-    soup = BeautifulSoup(html, 'html.parser')
-    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header"]):
-        tag.decompose()
-    
-    text = clean_text(soup.get_text())
-    
-    # Ключевые слова для поиска
-    field_patterns = {
-        "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
-        "total_loss": ["тотал", "полная гибель", "гибель", "75%", "70%", "65%"],
-        "gap": ["gap", "гэп", "сохранение стоимости"],
-        "without_certificates": ["без справок", "без документ"],
-        "fire": ["самовозгоран", "возгоран", "пожар"],
-        "terrorism": ["терроризм", "терр. акт"],
-        "drone": ["бпла", "беспилот", "дрон"],
-        "tow_truck": ["эвакуа"],
-        "repair_type": ["ремонт", "стоа", "дилер"],
-        "payment_terms": ["срок выплат", "рабочих дней", "дней"]
-    }
-    
-    for field, keywords in field_patterns.items():
-        for kw in keywords:
-            if kw in text.lower():
-                sentences = re.split(r'[.!?]', text)
-                for sentence in sentences:
-                    if kw in sentence.lower():
-                        value = clean_text(sentence)
-                        if len(value) > 15 and len(value) < 350:
-                            if not any(x in value.lower() for x in ["войти", "регистрац", "подпис", "©"]):
-                                result[field] = {
-                                    "value": value,
-                                    "source": {
-                                        "level": 1,
-                                        "name": f"Официальный сайт {company}",
-                                        "url": url,
-                                        "found_at": datetime.now().isoformat()
-                                    }
-                                }
-                                print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
-                                break
-                    if field in result:
-                        break
-            if field in result:
-                break
-    
-    print(f"    📊 Найдено в HTML: {len(result)} полей")
-    return result
-
-# ==================== ПАРСИНГ PDF ====================
-
 def parse_pdf_rules(company: str, html: str, base_url: str) -> Dict:
     """Поиск и парсинг PDF с правилами"""
     print(f"  📂 Уровень 2: PDF правила")
     
     result = {}
-    
-    # Находим PDF
     pdf_links = find_rules_pdf(html, base_url)
     
     if not pdf_links:
@@ -468,7 +504,6 @@ def parse_pdf_rules(company: str, html: str, base_url: str) -> Dict:
     
     print(f"    📄 Найдено PDF: {len(pdf_links)}")
     
-    # Читаем каждый PDF
     field_patterns = {
         "franchise": ["франшиз", "франшиза", "безусловн", "условн"],
         "total_loss": ["тотал", "полная гибель", "гибель", "75%", "70%", "65%"],
@@ -482,8 +517,7 @@ def parse_pdf_rules(company: str, html: str, base_url: str) -> Dict:
         "payment_terms": ["срок выплат", "рабочих дней"]
     }
     
-    for pdf_url in pdf_links[:5]:  # Ограничиваем 5 PDF
-        # Пропускаем мусорные PDF
+    for pdf_url in pdf_links[:5]:
         if any(x in pdf_url.lower() for x in ['cookie', 'privacy', 'policy', 'logo', 'image']):
             continue
             
@@ -496,7 +530,6 @@ def parse_pdf_rules(company: str, html: str, base_url: str) -> Dict:
         pdf_text_lower = pdf_text.lower()
         found_in_pdf = set()
         
-        # Ищем данные в PDF
         for field, keywords in field_patterns.items():
             if field in found_in_pdf:
                 continue
@@ -525,93 +558,133 @@ def parse_pdf_rules(company: str, html: str, base_url: str) -> Dict:
                 if field in result:
                     break
         
-        # Если нашли много полей — не ищем дальше
         if len(found_in_pdf) >= 8:
             break
     
     print(f"    📊 Найдено в PDF: {len(result)} полей")
     return result
 
-# ==================== ПОИСК В ИНТЕРНЕТЕ ====================
+# ==================== УРОВЕНЬ 3: DUCKDUCKGO + GROQ-LLM ====================
 
-def search_internet(company: str, field: str) -> Optional[Dict]:
-    """Поиск в интернете через Яндекс (работает в РФ)"""
-    query = f"{company} КАСКО {FIELD_LABELS.get(field, field)}"
-    print(f"    🔍 Яндекс: '{query}'")
+def search_with_duckduckgo(query: str) -> List[str]:
+    """Поиск в DuckDuckGo, возвращает список URL"""
+    encoded_query = quote_plus(query)
+    url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
     
-    search_url = f"https://yandex.ru/search/?text={quote_plus(query)}&lr=213"
-    
-    html = fetch_url(search_url, timeout=15)
+    html = fetch_url(url, timeout=15)
     if not html:
-        print(f"    ⚠️ Яндекс не отвечает")
+        return []
+    
+    soup = BeautifulSoup(html, 'html.parser')
+    links = []
+    
+    # DuckDuckGo HTML версия — ищем ссылки
+    for result in soup.find_all('a', class_='result__a'):
+        href = result.get('href')
+        if href and href.startswith('http'):
+            links.append(href)
+        elif href and href.startswith('/'):
+            links.append(f"https://duckduckgo.com{href}")
+    
+    # Альтернативный способ
+    for result in soup.find_all('a', href=True):
+        href = result.get('href')
+        if href and '://' in href and 'duckduckgo.com' not in href:
+            if any(x in href for x in ['http://', 'https://']):
+                if href not in links:
+                    links.append(href)
+    
+    return links[:5]
+
+def ask_groq(text: str, question: str) -> Optional[str]:
+    """Задать вопрос Groq на основе текста"""
+    if not GROQ_API_KEY:
         return None
     
     try:
-        soup = BeautifulSoup(html, 'html.parser')
+        # Обрезаем текст, чтобы не превысить лимит токенов
+        if len(text) > 8000:
+            text = text[:8000]
         
-        # Ищем результаты
-        for item in soup.find_all(['li', 'div'], class_=re.compile(r'result|serp-item|organic')):
-            link_tag = item.find('a')
-            if not link_tag:
-                continue
-            
-            title = clean_text(link_tag.get_text())
-            href = link_tag.get('href', '')
-            
-            desc_tag = item.find(['div', 'p'], class_=re.compile(r'text|desc|snippet'))
-            snippet = clean_text(desc_tag.get_text()) if desc_tag else ""
-            
-            full_text = f"{title} {snippet}".lower()
-            
-            field_keywords = {
-                "franchise": ["франшиз", "франшиза"],
-                "total_loss": ["тотал", "гибель"],
-                "without_certificates": ["без справок"],
-                "gap": ["gap", "гэп"],
-                "fire": ["самовозгоран"],
-                "terrorism": ["терроризм"],
-                "drone": ["бпла"],
-                "tow_truck": ["эвакуа"],
-                "payment_terms": ["срок", "дней"],
-                "repair_type": ["ремонт", "стоа"],
-            }
-            
-            kw_list = field_keywords.get(field, [])
-            for kw in kw_list:
-                if kw in full_text:
-                    value = snippet if snippet and len(snippet) > 20 else title
-                    if len(value) > 30:
-                        # Пробуем загрузить страницу
-                        if href.startswith('/'):
-                            href = f"https://yandex.ru{href}"
-                        
-                        page_html = fetch_url(href, timeout=10)
-                        if page_html:
-                            page_soup = BeautifulSoup(page_html, 'html.parser')
-                            page_text = clean_text(page_soup.get_text())
-                            
-                            for sentence in re.split(r'[.!?]', page_text):
-                                if kw in sentence.lower() and len(sentence) > 20:
-                                    value = clean_text(sentence)
-                                    break
-                        
-                        return {
-                            "value": value[:250],
-                            "source": {
-                                "level": 3,
-                                "name": "Яндекс",
-                                "url": href,
-                                "found_at": datetime.now().isoformat()
-                            }
-                        }
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": GROQ_MODEL,
+                "messages": [
+                    {"role": "system", "content": "Ты — эксперт по страхованию. Отвечай кратко, только фактами. Если информация не найдена — скажи 'не найдено'."},
+                    {"role": "user", "content": f"На основе текста ниже ответь на вопрос: {question}\n\nТекст:\n{text}"}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 100
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            answer = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+            if answer and answer.lower() not in ['не найдено', 'не указано', 'нет информации', 'no']:
+                return clean_text(answer)
         
         return None
         
     except Exception as e:
-        print(f"    ⚠️ Ошибка: {e}")
+        print(f"      ⚠️ Ошибка Groq: {e}")
         return None
 
-# ==================== ПАМЯТЬ ====================
+def search_with_groq(company: str, field: str) -> Optional[Dict]:
+    """Поиск в интернете через DuckDuckGo + Groq-LLM"""
+    print(f"    🤖 Groq: {company} → {FIELD_LABELS.get(field, field)}")
+    
+    query = f"{company} КАСКО {FIELD_LABELS.get(field, field)}"
+    urls = search_with_duckduckgo(query)
+    
+    if not urls:
+        print(f"      ⚠️ DuckDuckGo не вернул результатов")
+        return None
+    
+    print(f"      🔗 Найдено {len(urls)} страниц")
+    
+    for url in urls[:3]:
+        print(f"      📖 Читаем: {url[:60]}...")
+        
+        html = fetch_url(url, timeout=15)
+        if not html:
+            continue
+        
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header"]):
+                tag.decompose()
+            page_text = clean_text(soup.get_text())
+            
+            if len(page_text) < 100:
+                continue
+            
+            # Задаём вопрос Groq
+            question = f"Что указано в условиях КАСКО компании {company} по параметру '{FIELD_LABELS.get(field, field)}'? Ответь кратко, только конкретное значение."
+            answer = ask_groq(page_text, question)
+            
+            if answer:
+                return {
+                    "value": answer,
+                    "source": {
+                        "level": 3,
+                        "name": f"Groq-LLM (DuckDuckGo)",
+                        "url": url,
+                        "found_at": datetime.now().isoformat()
+                    }
+                }
+        except Exception as e:
+            print(f"      ⚠️ Ошибка: {e}")
+    
+    return None
+
+# ==================== УРОВЕНЬ 4: ПАМЯТЬ ====================
 
 def get_from_memory(company: str, field: str) -> Optional[Dict]:
     if company not in KASKO_MEMORY_DATA:
@@ -629,7 +702,7 @@ def get_from_memory(company: str, field: str) -> Optional[Dict]:
         }
     }
 
-# ==================== СБОР ДАННЫХ ДЛЯ ОДНОЙ КОМПАНИИ ====================
+# ==================== СБОР ДАННЫХ ====================
 
 def collect_company_data(company: str) -> Dict:
     print(f"\n🔍 {company}")
@@ -639,7 +712,7 @@ def collect_company_data(company: str) -> Dict:
     found = set()
     source_stats = {1: 0, 2: 0, 3: 0, 4: 0}
     
-    # УРОВЕНЬ 1: HTML страница
+    # УРОВЕНЬ 1: HTML
     if company in KASKO_PAGES:
         html_data = parse_html_page(company, KASKO_PAGES[company])
         for field, val in html_data.items():
@@ -660,19 +733,19 @@ def collect_company_data(company: str) -> Dict:
                     found.add(field)
                     source_stats[2] += 1
     
-    # УРОВЕНЬ 3: Интернет-поиск (только для недостающих полей)
+    # УРОВЕНЬ 3: Groq-LLM (поиск через DuckDuckGo)
     missing_fields = [f for f in KASKO_FIELDS if f not in found]
-    if missing_fields:
-        print(f"  📂 Уровень 3: Интернет-поиск (Яндекс)")
-        for field in missing_fields:
-            search_result = search_internet(company, field)
+    if missing_fields and GROQ_API_KEY:
+        print(f"  📂 Уровень 3: Groq-LLM (DuckDuckGo)")
+        for field in missing_fields[:5]:  # Ограничиваем 5 полей для скорости
+            search_result = search_with_groq(company, field)
             if search_result:
                 result[field] = search_result
                 found.add(field)
                 source_stats[3] += 1
                 print(f"    ✅ Найдено: {FIELD_LABELS.get(field, field)}")
     
-    # УРОВЕНЬ 4: Память (заполняем всё, что осталось)
+    # УРОВЕНЬ 4: Память
     missing_fields = [f for f in KASKO_FIELDS if f not in found]
     if missing_fields:
         print(f"  📂 Уровень 4: Внутренняя база")
@@ -911,7 +984,7 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
     <div class="legend">
         <span class="legend-item">🟢 Уровень 1 — Официальный сайт</span>
         <span class="legend-item">📄 Уровень 2 — PDF правила</span>
-        <span class="legend-item">🟡 Уровень 3 — Интернет-поиск</span>
+        <span class="legend-item">🤖 Уровень 3 — Groq-LLM (поиск)</span>
         <span class="legend-item">⚪ Уровень 4 — Внутренняя база</span>
     </div>
     
@@ -936,7 +1009,7 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
                         {% endif %}
                         {% if data1[field] is mapping and 'source' in data1[field] %}
                             {% set s = data1[field].source %}
-                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}🟢{% elif s.level == 2 %}📄{% elif s.level == 3 %}🟡{% else %}⚪{% endif %}</span>
+                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}🟢{% elif s.level == 2 %}📄{% elif s.level == 3 %}🤖{% else %}⚪{% endif %}</span>
                             <div class="source-tooltip">
                                 Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})
                                 {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
@@ -955,7 +1028,7 @@ with open('templates/result.html', 'w', encoding='utf-8') as f:
                         {% endif %}
                         {% if data2[field] is mapping and 'source' in data2[field] %}
                             {% set s = data2[field].source %}
-                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}🟢{% elif s.level == 2 %}📄{% elif s.level == 3 %}🟡{% else %}⚪{% endif %}</span>
+                            <span class="source-icon" title="Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})">{% if s.level == 1 %}🟢{% elif s.level == 2 %}📄{% elif s.level == 3 %}🤖{% else %}⚪{% endif %}</span>
                             <div class="source-tooltip">
                                 Источник: {{ s.label if s.label else s.type }} (уровень {{ s.level }})
                                 {% if s.url %}<br><span class="source-url"><a href="{{ s.url }}" target="_blank">{{ s.url }}</a></span>{% endif %}
