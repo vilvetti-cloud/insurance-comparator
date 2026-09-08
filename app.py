@@ -7,6 +7,8 @@ import urllib3
 import re
 import time
 import random
+import io
+import threading
 from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 import logging
@@ -17,7 +19,9 @@ import logging
 
 app = Flask(__name__)
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+urllib3.disable_warnings(
+    urllib3.exceptions.InsecureRequestWarning
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,20 +34,24 @@ logger = logging.getLogger(__name__)
 # Groq
 # ------------------------------------------------------------
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_API_KEY = os.environ.get(
+    "GROQ_API_KEY",
+    ""
+)
 
-# Основная модель + запасная
 GROQ_MODELS = [
-    os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"),
+    os.environ.get(
+        "GROQ_MODEL",
+        "openai/gpt-oss-120b"
+    ),
     "openai/gpt-oss-20b"
 ]
 
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_URL = (
+    "https://api.groq.com/openai/v1/chat/completions"
+)
 
-# Сколько раз пробуем один запрос к конкретной модели
 GROQ_RETRIES = 3
-
-# Таймаут HTTP-запроса к Groq
 GROQ_TIMEOUT = 90
 
 # ------------------------------------------------------------
@@ -51,6 +59,27 @@ GROQ_TIMEOUT = 90
 # ------------------------------------------------------------
 
 DATA_FILE = "insurance_data.json"
+
+# ------------------------------------------------------------
+# Автоматическое обновление
+#
+# Сейчас:
+#   UPDATE_ON_START = True
+#
+# Это означает:
+#   каждый перезапуск сервера -> новый сбор данных.
+#
+# В будущем:
+#   меняем на False и подключаем ночное расписание.
+# ------------------------------------------------------------
+
+UPDATE_ON_START = True
+
+# Защита от запуска двух обновлений одновременно
+UPDATE_LOCK = threading.Lock()
+
+# Флаг состояния обновления
+UPDATE_RUNNING = False
 
 
 # ============================================================
@@ -178,7 +207,7 @@ FIELD_LABELS = {
 
 
 # ============================================================
-# ПРОМПТЫ ДЛЯ АНАЛИЗА
+# ПРОМПТЫ
 # ============================================================
 
 FIELD_ANALYSIS_PROMPTS = {
@@ -342,13 +371,18 @@ def get_headers() -> Dict[str, str]:
 
 
 def clean_text(text: str) -> str:
+
     if not text:
         return ""
 
     text = text.replace("\xa0", " ")
     text = re.sub(r"\r\n?", "\n", text)
     text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
+    text = re.sub(
+        r"\n\s*\n\s*\n+",
+        "\n\n",
+        text
+    )
 
     return text.strip()
 
@@ -361,9 +395,13 @@ def fetch_url(
 
     last_error = None
 
-    for attempt in range(1, retries + 1):
+    for attempt in range(
+        1,
+        retries + 1
+    ):
 
         try:
+
             logger.info(
                 "🌐 Запрос: %s (попытка %s/%s)",
                 url,
@@ -390,7 +428,11 @@ def fetch_url(
             if status == 200:
 
                 content_type = (
-                    response.headers.get("Content-Type", "")
+                    response.headers
+                    .get(
+                        "Content-Type",
+                        ""
+                    )
                     .lower()
                 )
 
@@ -403,7 +445,15 @@ def fetch_url(
                     "content_type": content_type
                 }
 
-            if status in [401, 403, 429, 500, 502, 503, 504]:
+            if status in [
+                401,
+                403,
+                429,
+                500,
+                502,
+                503,
+                504
+            ]:
 
                 logger.warning(
                     "⚠️ HTTP %s для %s",
@@ -415,19 +465,31 @@ def fetch_url(
 
                     if status == 429:
                         wait_time = 5 * attempt
-                    elif status in [500, 502, 503, 504]:
+
+                    elif status in [
+                        500,
+                        502,
+                        503,
+                        504
+                    ]:
                         wait_time = 3 * attempt
+
                     else:
                         wait_time = 2 * attempt
 
-                    wait_time += random.uniform(0.5, 1.5)
+                    wait_time += random.uniform(
+                        0.5,
+                        1.5
+                    )
 
                     logger.info(
                         "⏳ Ждём %.1f сек.",
                         wait_time
                     )
 
-                    time.sleep(wait_time)
+                    time.sleep(
+                        wait_time
+                    )
 
                 continue
 
@@ -478,7 +540,10 @@ def fetch_url(
             )
 
         if attempt < retries:
-            time.sleep(2 * attempt)
+
+            time.sleep(
+                2 * attempt
+            )
 
     logger.error(
         "❌ Не удалось получить URL: %s | %s",
@@ -501,22 +566,43 @@ def find_pdf_links(
     links = []
 
     try:
-        soup = BeautifulSoup(html, "html.parser")
 
-        for tag in soup.find_all("a", href=True):
+        soup = BeautifulSoup(
+            html,
+            "html.parser"
+        )
 
-            href = tag.get("href", "").strip()
+        for tag in soup.find_all(
+            "a",
+            href=True
+        ):
+
+            href = tag.get(
+                "href",
+                ""
+            ).strip()
 
             if not href:
                 continue
 
             full_url = href
 
-            if not href.startswith(("http://", "https://")):
+            if not href.startswith(
+                (
+                    "http://",
+                    "https://"
+                )
+            ):
+
                 from urllib.parse import urljoin
-                full_url = urljoin(base_url, href)
+
+                full_url = urljoin(
+                    base_url,
+                    href
+                )
 
             href_lower = href.lower()
+
             text_lower = tag.get_text(
                 " ",
                 strip=True
@@ -535,8 +621,12 @@ def find_pdf_links(
             )
 
             if is_pdf:
+
                 if full_url not in links:
-                    links.append(full_url)
+
+                    links.append(
+                        full_url
+                    )
 
     except Exception as exc:
 
@@ -553,6 +643,7 @@ def extract_text_from_pdf(
 ) -> str:
 
     try:
+
         import PyPDF2
 
         reader = PyPDF2.PdfReader(
@@ -561,13 +652,22 @@ def extract_text_from_pdf(
 
         pages = []
 
-        for index, page in enumerate(reader.pages):
+        for index, page in enumerate(
+            reader.pages
+        ):
 
             try:
-                text = page.extract_text() or ""
+
+                text = (
+                    page.extract_text()
+                    or ""
+                )
 
                 if text.strip():
-                    pages.append(text)
+
+                    pages.append(
+                        text
+                    )
 
             except Exception as exc:
 
@@ -578,7 +678,9 @@ def extract_text_from_pdf(
                 )
 
         result = clean_text(
-            "\n\n".join(pages)
+            "\n\n".join(
+                pages
+            )
         )
 
         logger.info(
@@ -608,7 +710,9 @@ def extract_relevant_sections(
     max_chars: int = 100000
 ) -> str:
 
-    text = clean_text(text)
+    text = clean_text(
+        text
+    )
 
     if not text:
         return ""
@@ -653,7 +757,9 @@ def extract_relevant_sections(
     window_before = 8
     window_after = 18
 
-    for index, line in enumerate(lines):
+    for index, line in enumerate(
+        lines
+    ):
 
         line_lower = line.lower()
 
@@ -677,9 +783,10 @@ def extract_relevant_sections(
             lines[start:end]
         )
 
-        chunks.append(chunk)
+        chunks.append(
+            chunk
+        )
 
-    # Удаляем дубликаты
     unique_chunks = []
     seen = set()
 
@@ -697,16 +804,24 @@ def extract_relevant_sections(
         key = normalized[:500]
 
         if key not in seen:
-            seen.add(key)
-            unique_chunks.append(chunk)
+
+            seen.add(
+                key
+            )
+
+            unique_chunks.append(
+                chunk
+            )
 
     result = clean_text(
-        "\n\n--- РЕЛЕВАНТНЫЙ ФРАГМЕНТ ---\n\n".join(
+        "\n\n--- РЕЛЕВАНТНЫЙ ФРАГМЕНТ ---\n\n"
+        .join(
             unique_chunks
         )
     )
 
     if not result:
+
         result = text[:max_chars]
 
     return result[:max_chars]
@@ -720,28 +835,44 @@ def normalize_llm_result(
     data: Any
 ) -> Dict[str, str]:
 
-    if not isinstance(data, dict):
+    if not isinstance(
+        data,
+        dict
+    ):
         data = {}
 
     result = {}
 
     for field in KASKO_FIELDS:
 
-        value = data.get(field)
+        value = data.get(
+            field
+        )
 
         if value is None:
             value = "Не найдено"
 
-        if isinstance(value, (dict, list)):
+        if isinstance(
+            value,
+            (dict, list)
+        ):
+
             try:
+
                 value = json.dumps(
                     value,
                     ensure_ascii=False
                 )
-            except Exception:
-                value = str(value)
 
-        value = str(value).strip()
+            except Exception:
+
+                value = str(
+                    value
+                )
+
+        value = str(
+            value
+        ).strip()
 
         if not value:
             value = "Не найдено"
@@ -760,17 +891,21 @@ def try_parse_json(
 
     content = content.strip()
 
-    # Обычный JSON
     try:
-        data = json.loads(content)
 
-        if isinstance(data, dict):
+        data = json.loads(
+            content
+        )
+
+        if isinstance(
+            data,
+            dict
+        ):
             return data
 
     except Exception:
         pass
 
-    # JSON внутри ```json ... ```
     match = re.search(
         r"```(?:json)?\s*(\{.*?\})\s*```",
         content,
@@ -780,28 +915,44 @@ def try_parse_json(
     if match:
 
         try:
+
             data = json.loads(
                 match.group(1)
             )
 
-            if isinstance(data, dict):
+            if isinstance(
+                data,
+                dict
+            ):
                 return data
 
         except Exception:
             pass
 
-    # Попытка найти первый объект JSON
-    start = content.find("{")
-    end = content.rfind("}")
+    start = content.find(
+        "{"
+    )
+
+    end = content.rfind(
+        "}"
+    )
 
     if start >= 0 and end > start:
 
-        candidate = content[start:end + 1]
+        candidate = content[
+            start:end + 1
+        ]
 
         try:
-            data = json.loads(candidate)
 
-            if isinstance(data, dict):
+            data = json.loads(
+                candidate
+            )
+
+            if isinstance(
+                data,
+                dict
+            ):
                 return data
 
         except Exception:
@@ -833,13 +984,16 @@ def analyze_company_with_groq(
 
         return {}
 
-    relevant_text = extract_relevant_sections(
-        text
+    relevant_text = (
+        extract_relevant_sections(
+            text
+        )
     )
 
     fields_description = "\n\n".join(
         [
-            f"{field}: {FIELD_ANALYSIS_PROMPTS[field]}"
+            f"{field}: "
+            f"{FIELD_ANALYSIS_PROMPTS[field]}"
             for field in KASKO_FIELDS
         ]
     )
@@ -900,24 +1054,27 @@ def analyze_company_with_groq(
 """
 
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": (
+            f"Bearer {GROQ_API_KEY}"
+        ),
         "Content-Type": "application/json"
     }
 
-    # Убираем дубликаты моделей
     models = []
 
     for model in GROQ_MODELS:
 
         if model and model not in models:
-            models.append(model)
+
+            models.append(
+                model
+            )
 
     if not models:
-        models = ["openai/gpt-oss-120b"]
 
-    # --------------------------------------------------------
-    # Пробуем модели по очереди
-    # --------------------------------------------------------
+        models = [
+            "openai/gpt-oss-120b"
+        ]
 
     for model in models:
 
@@ -960,10 +1117,13 @@ def analyze_company_with_groq(
                     timeout=GROQ_TIMEOUT
                 )
 
-                status = response.status_code
+                status = (
+                    response.status_code
+                )
 
                 logger.info(
-                    "🤖 Groq HTTP %s | %s | попытка %s/%s",
+                    "🤖 Groq HTTP %s | %s | "
+                    "попытка %s/%s",
                     status,
                     company,
                     attempt,
@@ -978,11 +1138,15 @@ def analyze_company_with_groq(
 
                     try:
 
-                        response_json = response.json()
+                        response_json = (
+                            response.json()
+                        )
 
-                        choices = response_json.get(
-                            "choices",
-                            []
+                        choices = (
+                            response_json.get(
+                                "choices",
+                                []
+                            )
                         )
 
                         if not choices:
@@ -996,18 +1160,28 @@ def analyze_company_with_groq(
 
                         content = (
                             choices[0]
-                            .get("message", {})
-                            .get("content", "")
+                            .get(
+                                "message",
+                                {}
+                            )
+                            .get(
+                                "content",
+                                ""
+                            )
                         )
 
-                        parsed = try_parse_json(
-                            content
+                        parsed = (
+                            try_parse_json(
+                                content
+                            )
                         )
 
                         if parsed:
 
-                            result = normalize_llm_result(
-                                parsed
+                            result = (
+                                normalize_llm_result(
+                                    parsed
+                                )
                             )
 
                             logger.info(
@@ -1018,29 +1192,37 @@ def analyze_company_with_groq(
                             return result
 
                         logger.error(
-                            "❌ Groq вернул невалидный JSON: %s",
+                            "❌ Groq вернул "
+                            "невалидный JSON: %s",
                             content[:1000]
                         )
 
                     except Exception as exc:
 
                         logger.exception(
-                            "❌ Ошибка разбора ответа Groq: %s",
+                            "❌ Ошибка разбора "
+                            "ответа Groq: %s",
                             exc
                         )
 
                     continue
 
                 # ------------------------------------------------
-                # 400 — проблема запроса / модели
+                # 400
                 # ------------------------------------------------
 
                 if status == 400:
 
                     try:
-                        error_json = response.json()
+                        error_json = (
+                            response.json()
+                        )
+
                     except Exception:
-                        error_json = response.text[:1000]
+
+                        error_json = (
+                            response.text[:1000]
+                        )
 
                     logger.error(
                         "❌ Groq 400 | модель=%s | %s",
@@ -1048,27 +1230,27 @@ def analyze_company_with_groq(
                         error_json
                     )
 
-                    # Нет смысла трижды повторять
-                    # заведомо плохой запрос.
                     break
 
                 # ------------------------------------------------
-                # 401 / 403 — API KEY
+                # 401 / 403
                 # ------------------------------------------------
 
-                if status in [401, 403]:
+                if status in [
+                    401,
+                    403
+                ]:
 
                     logger.error(
-                        "❌ Groq авторизация не прошла: HTTP %s",
+                        "❌ Groq авторизация "
+                        "не прошла: HTTP %s",
                         status
                     )
 
-                    # Это не проблема конкретной страховой.
-                    # Нет смысла продолжать запросы.
                     return {}
 
                 # ------------------------------------------------
-                # 429 — лимит
+                # 429
                 # ------------------------------------------------
 
                 if status == 429:
@@ -1080,23 +1262,27 @@ def analyze_company_with_groq(
                         )
 
                         logger.warning(
-                            "⏳ Groq rate limit. Ждём %s сек.",
+                            "⏳ Groq rate limit. "
+                            "Ждём %s сек.",
                             wait_time
                         )
 
-                        time.sleep(wait_time)
+                        time.sleep(
+                            wait_time
+                        )
 
                         continue
 
                     logger.warning(
-                        "⚠️ Groq rate limit после всех попыток: %s",
+                        "⚠️ Groq rate limit "
+                        "после всех попыток: %s",
                         company
                     )
 
                     break
 
                 # ------------------------------------------------
-                # 5xx — временная ошибка
+                # 5xx
                 # ------------------------------------------------
 
                 if status in [
@@ -1118,15 +1304,13 @@ def analyze_company_with_groq(
                             wait_time
                         )
 
-                        time.sleep(wait_time)
+                        time.sleep(
+                            wait_time
+                        )
 
                         continue
 
                     break
-
-                # ------------------------------------------------
-                # Другой HTTP
-                # ------------------------------------------------
 
                 logger.error(
                     "❌ Groq неожиданный HTTP %s: %s",
@@ -1171,19 +1355,17 @@ def analyze_company_with_groq(
 
                 break
 
-        # --------------------------------------------------------
-        # Если модель не справилась — пробуем следующую
-        # --------------------------------------------------------
-
         logger.warning(
-            "⚠️ Модель %s не обработала компанию %s. "
+            "⚠️ Модель %s не обработала "
+            "компанию %s. "
             "Пробуем следующую модель.",
             model,
             company
         )
 
     logger.error(
-        "❌ Все модели Groq не смогли обработать: %s",
+        "❌ Все модели Groq не смогли "
+        "обработать: %s",
         company
     )
 
@@ -1214,6 +1396,7 @@ def parse_html_page(
             "header",
             "svg"
         ]):
+
             tag.decompose()
 
         text = soup.get_text(
@@ -1221,7 +1404,9 @@ def parse_html_page(
             strip=True
         )
 
-        return clean_text(text)
+        return clean_text(
+            text
+        )
 
     except Exception as exc:
 
@@ -1274,11 +1459,15 @@ def make_field_result(
 ) -> Dict[str, Any]:
 
     if value is None:
+
         value = "Не найдено"
 
-    value = str(value).strip()
+    value = str(
+        value
+    ).strip()
 
     if not value:
+
         value = "Не найдено"
 
     return {
@@ -1297,14 +1486,20 @@ def collect_company_data(
 ) -> Dict[str, Any]:
 
     logger.info("")
-    logger.info("=" * 70)
+    logger.info(
+        "=" * 70
+    )
     logger.info(
         "🏢 НАЧИНАЕМ: %s",
         company
     )
-    logger.info("=" * 70)
+    logger.info(
+        "=" * 70
+    )
 
-    source = COMPANY_SOURCES.get(company)
+    source = COMPANY_SOURCES.get(
+        company
+    )
 
     if not source:
 
@@ -1324,10 +1519,6 @@ def collect_company_data(
     source_url = source.get(
         "url"
     )
-
-    # --------------------------------------------------------
-    # Скачиваем основной источник
-    # --------------------------------------------------------
 
     response = fetch_url(
         source_url
@@ -1349,10 +1540,13 @@ def collect_company_data(
             for field in KASKO_FIELDS
         }
 
-    if not response.get("success"):
+    if not response.get(
+        "success"
+    ):
 
         logger.error(
-            "❌ Источник вернул ошибку: %s | HTTP %s",
+            "❌ Источник вернул ошибку: "
+            "%s | HTTP %s",
             company,
             response.get("status")
         )
@@ -1376,16 +1570,18 @@ def collect_company_data(
         ""
     )
 
-    content_type = response.get(
-        "content_type",
-        ""
-    ).lower()
+    content_type = (
+        response.get(
+            "content_type",
+            ""
+        ).lower()
+    )
 
     final_data = {}
 
-    # --------------------------------------------------------
-    # 1. Проверяем, не PDF ли это
-    # --------------------------------------------------------
+    # ========================================================
+    # 1. ПРЯМОЙ PDF
+    # ========================================================
 
     is_pdf = (
         "application/pdf" in content_type
@@ -1419,10 +1615,12 @@ def collect_company_data(
                     "Не найдено"
                 )
 
-                final_data[field] = make_field_result(
-                    value,
-                    2,
-                    source_url
+                final_data[field] = (
+                    make_field_result(
+                        value,
+                        2,
+                        source_url
+                    )
                 )
 
             if llm_data:
@@ -1439,9 +1637,9 @@ def collect_company_data(
                 company
             )
 
-    # --------------------------------------------------------
-    # 2. Если это HTML — ищем PDF с правилами
-    # --------------------------------------------------------
+    # ========================================================
+    # 2. HTML → ИЩЕМ PDF
+    # ========================================================
 
     if html:
 
@@ -1459,13 +1657,11 @@ def collect_company_data(
         )
 
         logger.info(
-            "📚 Найдено потенциальных PDF/документов: %s",
+            "📚 Найдено потенциальных "
+            "PDF/документов: %s",
             len(pdf_links)
         )
 
-        # Ограничиваем количество попыток
-        # чтобы одна компания не могла зависнуть
-        # на десятках документов.
         for pdf_url in pdf_links[:5]:
 
             try:
@@ -1489,9 +1685,11 @@ def collect_company_data(
                 ):
                     continue
 
-                pdf_content = pdf_response.get(
-                    "content",
-                    b""
+                pdf_content = (
+                    pdf_response.get(
+                        "content",
+                        b""
+                    )
                 )
 
                 pdf_content_type = (
@@ -1502,40 +1700,54 @@ def collect_company_data(
                 )
 
                 if not (
-                    "application/pdf" in pdf_content_type
+                    "application/pdf"
+                    in pdf_content_type
                     or pdf_content[:4] == b"%PDF"
                 ):
+
+                    logger.info(
+                        "⚠️ Это не PDF: %s",
+                        pdf_url
+                    )
+
                     continue
 
-                pdf_text = extract_text_from_pdf(
-                    pdf_content
+                pdf_text = (
+                    extract_text_from_pdf(
+                        pdf_content
+                    )
                 )
 
                 if not pdf_text:
                     continue
 
                 logger.info(
-                    "📄 PDF извлечён: %s символов",
+                    "📄 PDF извлечён: "
+                    "%s символов",
                     len(pdf_text)
                 )
 
-                llm_data = analyze_company_with_groq(
-                    pdf_text,
-                    company,
-                    "PDF / Правила страхования"
+                llm_data = (
+                    analyze_company_with_groq(
+                        pdf_text,
+                        company,
+                        "PDF / Правила страхования"
+                    )
                 )
 
                 if llm_data:
 
                     for field in KASKO_FIELDS:
 
-                        final_data[field] = make_field_result(
-                            llm_data.get(
-                                field,
-                                "Не найдено"
-                            ),
-                            2,
-                            pdf_url
+                        final_data[field] = (
+                            make_field_result(
+                                llm_data.get(
+                                    field,
+                                    "Не найдено"
+                                ),
+                                2,
+                                pdf_url
+                            )
                         )
 
                     logger.info(
@@ -1547,19 +1759,18 @@ def collect_company_data(
 
             except Exception as exc:
 
-                # КЛЮЧЕВОЙ МОМЕНТ:
-                # ошибка одного PDF не ломает компанию
                 logger.exception(
-                    "❌ Ошибка при обработке PDF %s: %s",
+                    "❌ Ошибка при обработке PDF "
+                    "%s: %s",
                     pdf_url,
                     exc
                 )
 
                 continue
 
-    # --------------------------------------------------------
-    # 3. Если PDF не сработал — анализируем HTML
-    # --------------------------------------------------------
+    # ========================================================
+    # 3. HTML → GROQ
+    # ========================================================
 
     html_text = parse_html_page(
         html
@@ -1568,30 +1779,35 @@ def collect_company_data(
     if html_text:
 
         logger.info(
-            "🤖 Передаём HTML в Groq: %s | %s символов",
+            "🤖 Передаём HTML в Groq: "
+            "%s | %s символов",
             company,
             len(html_text)
         )
 
-        llm_data = analyze_company_with_groq(
-            html_text,
-            company,
-            "Сайт страховой"
+        llm_data = (
+            analyze_company_with_groq(
+                html_text,
+                company,
+                "Сайт страховой"
+            )
         )
 
         if llm_data:
 
             for field in KASKO_FIELDS:
 
-                final_data[field] = make_field_result(
-                    llm_data.get(
-                        field,
-                        "Не найдено"
-                    ),
-                    3,
-                    response.get(
-                        "url",
-                        source_url
+                final_data[field] = (
+                    make_field_result(
+                        llm_data.get(
+                            field,
+                            "Не найдено"
+                        ),
+                        3,
+                        response.get(
+                            "url",
+                            source_url
+                        )
                     )
                 )
 
@@ -1602,9 +1818,9 @@ def collect_company_data(
 
             return final_data
 
-    # --------------------------------------------------------
-    # 4. Полный провал только этой компании
-    # --------------------------------------------------------
+    # ========================================================
+    # 4. ПРОВАЛ ТОЛЬКО ЭТОЙ СТРАХОВОЙ
+    # ========================================================
 
     logger.error(
         "❌ НЕ УДАЛОСЬ СОБРАТЬ ДАННЫЕ: %s",
@@ -1627,215 +1843,337 @@ def collect_company_data(
 
 def collect_all_data() -> Dict[str, Any]:
 
-    logger.info("")
-    logger.info("#" * 70)
-    logger.info(
-        "🚀 НАЧИНАЕМ ПОЛНОЕ ОБНОВЛЕНИЕ"
-    )
-    logger.info("#" * 70)
-
-    companies = list(
-        COMPANY_SOURCES.keys()
-    )
-
-    result = {}
-
-    successful = 0
-    failed = 0
+    global UPDATE_RUNNING
 
     # --------------------------------------------------------
-    # Обрабатываем компании ПО ОДНОЙ
+    # Не допускаем два обновления одновременно
     # --------------------------------------------------------
 
-    for index, company in enumerate(
-        companies,
-        start=1
+    if not UPDATE_LOCK.acquire(
+        blocking=False
     ):
+
+        logger.warning(
+            "⚠️ Обновление уже выполняется."
+        )
+
+        return load_data()
+
+    UPDATE_RUNNING = True
+
+    try:
 
         logger.info("")
         logger.info(
-            "🏁 Компания %s из %s: %s",
-            index,
-            len(companies),
-            company
+            "#" * 70
+        )
+        logger.info(
+            "🚀 НАЧИНАЕМ ПОЛНОЕ ОБНОВЛЕНИЕ"
+        )
+        logger.info(
+            "#" * 70
         )
 
-        try:
-
-            company_data = collect_company_data(
-                company
-            )
-
-            # Проверяем, что вернулся словарь
-            if not isinstance(
-                company_data,
-                dict
-            ):
-                raise ValueError(
-                    "collect_company_data вернул "
-                    "не словарь"
-                )
-
-            result[company] = company_data
-
-            # Проверяем наличие хотя бы одного
-            # реально найденного поля
-            has_data = any(
-                isinstance(
-                    company_data.get(field),
-                    dict
-                )
-                and company_data[field].get(
-                    "value"
-                ) not in [
-                    None,
-                    "",
-                    "Не найдено"
-                ]
-                for field in KASKO_FIELDS
-            )
-
-            if has_data:
-                successful += 1
-                logger.info(
-                    "✅ Компания обработана: %s",
-                    company
-                )
-            else:
-                failed += 1
-                logger.warning(
-                    "⚠️ Компания обработана, "
-                    "но данных не найдено: %s",
-                    company
-                )
-
-        except Exception as exc:
-
-            # =================================================
-            # САМАЯ ВАЖНАЯ ЗАЩИТА
-            #
-            # Даже если внутри компании произойдёт
-            # непредвиденная ошибка, цикл НЕ остановится.
-            # =================================================
-
-            failed += 1
-
-            logger.exception(
-                "🔥 КРИТИЧЕСКАЯ ОШИБКА КОМПАНИИ %s: %s",
-                company,
-                exc
-            )
-
-            result[company] = {
-                field: make_field_result(
-                    "Не найдено",
-                    0,
-                    COMPANY_SOURCES.get(
-                        company,
-                        {}
-                    ).get(
-                        "url"
-                    )
-                )
-                for field in KASKO_FIELDS
-            }
+        companies = list(
+            COMPANY_SOURCES.keys()
+        )
 
         # ----------------------------------------------------
-        # СОХРАНЯЕМ ПОСЛЕ КАЖДОЙ КОМПАНИИ
+        # Загружаем старую базу.
+        #
+        # Она нужна для того, чтобы клиент не потерял
+        # уже существующие данные, пока идёт новый сбор.
         # ----------------------------------------------------
 
-        partial_result = dict(result)
+        old_data = load_data()
 
-        partial_result["_last_updated"] = (
+        result = {}
+
+        successful = 0
+        failed = 0
+
+        update_started = (
             datetime.now().strftime(
                 "%d.%m.%Y %H:%M:%S"
             )
         )
 
-        partial_result["_update_progress"] = {
-            "processed": index,
+        logger.info(
+            "🕐 Начало обновления: %s",
+            update_started
+        )
+
+        # ----------------------------------------------------
+        # Компании ПО ОДНОЙ
+        # ----------------------------------------------------
+
+        for index, company in enumerate(
+            companies,
+            start=1
+        ):
+
+            logger.info("")
+            logger.info(
+                "🏁 Компания %s из %s: %s",
+                index,
+                len(companies),
+                company
+            )
+
+            try:
+
+                company_data = (
+                    collect_company_data(
+                        company
+                    )
+                )
+
+                if not isinstance(
+                    company_data,
+                    dict
+                ):
+
+                    raise ValueError(
+                        "collect_company_data "
+                        "вернул не словарь"
+                    )
+
+                result[company] = (
+                    company_data
+                )
+
+                has_data = any(
+                    isinstance(
+                        company_data.get(
+                            field
+                        ),
+                        dict
+                    )
+                    and company_data[field].get(
+                        "value"
+                    ) not in [
+                        None,
+                        "",
+                        "Не найдено"
+                    ]
+                    for field in KASKO_FIELDS
+                )
+
+                if has_data:
+
+                    successful += 1
+
+                    logger.info(
+                        "✅ Компания обработана: %s",
+                        company
+                    )
+
+                else:
+
+                    failed += 1
+
+                    logger.warning(
+                        "⚠️ Компания обработана, "
+                        "но данных не найдено: %s",
+                        company
+                    )
+
+            except Exception as exc:
+
+                failed += 1
+
+                logger.exception(
+                    "🔥 КРИТИЧЕСКАЯ ОШИБКА "
+                    "КОМПАНИИ %s: %s",
+                    company,
+                    exc
+                )
+
+                result[company] = {
+                    field: make_field_result(
+                        "Не найдено",
+                        0,
+                        COMPANY_SOURCES.get(
+                            company,
+                            {}
+                        ).get(
+                            "url"
+                        )
+                    )
+                    for field in KASKO_FIELDS
+                }
+
+            # ------------------------------------------------
+            # ПРОМЕЖУТОЧНОЕ СОХРАНЕНИЕ
+            #
+            # ВАЖНО:
+            # _last_updated здесь НЕ меняем.
+            #
+            # Это значит, что дата на сайте показывает
+            # последнюю ПОЛНОСТЬЮ завершённую базу.
+            # ------------------------------------------------
+
+            partial_result = dict(
+                result
+            )
+
+            # Сохраняем старую дату,
+            # если она была.
+            if "_last_updated" in old_data:
+
+                partial_result[
+                    "_last_updated"
+                ] = old_data[
+                    "_last_updated"
+                ]
+
+            partial_result[
+                "_fields"
+            ] = KASKO_FIELDS
+
+            partial_result[
+                "_update_status"
+            ] = {
+                "running": True,
+                "started_at": update_started,
+                "processed": index,
+                "total": len(companies),
+                "successful": successful,
+                "failed": failed
+            }
+
+            try:
+
+                save_data(
+                    partial_result
+                )
+
+                logger.info(
+                    "💾 Промежуточные данные "
+                    "сохранены: %s/%s",
+                    index,
+                    len(companies)
+                )
+
+            except Exception as exc:
+
+                logger.exception(
+                    "⚠️ Не удалось сохранить "
+                    "промежуточные данные: %s",
+                    exc
+                )
+
+            # ------------------------------------------------
+            # ПАУЗА
+            # ------------------------------------------------
+
+            if index < len(companies):
+
+                wait_time = (
+                    2 +
+                    random.uniform(
+                        0.5,
+                        1.5
+                    )
+                )
+
+                logger.info(
+                    "⏳ Пауза %.1f сек. "
+                    "перед следующей компанией",
+                    wait_time
+                )
+
+                time.sleep(
+                    wait_time
+                )
+
+        # ====================================================
+        # ПОЛНОСТЬЮ ЗАВЕРШИЛИ ОБНОВЛЕНИЕ
+        # ====================================================
+
+        final_updated = (
+            datetime.now().strftime(
+                "%d.%m.%Y %H:%M:%S"
+            )
+        )
+
+        result[
+            "_last_updated"
+        ] = final_updated
+
+        result[
+            "_fields"
+        ] = KASKO_FIELDS
+
+        result[
+            "_update_status"
+        ] = {
+            "running": False,
+            "started_at": update_started,
+            "finished_at": final_updated,
+            "processed": len(companies),
             "total": len(companies),
             "successful": successful,
             "failed": failed
         }
 
-        try:
+        # ----------------------------------------------------
+        # Финальное сохранение
+        # ----------------------------------------------------
 
-            save_data(
-                partial_result
-            )
-
-            logger.info(
-                "💾 Промежуточные данные сохранены: "
-                "%s/%s",
-                index,
-                len(companies)
-            )
-
-        except Exception as exc:
-
-            logger.exception(
-                "⚠️ Не удалось сохранить промежуточные данные: %s",
-                exc
-            )
-
-        # Небольшая пауза между компаниями
-        # для снижения нагрузки и вероятности rate limit.
-        if index < len(companies):
-
-            wait_time = 2 + random.uniform(
-                0.5,
-                1.5
-            )
-
-            logger.info(
-                "⏳ Пауза %.1f сек. перед следующей компанией",
-                wait_time
-            )
-
-            time.sleep(
-                wait_time
-            )
-
-    # --------------------------------------------------------
-    # Финальная информация
-    # --------------------------------------------------------
-
-    result["_last_updated"] = (
-        datetime.now().strftime(
-            "%d.%m.%Y %H:%M:%S"
+        save_data(
+            result
         )
-    )
 
-    result["_fields"] = KASKO_FIELDS
+        logger.info("")
+        logger.info(
+            "#" * 70
+        )
+        logger.info(
+            "🏁 ОБНОВЛЕНИЕ ЗАВЕРШЕНО"
+        )
+        logger.info(
+            "Всего компаний: %s",
+            len(companies)
+        )
+        logger.info(
+            "Успешно: %s",
+            successful
+        )
+        logger.info(
+            "Без данных: %s",
+            failed
+        )
+        logger.info(
+            "Дата актуальности: %s",
+            final_updated
+        )
+        logger.info(
+            "#" * 70
+        )
 
-    result["_update_progress"] = {
-        "processed": len(companies),
-        "total": len(companies),
-        "successful": successful,
-        "failed": failed
-    }
+        return result
 
-    logger.info("")
-    logger.info("#" * 70)
-    logger.info(
-        "🏁 ОБНОВЛЕНИЕ ЗАВЕРШЕНО"
-    )
-    logger.info(
-        "Всего компаний: %s",
-        len(companies)
-    )
-    logger.info(
-        "Успешно: %s",
-        successful
-    )
-    logger.info(
-        "Без данных: %s",
-        failed
-    )
-    logger.info("#" * 70)
+    except Exception as exc:
 
-    return result
+        logger.exception(
+            "🔥 КРИТИЧЕСКАЯ ОШИБКА "
+            "ПОЛНОГО ОБНОВЛЕНИЯ: %s",
+            exc
+        )
+
+        # Если общий процесс упал,
+        # возвращаем уже имеющуюся базу.
+        return load_data()
+
+    finally:
+
+        UPDATE_RUNNING = False
+
+        try:
+            UPDATE_LOCK.release()
+        except Exception:
+            pass
 
 
 # ============================================================
@@ -1848,8 +2186,12 @@ def save_data(
 
     try:
 
+        temp_file = (
+            DATA_FILE + ".tmp"
+        )
+
         with open(
-            DATA_FILE,
+            temp_file,
             "w",
             encoding="utf-8"
         ) as file:
@@ -1860,6 +2202,15 @@ def save_data(
                 ensure_ascii=False,
                 indent=2
             )
+
+        # Атомарная замена файла.
+        # Это защищает от повреждённого JSON,
+        # если процесс внезапно завершится во время записи.
+
+        os.replace(
+            temp_file,
+            DATA_FILE
+        )
 
         return True
 
@@ -1902,6 +2253,7 @@ def load_data() -> Dict[str, Any]:
             data,
             dict
         ):
+
             return {}
 
         logger.info(
@@ -1928,6 +2280,77 @@ INSURANCE_DATA = load_data()
 
 
 # ============================================================
+# ФОНОВОЕ АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ
+# ============================================================
+
+def startup_update_worker():
+
+    global INSURANCE_DATA
+
+    logger.info("")
+    logger.info(
+        "🔄 Запущен автоматический сбор данных "
+        "при старте сервера."
+    )
+
+    try:
+
+        new_data = collect_all_data()
+
+        if isinstance(
+            new_data,
+            dict
+        ):
+
+            INSURANCE_DATA = new_data
+
+            logger.info(
+                "✅ Глобальная база данных "
+                "обновлена после запуска."
+            )
+
+        else:
+
+            logger.error(
+                "❌ Автоматическое обновление "
+                "вернуло некорректные данные."
+            )
+
+    except Exception as exc:
+
+        logger.exception(
+            "🔥 Ошибка автоматического "
+            "обновления при старте: %s",
+            exc
+        )
+
+
+def start_startup_update():
+
+    if not UPDATE_ON_START:
+
+        logger.info(
+            "ℹ️ Автоматическое обновление "
+            "при старте отключено."
+        )
+
+        return
+
+    logger.info(
+        "🚀 Планируем автоматическое "
+        "обновление базы..."
+    )
+
+    thread = threading.Thread(
+        target=startup_update_worker,
+        name="startup-data-update",
+        daemon=True
+    )
+
+    thread.start()
+
+
+# ============================================================
 # ROUTE: ГЛАВНАЯ
 # ============================================================
 
@@ -1941,16 +2364,29 @@ def index():
         COMPANY_SOURCES.keys()
     )
 
+    # Берём актуальное состояние базы
+    # непосредственно перед отображением.
+
+    current_data = INSURANCE_DATA
+
+    last_updated = current_data.get(
+        "_last_updated",
+        "Не обновлялось"
+    )
+
+    update_status = current_data.get(
+        "_update_status",
+        {}
+    )
+
     return render_template(
         "index.html",
         companies=companies,
         fields=KASKO_FIELDS,
         field_labels=FIELD_LABELS,
-        data=INSURANCE_DATA,
-        last_updated=INSURANCE_DATA.get(
-            "_last_updated",
-            "Не обновлялось"
-        ),
+        data=current_data,
+        last_updated=last_updated,
+        update_status=update_status,
         source_info=get_source_info
     )
 
@@ -1977,15 +2413,23 @@ def compare():
         COMPANY_SOURCES.keys()
     )
 
-    # Проверяем компании
     if not company1 or company1 not in companies:
-        return redirect("/")
+
+        return redirect(
+            "/"
+        )
 
     if not company2 or company2 not in companies:
-        return redirect("/")
+
+        return redirect(
+            "/"
+        )
 
     if company1 == company2:
-        return redirect("/")
+
+        return redirect(
+            "/"
+        )
 
     raw_data1 = INSURANCE_DATA.get(
         company1,
@@ -2003,9 +2447,9 @@ def compare():
     sources_detail1 = {}
     sources_detail2 = {}
 
-    # --------------------------------------------------------
-    # Компания 1
-    # --------------------------------------------------------
+    # ========================================================
+    # КОМПАНИЯ 1
+    # ========================================================
 
     for field in KASKO_FIELDS:
 
@@ -2070,9 +2514,9 @@ def compare():
                 f"{source_name}"
             )
 
-    # --------------------------------------------------------
-    # Компания 2
-    # --------------------------------------------------------
+    # ========================================================
+    # КОМПАНИЯ 2
+    # ========================================================
 
     for field in KASKO_FIELDS:
 
@@ -2137,10 +2581,14 @@ def compare():
                 f"{source_name}"
             )
 
-    # Эти поля пока не собираются LLM.
-    # Оставляем их, чтобы текущий result.html
-    # не ломался.
-    for data in [data1, data2]:
+    # ========================================================
+    # ДОПОЛНИТЕЛЬНЫЕ ПОЛЯ
+    # ========================================================
+
+    for data in [
+        data1,
+        data2
+    ]:
 
         data.setdefault(
             "advantages",
@@ -2162,28 +2610,32 @@ def compare():
             "Не указано"
         )
 
-    data1["_sources_detail"] = (
-        sources_detail1
+    data1[
+        "_sources_detail"
+    ] = sources_detail1
+
+    data2[
+        "_sources_detail"
+    ] = sources_detail2
+
+    source1_url = (
+        COMPANY_SOURCES.get(
+            company1,
+            {}
+        ).get(
+            "url",
+            "#"
+        )
     )
 
-    data2["_sources_detail"] = (
-        sources_detail2
-    )
-
-    source1_url = COMPANY_SOURCES.get(
-        company1,
-        {}
-    ).get(
-        "url",
-        "#"
-    )
-
-    source2_url = COMPANY_SOURCES.get(
-        company2,
-        {}
-    ).get(
-        "url",
-        "#"
+    source2_url = (
+        COMPANY_SOURCES.get(
+            company2,
+            {}
+        ).get(
+            "url",
+            "#"
+        )
     )
 
     sources1 = [
@@ -2213,54 +2665,7 @@ def compare():
 
 
 # ============================================================
-# ROUTE: ОБНОВЛЕНИЕ ДАННЫХ
-# ============================================================
-
-@app.route(
-    "/update",
-    methods=["GET", "POST"]
-)
-def update():
-
-    global INSURANCE_DATA
-
-    try:
-
-        new_data = collect_all_data()
-
-        # Даже если часть компаний не обработалась,
-        # сохраняем весь полученный результат.
-        if isinstance(
-            new_data,
-            dict
-        ):
-
-            INSURANCE_DATA = new_data
-
-            save_data(
-                INSURANCE_DATA
-            )
-
-        else:
-
-            logger.error(
-                "❌ collect_all_data вернул "
-                "неверный результат"
-            )
-
-    except Exception as exc:
-
-        # Дополнительная защита всего /update.
-        logger.exception(
-            "🔥 КРИТИЧЕСКАЯ ОШИБКА /update: %s",
-            exc
-        )
-
-    return redirect("/")
-
-
-# ============================================================
-# СОВМЕСТИМОСТЬ СО СТАРЫМИ URL
+# СТАРЫЕ URL
 # ============================================================
 
 @app.route(
@@ -2268,7 +2673,9 @@ def update():
 )
 def kasko():
 
-    return redirect("/")
+    return redirect(
+        "/"
+    )
 
 
 @app.route(
@@ -2276,11 +2683,31 @@ def kasko():
 )
 def casco():
 
-    return redirect("/")
+    return redirect(
+        "/"
+    )
 
 
 # ============================================================
-# ЗАПУСК
+# ЗАПУСК АВТООБНОВЛЕНИЯ
+# ============================================================
+
+# ВАЖНО:
+# Этот вызов происходит после объявления всех функций.
+#
+# При запуске Gunicorn:
+#
+#   gunicorn app:app
+#
+# сервер импортирует app.py,
+# запускается фоновый сбор,
+# а сайт продолжает работать.
+
+start_startup_update()
+
+
+# ============================================================
+# ЛОКАЛЬНЫЙ ЗАПУСК
 # ============================================================
 
 if __name__ == "__main__":
