@@ -183,7 +183,6 @@ def load_data() -> Dict[str, Any]:
     finally:
         conn.close()
 
-    # If a JSON snapshot is present, migrate it once into PostgreSQL.
     legacy = _load_json_fallback()
     if legacy:
         save_data(legacy)
@@ -269,6 +268,7 @@ def save_data(data: Dict[str, Any]) -> bool:
                         """
                         INSERT INTO conditions (field_id, value, source_type, source_url, checked_at, updated_at)
                         VALUES (%s, %s, %s, %s, %s, %s)
+                        RETURNING id
                         """,
                         (
                             field_id,
@@ -279,7 +279,9 @@ def save_data(data: Dict[str, Any]) -> bool:
                             now,
                         ),
                     )
+                    condition_id = cur.fetchone()[0]
 
+                    source_id = None
                     if source_url:
                         cur.execute(
                             """
@@ -294,12 +296,13 @@ def save_data(data: Dict[str, Any]) -> bool:
                         )
                         source_id = cur.fetchone()[0]
 
+                    if value is not None or source_id is not None:
                         cur.execute(
                             """
                             INSERT INTO evidence (condition_id, source_id, text_fragment, verification_status)
                             VALUES (%s, %s, %s, 'unverified')
                             """,
-                            (field_id, source_id, None if value is None else str(value)),
+                            (condition_id, source_id, None if value is None else str(value)),
                         )
 
         conn.commit()
