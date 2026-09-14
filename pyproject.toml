@@ -9,3 +9,6 @@ dependencies = [
   "PyPDF2",
   "pypdf",
 ]
+
+[tool.vercel]
+entrypoint = "vercel_entry:app"
