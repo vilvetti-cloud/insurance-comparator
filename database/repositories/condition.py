@@ -50,6 +50,7 @@ class ConditionRepository(BaseRepository):
     ) -> dict[str, Any]:
         if source_level is not None and source_level not in {1, 2, 3, 4}:
             raise ValueError("source_level must be between 1 and 4")
+
         current = self.fetch_one(
             """
             SELECT * FROM conditions
@@ -62,6 +63,12 @@ class ConditionRepository(BaseRepository):
         if current and source_level is not None and current.get("source_level") is not None:
             if current["source_level"] < source_level:
                 return current
+
+        if current:
+            self.execute(
+                "UPDATE conditions SET status = 'superseded', updated_at = NOW() WHERE id = %s",
+                (current["id"],),
+            )
 
         row = self.fetch_one(
             """
