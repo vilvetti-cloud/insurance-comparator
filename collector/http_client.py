@@ -9,9 +9,7 @@ import requests
 
 
 DEFAULT_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (compatible; InsuranceComparatorBot/1.0; +https://example.com/bot)"
-    ),
+    "User-Agent": "InsuranceComparatorBot/1.0 (+source-verification)",
     "Accept": "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.8",
 }
 
@@ -30,13 +28,16 @@ class FetchResult:
 
 
 class FetchError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class HttpFetcher:
-    def __init__(self, *, timeout: int = 20, retries: int = 2) -> None:
+    def __init__(self, *, timeout: int = 20, retries: int = 3, backoff: float = 1.5) -> None:
         self.timeout = timeout
-        self.retries = retries
+        self.retries = max(1, retries)
+        self.backoff = max(0.0, backoff)
         self.session = requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
 
@@ -46,13 +47,18 @@ class HttpFetcher:
             raise FetchError(f"Unsupported URL: {url}")
 
         last_error: Exception | None = None
-        for attempt in range(self.retries + 1):
+        for attempt in range(self.retries):
             try:
-                response = self.session.get(
-                    url,
-                    timeout=self.timeout,
-                    allow_redirects=True,
-                )
+                response = self.session.get(url, timeout=self.timeout, allow_redirects=True)
+                if response.status_code == 429 or response.status_code >= 500:
+                    if attempt + 1 < self.retries:
+                        time.sleep(self.backoff * (attempt + 1))
+                        continue
+                if response.status_code >= 400:
+                    raise FetchError(
+                        f"HTTP {response.status_code} for {url}",
+                        status_code=response.status_code,
+                    )
                 body = response.content
                 return FetchResult(
                     url=response.url,
@@ -61,9 +67,10 @@ class HttpFetcher:
                     body=body,
                     checksum=hashlib.sha256(body).hexdigest(),
                 )
+            except FetchError:
+                raise
             except requests.RequestException as exc:
                 last_error = exc
-                if attempt < self.retries:
-                    time.sleep(2**attempt)
-
+                if attempt + 1 < self.retries:
+                    time.sleep(self.backoff * (attempt + 1))
         raise FetchError(f"Failed to fetch {url}: {last_error}") from last_error
