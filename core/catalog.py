@@ -5,7 +5,7 @@ KASKO_FIELDS = (
     {"key": "without_certificates", "label": "Без справок", "category": "damage", "sort_order": 20},
     {"key": "gap", "label": "GAP-страхование", "category": "financial", "sort_order": 30},
     {"key": "total_loss", "label": "Порог тотала", "category": "total_loss", "sort_order": 40},
-    {"key": "fire", "label": "Пожар", "category": "risks", "sort_order": 50},
+    {"key": "self_ignition", "label": "Самовозгорание", "category": "risks", "sort_order": 50},
     {"key": "terrorism", "label": "Терроризм", "category": "risks", "sort_order": 60},
     {"key": "drone", "label": "БПЛА / Дроны", "category": "risks", "sort_order": 70},
     {"key": "tow_truck", "label": "Эвакуатор", "category": "assistance", "sort_order": 80},
@@ -17,6 +17,9 @@ PRODUCT_TYPES = {
     "insurance": "Страхование",
     "casco": "КАСКО",
     "osago": "ОСАГО",
+    "health": "ДМС",
+    "property": "Имущество",
+    "travel": "Путешествия",
 }
 
 VERIFICATION_STATUSES = {
@@ -33,5 +36,21 @@ SOURCE_TYPES = {
     "tariff",
     "pdf",
     "faq",
+    "web_search",
+    "fallback",
     "other",
+}
+
+SOURCE_LEVELS = {
+    1: "official_document",
+    2: "official_site",
+    3: "web_search",
+    4: "fallback",
+}
+
+SOURCE_LEVEL_NAMES = {
+    1: "PDF / официальный документ",
+    2: "Официальный сайт",
+    3: "Интернет-поиск",
+    4: "Внутренняя база",
 }
