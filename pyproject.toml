@@ -8,7 +8,8 @@ dependencies = [
   "beautifulsoup4",
   "PyPDF2",
   "pypdf",
+  "psycopg[binary]>=3.2,<4",
 ]
 
 [tool.vercel]
-entrypoint = "vercel_entry:app"
+entrypoint = "vercel_db_entry:app"
