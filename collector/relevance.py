@@ -32,7 +32,7 @@ class RelevanceSelector:
         self.window_lines = window_lines
         self.max_chunks_per_field = max_chunks_per_field
 
-    def select(self, text: str, *, max_total_chars: int = 30000) -> dict[str, list[TextChunk]]:
+    def select(self, text: str, *, max_total_chars: int = 18000) -> dict[str, list[TextChunk]]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         page_numbers = self._page_numbers(lines)
         result: dict[str, list[TextChunk]] = {}
@@ -52,15 +52,9 @@ class RelevanceSelector:
                 candidates.append(TextChunk(fragment, page_numbers.get(index), score))
             candidates.sort(key=lambda item: item.score, reverse=True)
             result[key] = self._dedupe(candidates[: self.max_chunks_per_field])
-
         return self._fit_budget(result, max_total_chars=max_total_chars)
 
-    def _fit_budget(
-        self,
-        grouped: dict[str, list[TextChunk]],
-        *,
-        max_total_chars: int,
-    ) -> dict[str, list[TextChunk]]:
+    def _fit_budget(self, grouped: dict[str, list[TextChunk]], *, max_total_chars: int) -> dict[str, list[TextChunk]]:
         output = {key: list(chunks) for key, chunks in grouped.items()}
         total = sum(len(chunk.text) for chunks in output.values() for chunk in chunks)
         while total > max_total_chars:
