@@ -35,24 +35,13 @@ CREATE TABLE IF NOT EXISTS comparison_fields (
     UNIQUE(product_id, field_key)
 );
 
-CREATE TABLE IF NOT EXISTS conditions (
-    id BIGSERIAL PRIMARY KEY,
-    field_id BIGINT NOT NULL REFERENCES comparison_fields(id) ON DELETE CASCADE,
-    value TEXT,
-    status TEXT NOT NULL DEFAULT 'active',
-    verification_status TEXT NOT NULL DEFAULT 'unverified',
-    checked_at TIMESTAMPTZ,
-    valid_from TIMESTAMPTZ,
-    valid_to TIMESTAMPTZ,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS sources (
     id BIGSERIAL PRIMARY KEY,
     company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     url TEXT NOT NULL,
     title TEXT,
     source_type TEXT NOT NULL DEFAULT 'official_site',
+    source_level SMALLINT NOT NULL DEFAULT 2 CHECK (source_level BETWEEN 1 AND 4),
     status TEXT NOT NULL DEFAULT 'active',
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_checked_at TIMESTAMPTZ,
@@ -73,6 +62,21 @@ CREATE TABLE IF NOT EXISTS documents (
     discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_checked_at TIMESTAMPTZ,
     UNIQUE(source_id, document_url)
+);
+
+CREATE TABLE IF NOT EXISTS conditions (
+    id BIGSERIAL PRIMARY KEY,
+    field_id BIGINT NOT NULL REFERENCES comparison_fields(id) ON DELETE CASCADE,
+    source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL,
+    value TEXT,
+    source_level SMALLINT CHECK (source_level BETWEEN 1 AND 4),
+    confidence NUMERIC(5,4),
+    status TEXT NOT NULL DEFAULT 'active',
+    verification_status TEXT NOT NULL DEFAULT 'unverified',
+    checked_at TIMESTAMPTZ,
+    valid_from TIMESTAMPTZ,
+    valid_to TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS evidence (
@@ -111,6 +115,31 @@ CREATE TABLE IF NOT EXISTS change_log (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS collection_runs (
+    id BIGSERIAL PRIMARY KEY,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ,
+    status TEXT NOT NULL DEFAULT 'running',
+    triggered_by TEXT,
+    companies_total INTEGER NOT NULL DEFAULT 0,
+    companies_success INTEGER NOT NULL DEFAULT 0,
+    companies_failed INTEGER NOT NULL DEFAULT 0,
+    error TEXT
+);
+
+CREATE TABLE IF NOT EXISTS collection_items (
+    id BIGSERIAL PRIMARY KEY,
+    run_id BIGINT NOT NULL REFERENCES collection_runs(id) ON DELETE CASCADE,
+    company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ,
+    source_count INTEGER NOT NULL DEFAULT 0,
+    document_count INTEGER NOT NULL DEFAULT 0,
+    fields_found INTEGER NOT NULL DEFAULT 0,
+    error TEXT
+);
+
 CREATE TABLE IF NOT EXISTS app_state (
     state_key TEXT PRIMARY KEY,
     payload JSONB NOT NULL,
@@ -120,11 +149,15 @@ CREATE TABLE IF NOT EXISTS app_state (
 CREATE INDEX IF NOT EXISTS idx_products_company ON products(company_id);
 CREATE INDEX IF NOT EXISTS idx_fields_product ON comparison_fields(product_id);
 CREATE INDEX IF NOT EXISTS idx_conditions_field ON conditions(field_id);
+CREATE INDEX IF NOT EXISTS idx_conditions_source_level ON conditions(field_id, source_level);
 CREATE INDEX IF NOT EXISTS idx_sources_company ON sources(company_id);
+CREATE INDEX IF NOT EXISTS idx_sources_level ON sources(company_id, source_level);
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_condition ON evidence(condition_id);
 CREATE INDEX IF NOT EXISTS idx_condition_versions_condition ON condition_versions(condition_id);
 CREATE INDEX IF NOT EXISTS idx_change_log_entity ON change_log(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_collection_items_run ON collection_items(run_id);
+CREATE INDEX IF NOT EXISTS idx_collection_items_company ON collection_items(company_id);
 
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS slug TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS short_name TEXT;
@@ -142,16 +175,20 @@ ALTER TABLE comparison_fields ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NU
 ALTER TABLE comparison_fields ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE comparison_fields ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
-ALTER TABLE conditions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
-ALTER TABLE conditions ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'unverified';
-ALTER TABLE conditions ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ;
-ALTER TABLE conditions ADD COLUMN IF NOT EXISTS valid_to TIMESTAMPTZ;
-
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS source_level SMALLINT NOT NULL DEFAULT 2;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS http_status INTEGER;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS checksum TEXT;
+
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL;
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS source_level SMALLINT;
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4);
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'unverified';
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ;
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS valid_to TIMESTAMPTZ;
 
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS document_id BIGINT REFERENCES documents(id) ON DELETE SET NULL;
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
