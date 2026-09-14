@@ -1,6 +1,5 @@
-"""Data collection and verification pipeline.
+"""Source collection and verification pipeline for insurance products."""
 
-The collector is intentionally separate from the web application. It will
-produce structured facts with source evidence instead of writing application
-HTML or a legacy JSON snapshot directly.
-"""
+from .pipeline import CascoCollectionPipeline, PipelineResult
+
+__all__ = ["CascoCollectionPipeline", "PipelineResult"]
