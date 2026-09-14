@@ -39,7 +39,6 @@ class CascoCollectionPipeline:
         self.selector = RelevanceSelector()
         self.llm = GroqExtractor()
         self.search = DuckDuckGoSearch()
-
         self.companies = CompanyRepository()
         self.products = ProductRepository()
         self.fields = ComparisonFieldRepository()
@@ -52,106 +51,47 @@ class CascoCollectionPipeline:
     def run(self, *, insurer_slugs: list[str] | None = None, triggered_by: str = "manual") -> PipelineResult:
         selected = [item for item in INSURERS if not insurer_slugs or item.slug in insurer_slugs]
         run = self.runs.start_run(triggered_by=triggered_by, companies_total=len(selected))
-        success = 0
-        failed = 0
-        found = 0
-
+        success = failed = found = 0
         try:
             for insurer in selected:
                 item = self._prepare_item(run["id"], insurer)
                 try:
                     result = self.collect_company(insurer)
-                    self.runs.finish_item(
-                        item["id"],
-                        status="success",
-                        source_count=result["source_count"],
-                        document_count=result["document_count"],
-                        fields_found=result["fields_found"],
-                    )
+                    self.runs.finish_item(item["id"], status="success", **result)
                     success += 1
                     found += result["fields_found"]
                 except Exception as exc:
                     failed += 1
                     self.runs.finish_item(item["id"], status="failed", error=str(exc)[:2000])
-
             status = "success" if failed == 0 else "partial" if success else "failed"
-            self.runs.finish_run(
-                run["id"],
-                status=status,
-                companies_success=success,
-                companies_failed=failed,
-            )
+            self.runs.finish_run(run["id"], status=status, companies_success=success, companies_failed=failed)
         except Exception as exc:
-            self.runs.finish_run(
-                run["id"],
-                status="failed",
-                companies_success=success,
-                companies_failed=failed,
-                error=str(exc)[:2000],
-            )
+            self.runs.finish_run(run["id"], status="failed", companies_success=success, companies_failed=failed, error=str(exc)[:2000])
             raise
-
         return PipelineResult(run["id"], success, failed, found)
 
     def collect_company(self, insurer: InsurerConfig) -> dict[str, int]:
-        company = self.companies.upsert(
-            name=insurer.name,
-            slug=insurer.slug,
-            short_name=insurer.short_name,
-            official_url=insurer.official_url,
-        )
-        product = self.products.upsert(
-            company_id=company["id"],
-            name="КАСКО",
-            slug="casco",
-            product_type="casco",
-        )
+        company = self.companies.upsert(name=insurer.name, slug=insurer.slug, short_name=insurer.short_name, official_url=insurer.official_url)
+        product = self.products.upsert(company_id=company["id"], name="КАСКО", slug="casco", product_type="casco")
         field_rows = {
-            field["key"]: self.fields.upsert(
-                product_id=product["id"],
-                field_key=field["key"],
-                label=field["label"],
-                category=field["category"],
-                sort_order=field["sort_order"],
-            )
+            field["key"]: self.fields.upsert(product_id=product["id"], field_key=field["key"], label=field["label"], category=field["category"], sort_order=field["sort_order"])
             for field in KASKO_FIELDS
         }
-
         found_fields: set[str] = set()
-        source_count = 0
-        document_count = 0
+        source_count = document_count = 0
 
-        # Level 1: official PDF/rules.
         try:
-            landing, discovered = self.discovery.discover_casco(
-                official_url=insurer.official_url,
-                casco_url=insurer.casco_url,
-            )
+            landing, discovered = self.discovery.discover_casco(official_url=insurer.official_url, casco_url=insurer.casco_url)
             source_count = len(discovered)
         except FetchError:
-            landing = None
-            discovered = []
+            landing, discovered = None, []
 
-        pdf_sources = [source for source in discovered if source.source_level == 1]
-        for source_info in pdf_sources[:3]:
+        # Level 1: official PDF/rules.
+        for source_info in [source for source in discovered if source.source_level == 1][:3]:
             try:
                 result = self.fetcher.fetch(source_info.url)
-                source = self.sources.upsert(
-                    company_id=company["id"],
-                    url=result.url,
-                    title=source_info.title,
-                    source_type="pdf",
-                    source_level=1,
-                    http_status=result.status_code,
-                    checksum=result.checksum,
-                    success=True,
-                )
-                document = self.documents.upsert(
-                    source_id=source["id"],
-                    document_url=result.url,
-                    title=source_info.title,
-                    checksum=result.checksum,
-                )
+                source = self.sources.upsert(company_id=company["id"], url=result.url, title=source_info.title, source_type="pdf", source_level=1, http_status=result.status_code, checksum=result.checksum, success=True)
+                document = self.documents.upsert(source_id=source["id"], document_url=result.url, title=source_info.title, checksum=result.checksum)
                 document_count += 1
                 extracted = self.extractor.extract(body=result.body, content_type=result.content_type)
                 grouped = self.selector.select(extracted.text)
@@ -164,22 +104,13 @@ class CascoCollectionPipeline:
 
         # Level 2: official HTML. Lower levels only fill unresolved fields.
         if landing is not None and not landing.body.lstrip().startswith(b"%PDF"):
-            source = self.sources.upsert(
-                company_id=company["id"],
-                url=landing.url,
-                title="Официальная страница КАСКО",
-                source_type="official_site",
-                source_level=2,
-                http_status=landing.status_code,
-                checksum=landing.checksum,
-                success=True,
-            )
+            source = self.sources.upsert(company_id=company["id"], url=landing.url, title="Официальная страница КАСКО", source_type="official_site", source_level=2, http_status=landing.status_code, checksum=landing.checksum, success=True)
             extracted = self.extractor.extract(body=landing.body, content_type=landing.content_type)
-            grouped = self.selector.select(extracted.text, max_total_chars=24000)
+            grouped = self.selector.select(extracted.text)
             values = self._extract_with_llm(insurer, landing.url, 2, grouped)
             found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
 
-        # Level 3: web search for only the still-unresolved parameters.
+        # Level 3: web search for unresolved parameters.
         missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
         if missing:
             search_text_parts: list[str] = []
@@ -192,19 +123,8 @@ class CascoCollectionPipeline:
                 except Exception:
                     continue
             if search_text_parts:
-                combined = "\n\n".join(search_text_parts)
-                grouped = self.selector.select(combined, max_total_chars=22000)
-                source = self.sources.upsert(
-                    company_id=company["id"],
-                    url=search_hits[0][0],
-                    title="DuckDuckGo result bundle",
-                    source_type="web_search",
-                    source_level=3,
-                    status="active",
-                    http_status=200,
-                    checksum=None,
-                    success=True,
-                )
+                grouped = self.selector.select("\n\n".join(search_text_parts))
+                source = self.sources.upsert(company_id=company["id"], url=search_hits[0][0], title="DuckDuckGo result bundle", source_type="web_search", source_level=3, http_status=200, success=True)
                 values = self._extract_with_llm(insurer, search_hits[0][0], 3, grouped)
                 found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
 
@@ -212,59 +132,22 @@ class CascoCollectionPipeline:
         return {"source_count": source_count, "document_count": document_count, "fields_found": len(found_fields)}
 
     def _prepare_item(self, run_id: int, insurer: InsurerConfig) -> dict[str, Any]:
-        company = self.companies.upsert(
-            name=insurer.name,
-            slug=insurer.slug,
-            short_name=insurer.short_name,
-            official_url=insurer.official_url,
-        )
+        company = self.companies.upsert(name=insurer.name, slug=insurer.slug, short_name=insurer.short_name, official_url=insurer.official_url)
         return self.runs.start_item(run_id=run_id, company_id=company["id"])
 
-    def _extract_with_llm(
-        self,
-        insurer: InsurerConfig,
-        source_url: str,
-        source_level: int,
-        grouped: dict[str, list[TextChunk]],
-    ) -> dict[str, dict[str, Any]]:
-        return self.llm.extract(
-            company_name=insurer.name,
-            source_url=source_url,
-            source_level=source_level,
-            grouped_chunks=grouped,
-        )
+    def _extract_with_llm(self, insurer: InsurerConfig, source_url: str, source_level: int, grouped: dict[str, list[TextChunk]]) -> dict[str, dict[str, Any]]:
+        return self.llm.extract(company_name=insurer.name, source_url=source_url, source_level=source_level, grouped_chunks=grouped)
 
-    def _persist_values(
-        self,
-        values: dict[str, dict[str, Any]],
-        field_rows: dict[str, dict[str, Any]],
-        *,
-        source: dict[str, Any],
-        document: dict[str, Any] | None,
-    ) -> set[str]:
+    def _persist_values(self, values: dict[str, dict[str, Any]], field_rows: dict[str, dict[str, Any]], *, source: dict[str, Any], document: dict[str, Any] | None) -> set[str]:
         found: set[str] = set()
         for field in KASKO_FIELDS:
             key = field["key"]
             value = values.get(key, {})
             if not value.get("found") or not value.get("value"):
                 continue
-            condition = self.conditions.save_candidate(
-                field_id=field_rows[key]["id"],
-                value=value["value"],
-                source_id=source["id"],
-                source_level=source["source_level"],
-                confidence=value.get("confidence"),
-                verification_status="needs_review",
-            )
+            condition = self.conditions.save_candidate(field_id=field_rows[key]["id"], value=value["value"], source_id=source["id"], source_level=source["source_level"], confidence=value.get("confidence"), verification_status="needs_review")
             # A stronger source may already own the field. Never attach weaker evidence to it.
             if condition.get("source_id") == source["id"]:
-                self.evidence.add(
-                    condition_id=condition["id"],
-                    source_id=source["id"],
-                    document_id=document["id"] if document else None,
-                    page_number=value.get("page"),
-                    text_fragment=value.get("quote"),
-                    verification_status="needs_review",
-                )
+                self.evidence.add(condition_id=condition["id"], source_id=source["id"], document_id=document["id"] if document else None, page_number=value.get("page"), text_fragment=value.get("quote"), verification_status="needs_review")
             found.add(key)
         return found
