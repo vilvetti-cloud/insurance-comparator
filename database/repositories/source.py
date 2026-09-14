@@ -20,7 +20,7 @@ class SourceRepository(BaseRepository):
             """
             SELECT * FROM sources
             WHERE company_id = %s
-            ORDER BY last_checked_at DESC NULLS LAST, id
+            ORDER BY source_level, last_checked_at DESC NULLS LAST, id
             """,
             (company_id,),
         )
@@ -32,21 +32,25 @@ class SourceRepository(BaseRepository):
         url: str,
         title: str | None = None,
         source_type: str = "official_site",
+        source_level: int = 2,
         status: str = "active",
         http_status: int | None = None,
         checksum: str | None = None,
         success: bool = False,
     ) -> dict[str, Any]:
+        if source_level not in {1, 2, 3, 4}:
+            raise ValueError("source_level must be between 1 and 4")
         row = self.fetch_one(
             """
             INSERT INTO sources
-                (company_id, url, title, source_type, status, http_status, checksum,
+                (company_id, url, title, source_type, source_level, status, http_status, checksum,
                  last_checked_at, last_success_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(),
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(),
                     CASE WHEN %s THEN NOW() ELSE NULL END)
             ON CONFLICT (company_id, url) DO UPDATE SET
                 title = COALESCE(EXCLUDED.title, sources.title),
                 source_type = EXCLUDED.source_type,
+                source_level = EXCLUDED.source_level,
                 status = EXCLUDED.status,
                 http_status = EXCLUDED.http_status,
                 checksum = EXCLUDED.checksum,
@@ -62,6 +66,7 @@ class SourceRepository(BaseRepository):
                 url,
                 title,
                 source_type,
+                source_level,
                 status,
                 http_status,
                 checksum,
