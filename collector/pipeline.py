@@ -5,6 +5,7 @@ from typing import Any
 
 from collector.discovery import SourceDiscovery
 from collector.document_extractor import DocumentExtractor
+from collector.fallback import InternalFallback
 from collector.http_client import FetchError, HttpFetcher
 from collector.llm import GroqExtractor, LLMExtractionError
 from collector.registry import INSURERS, InsurerConfig
@@ -39,6 +40,7 @@ class CascoCollectionPipeline:
         self.selector = RelevanceSelector()
         self.llm = GroqExtractor()
         self.search = DuckDuckGoSearch()
+        self.fallback = InternalFallback()
         self.companies = CompanyRepository()
         self.products = ProductRepository()
         self.fields = ComparisonFieldRepository()
@@ -128,7 +130,29 @@ class CascoCollectionPipeline:
                 values = self._extract_with_llm(insurer, search_hits[0][0], 3, grouped)
                 found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
 
-        # Level 4 is intentionally empty until a curated internal fallback is supplied.
+        # Level 4: optional curated fallback, only for fields still unresolved.
+        missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
+        if missing:
+            fallback_values = self.fallback.get(insurer.slug)
+            if fallback_values:
+                source = self.sources.upsert(
+                    company_id=company["id"],
+                    url=f"internal://fallback/{insurer.slug}",
+                    title="Curated internal fallback",
+                    source_type="fallback",
+                    source_level=4,
+                    status="active",
+                    success=True,
+                )
+                normalized: dict[str, dict[str, Any]] = {}
+                for key in missing:
+                    raw = fallback_values.get(key)
+                    if isinstance(raw, dict):
+                        normalized[key] = raw
+                    elif raw is not None:
+                        normalized[key] = {"value": str(raw), "found": True, "confidence": 0.5, "quote": str(raw), "page": None}
+                found_fields.update(self._persist_values(normalized, field_rows, source=source, document=None))
+
         return {"source_count": source_count, "document_count": document_count, "fields_found": len(found_fields)}
 
     def _prepare_item(self, run_id: int, insurer: InsurerConfig) -> dict[str, Any]:
