@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -158,20 +156,13 @@ class CascoCollectionPipeline:
                 extracted = self.extractor.extract(body=result.body, content_type=result.content_type)
                 grouped = self.selector.select(extracted.text)
                 values = self._extract_with_llm(insurer, result.url, 1, grouped)
-                found_fields.update(
-                    self._persist_values(
-                        values,
-                        field_rows,
-                        source=source,
-                        document=document,
-                    )
-                )
+                found_fields.update(self._persist_values(values, field_rows, source=source, document=document))
                 if len(found_fields) == len(KASKO_FIELDS):
                     return {"source_count": source_count, "document_count": document_count, "fields_found": len(found_fields)}
             except (FetchError, LLMExtractionError, ValueError):
                 continue
 
-        # Level 2: official HTML. Only missing fields are allowed to be filled.
+        # Level 2: official HTML. Lower levels only fill unresolved fields.
         if landing is not None and not landing.body.lstrip().startswith(b"%PDF"):
             source = self.sources.upsert(
                 company_id=company["id"],
@@ -218,7 +209,6 @@ class CascoCollectionPipeline:
                 found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
 
         # Level 4 is intentionally empty until a curated internal fallback is supplied.
-        # It must never override levels 1-3.
         return {"source_count": source_count, "document_count": document_count, "fields_found": len(found_fields)}
 
     def _prepare_item(self, run_id: int, insurer: InsurerConfig) -> dict[str, Any]:
@@ -266,15 +256,15 @@ class CascoCollectionPipeline:
                 confidence=value.get("confidence"),
                 verification_status="needs_review",
             )
-            quote = value.get("quote")
-            page = value.get("page")
-            self.evidence.add(
-                condition_id=condition["id"],
-                source_id=source["id"],
-                document_id=document["id"] if document else None,
-                page_number=page,
-                text_fragment=quote,
-                verification_status="needs_review",
-            )
+            # A stronger source may already own the field. Never attach weaker evidence to it.
+            if condition.get("source_id") == source["id"]:
+                self.evidence.add(
+                    condition_id=condition["id"],
+                    source_id=source["id"],
+                    document_id=document["id"] if document else None,
+                    page_number=value.get("page"),
+                    text_fragment=value.get("quote"),
+                    verification_status="needs_review",
+                )
             found.add(key)
         return found
