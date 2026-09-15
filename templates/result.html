@@ -1,18 +1,62 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{{ company1 }} vs {{ company2 }}</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{{ company1 }} vs {{ company2 }}</title>
 <style>
-:root{--green:#009639;--lime:#43B02A;--ink:#12231c;--muted:#64736b;--glass:rgba(255,255,255,.7)}*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:radial-gradient(circle at 10% 5%,rgba(67,176,42,.17),transparent 32%),radial-gradient(circle at 90% 75%,rgba(0,150,57,.13),transparent 35%),linear-gradient(135deg,#eef7f1,#f7faf8);padding:24px 16px}.wrap{width:min(1080px,100%);margin:auto}.nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px}.brand{font-weight:800;letter-spacing:-.03em}.back{color:#64736b;text-decoration:none;font-size:13px;font-weight:700}.back:hover{color:var(--green)}.hero{margin-bottom:24px}.eyebrow{display:inline-flex;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.48);border:1px solid rgba(0,150,57,.14);color:var(--green);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.hero h1{font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:-.055em;margin:14px 0 9px}.hero p{color:var(--muted);margin:0}.summary{display:grid;grid-template-columns:1fr auto;gap:18px;margin-bottom:18px}.glass{background:var(--glass);border:1px solid rgba(255,255,255,.72);border-radius:24px;box-shadow:0 24px 70px rgba(22,57,39,.1),inset 0 1px 0 rgba(255,255,255,.9);backdrop-filter:blur(25px);-webkit-backdrop-filter:blur(25px)}.win{padding:24px}.win-label{font-size:12px;color:var(--muted);font-weight:700}.win strong{display:block;font-size:28px;letter-spacing:-.035em;margin-top:6px}.score{padding:24px;text-align:center;min-width:150px}.score strong{display:block;font-size:36px;color:var(--green);letter-spacing:-.05em}.score span{font-size:11px;color:var(--muted)}.table-card{padding:10px;overflow:hidden}table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}th,td{padding:15px 14px;text-align:left;border-bottom:1px solid rgba(70,101,84,.09)}th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#718078;background:rgba(255,255,255,.35)}th:first-child{border-radius:15px 0 0 0}th:last-child{border-radius:0 15px 0 0}.param{font-weight:800;width:25%;color:#385146}.value{line-height:1.4}.info-btn{color:var(--green);cursor:help;margin-left:5px;font-weight:800}.sources{margin-top:18px;padding:20px}.sources strong{font-size:13px}.sources a{color:var(--green);word-break:break-all}.source-row{font-size:12px;color:#65736c;margin-top:8px}.footer{display:flex;justify-content:space-between;align-items:center;margin-top:18px}.btn{display:inline-flex;padding:13px 18px;border-radius:14px;text-decoration:none;color:white;font-weight:800;font-size:13px;background:linear-gradient(135deg,var(--lime),var(--green));box-shadow:0 12px 25px rgba(0,150,57,.2)}.note{font-size:11px;color:#849089}@media(max-width:720px){body{padding:16px 12px}.summary{grid-template-columns:1fr}.score{min-width:0}.table-card{padding:5px;overflow-x:auto}table{min-width:650px}.footer{align-items:flex-start;gap:12px;flex-direction:column}}
-</style></head>
-<body><div class="wrap">
+:root{--green:#009639;--lime:#43B02A;--ink:#12231c;--muted:#64736b;--glass:rgba(255,255,255,.7)}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:radial-gradient(circle at 10% 5%,rgba(67,176,42,.17),transparent 32%),radial-gradient(circle at 90% 75%,rgba(0,150,57,.13),transparent 35%),linear-gradient(135deg,#eef7f1,#f7faf8);padding:24px 16px}
+.wrap{width:min(1080px,100%);margin:auto}
+.nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px}
+.brand{font-weight:800;letter-spacing:-.03em}
+.back{color:#64736b;text-decoration:none;font-size:13px;font-weight:700}
+.back:hover{color:var(--green)}
+.hero{margin-bottom:24px}
+.eyebrow{display:inline-flex;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.48);border:1px solid rgba(0,150,57,.14);color:var(--green);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.hero h1{font-size:clamp(32px,5vw,54px);line-height:1;letter-spacing:-.055em;margin:14px 0 9px}
+.hero p{color:var(--muted);margin:0}
+.summary{display:grid;grid-template-columns:1fr auto;gap:18px;margin-bottom:18px}
+.glass{background:var(--glass);border:1px solid rgba(255,255,255,.72);border-radius:24px;box-shadow:0 24px 70px rgba(22,57,39,.1),inset 0 1px 0 rgba(255,255,255,.9);backdrop-filter:blur(25px);-webkit-backdrop-filter:blur(25px)}
+.win{padding:24px}.win-label{font-size:12px;color:var(--muted);font-weight:700}.win strong{display:block;font-size:28px;letter-spacing:-.035em;margin-top:6px}
+.score{padding:24px;text-align:center;min-width:150px}.score strong{display:block;font-size:36px;color:var(--green);letter-spacing:-.05em}.score span{font-size:11px;color:var(--muted)}
+.table-card{padding:10px;overflow:hidden}table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}th,td{padding:15px 14px;text-align:left;border-bottom:1px solid rgba(70,101,84,.09)}th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#718078;background:rgba(255,255,255,.35)}th:first-child{border-radius:15px 0 0 0}th:last-child{border-radius:0 15px 0 0}.param{font-weight:800;width:25%;color:#385146}.value{line-height:1.4}.info-btn{color:var(--green);cursor:help;margin-left:5px;font-weight:800}
+.sources{margin-top:18px;padding:20px}.sources strong{font-size:13px}.sources a{color:var(--green);word-break:break-all}.source-row{font-size:12px;color:#65736c;margin-top:8px}
+.footer{display:flex;justify-content:space-between;align-items:center;margin-top:18px}.btn{display:inline-flex;padding:13px 18px;border-radius:14px;text-decoration:none;color:white;font-weight:800;font-size:13px;background:linear-gradient(135deg,var(--lime),var(--green));box-shadow:0 12px 25px rgba(0,150,57,.2)}.note{font-size:11px;color:#849089}
+@media(max-width:720px){body{padding:16px 12px}.summary{grid-template-columns:1fr}.score{min-width:0}.table-card{padding:5px;overflow-x:auto}table{min-width:650px}.footer{align-items:flex-start;gap:12px;flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="wrap">
 <nav class="nav"><div class="brand">Страховой аналитик</div><a class="back" href="/">← Новое сравнение</a></nav>
 <section class="hero"><div class="eyebrow">Результат сравнения</div><h1>{{ company1 }} <span style="color:#8b9992">vs</span> {{ company2 }}</h1><p>Сравнение условий для подготовки сильной позиции вашей страховой в продаже.</p></section>
 <div class="summary"><div class="glass win"><div class="win-label">Фокус продажи</div><strong>Почему клиенту стоит выбрать {{ company1 }}?</strong></div><div class="glass score"><strong>{{ company1 }}</strong><span>основная компания</span></div></div>
-<div class="glass table-card"><table><thead><tr><th class="param">Параметр</th><th>{{ company1 }}</th><th>{{ company2 }}</th></tr></thead><tbody>
-{% set fields=[('franchise','Франшиза'),('without_certificates','Без справок'),('gap','GAP-страхование'),('total_loss','Порог тотала'),('fire','Самовозгорание'),('terrorism','Терроризм'),('drone','БПЛА / Дроны'),('tow_truck','Эвакуатор'),('repair_type','Тип ремонта'),('payment_terms','Срок выплат'),('advantages','Преимущества'),('weak_points','Недостатки'),('rating','Рейтинг'),('offices','Офисы')] %}
-{% for key,label in fields %}<tr><td class="param">{{ label }}</td><td class="value">{{ data1.get(key,'—') }} <span class="info-btn" title="Источник: {{ data1._sources_detail.get(key,'Запасная база') }}">ⓘ</span></td><td class="value">{{ data2.get(key,'—') }} <span class="info-btn" title="Источник: {{ data2._sources_detail.get(key,'Запасная база') }}">ⓘ</span></td></tr>{% endfor %}
-</tbody></table></div>
-<div class="glass sources"><strong>Источники данных</strong><div class="source-row">{{ company1 }}: <a href="{{ sources1[0] }}" target="_blank" rel="noopener">{{ sources1[0] }}</a></div><div class="source-row">{{ company2 }}: <a href="{{ sources2[0] }}" target="_blank" rel="noopener">{{ sources2[0] }}</a></div></div>
+<div class="glass table-card">
+<table>
+<thead><tr><th class="param">Параметр</th><th>{{ company1 }}</th><th>{{ company2 }}</th></tr></thead>
+<tbody>
+{% set fields=[('franchise','Франшиза'),('without_certificates','Без справок'),('gap','GAP-страхование'),('total_loss','Порог тотала'),('fire','Самовозгорание'),('terrorism','Терроризм'),('drone','БПЛА / Дроны'),('tow_truck','Эвакуатор'),('repair_type','Тип ремонта'),('payment_terms','Срок выплат')] %}
+{% for key,label in fields %}
+<tr>
+<td class="param">{{ label }}</td>
+<td class="value">{{ data1.get(key,'Не найдено') }}{% if data1.get(key + '_url') %} <span class="info-btn" title="Источник: {{ data1.get(key + '_url') }}">ⓘ</span>{% endif %}</td>
+<td class="value">{{ data2.get(key,'Не найдено') }}{% if data2.get(key + '_url') %} <span class="info-btn" title="Источник: {{ data2.get(key + '_url') }}">ⓘ</span>{% endif %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+<div class="glass sources">
+<strong>Источники данных</strong>
+{% set ns1 = namespace(url=None) %}
+{% for key,label in fields %}{% if not ns1.url and data1.get(key + '_url') %}{% set ns1.url = data1.get(key + '_url') %}{% endif %}{% endfor %}
+{% set ns2 = namespace(url=None) %}
+{% for key,label in fields %}{% if not ns2.url and data2.get(key + '_url') %}{% set ns2.url = data2.get(key + '_url') %}{% endif %}{% endfor %}
+<div class="source-row">{{ company1 }}: {% if ns1.url %}<a href="{{ ns1.url }}" target="_blank" rel="noopener">{{ ns1.url }}</a>{% else %}Источник не указан{% endif %}</div>
+<div class="source-row">{{ company2 }}: {% if ns2.url %}<a href="{{ ns2.url }}" target="_blank" rel="noopener">{{ ns2.url }}</a>{% else %}Источник не указан{% endif %}</div>
+</div>
 <div class="footer"><a class="btn" href="/">← Подготовить другое сравнение</a><span class="note">ⓘ Наведите на значок у значения, чтобы увидеть источник.</span></div>
-</div></body></html>
+</div>
+</body>
+</html>
