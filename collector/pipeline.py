@@ -274,9 +274,9 @@ class CascoCollectionPipeline:
             grouped = self.selector.select_fields(
                 text,
                 field_keys=batch,
-                max_total_chars=36000,
-                window_lines=9,
-                max_chunks_per_field=6,
+                max_total_chars=18000,
+                window_lines=7,
+                max_chunks_per_field=4,
             )
             if not any(grouped.get(key) for key in batch):
                 continue
@@ -292,6 +292,19 @@ class CascoCollectionPipeline:
                     result[key] = values[key]
 
         return result
+
+    def _current_keys_for_source(
+        self,
+        *,
+        field_rows: dict[str, dict[str, Any]],
+        source_id: int,
+    ) -> set[str]:
+        current: set[str] = set()
+        for key, field_row in field_rows.items():
+            condition = self.conditions.get_current(field_row["id"])
+            if condition and condition.get("source_id") == source_id:
+                current.add(key)
+        return current
 
     def _collect_configured_official_docs(
         self,
@@ -379,7 +392,12 @@ class CascoCollectionPipeline:
 
             # rules_url is a curated catalog entry: the document has already
             # been confirmed as the insurer's official current CASCO rules.
-            extracted = self.extractor.extract(body=fetched.body, content_type=fetched.content_type)
+            existing_source = self.sources.get_by_url(company["id"], fetched.url)
+            unchanged = bool(
+                existing_source
+                and existing_source.get("checksum")
+                and existing_source.get("checksum") == fetched.checksum
+            )
 
             source = self.sources.upsert(
                 company_id=company["id"],
@@ -397,18 +415,47 @@ class CascoCollectionPipeline:
                 title="Официальные правила КАСКО",
                 checksum=fetched.checksum,
             )
+
+            # If the official PDF bytes did not change, facts already extracted
+            # from this exact source cannot have changed either. Reuse them and
+            # spend LLM calls only on fields that have never been extracted
+            # from this rulebook.
+            already_from_rules = (
+                self._current_keys_for_source(
+                    field_rows=field_rows,
+                    source_id=source["id"],
+                )
+                if unchanged
+                else set()
+            )
+            missing_from_rules = [
+                field["key"]
+                for field in KASKO_FIELDS
+                if field["key"] not in already_from_rules
+            ]
+            if not missing_from_rules:
+                return already_from_rules, 1, 1
+
+            extracted = self.extractor.extract(
+                body=fetched.body,
+                content_type=fetched.content_type,
+            )
             values = self._deep_extract_official(
                 insurer=insurer,
                 source_url=fetched.url,
                 source_level=1,
                 text=extracted.text,
-                field_keys=[field["key"] for field in KASKO_FIELDS],
+                field_keys=missing_from_rules,
             )
-            found = self._persist_values(
-                values,
-                field_rows,
-                source=source,
-                document=document,
+            found = set(already_from_rules)
+            found.update(
+                self._persist_values(
+                    values,
+                    field_rows,
+                    source=source,
+                    document=document,
+                    allowed_keys=set(missing_from_rules),
+                )
             )
             return found, 1, 1
         except (FetchError, LLMExtractionError, ValueError):
