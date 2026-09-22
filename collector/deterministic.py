@@ -48,7 +48,14 @@ class DeterministicCascoExtractor:
         sentence = self._best_sentence(
             chunks,
             required=(r"франшиз",),
-            positive=(r"безуслов", r"условн", r"размер", r"d+s*%", r"d+s*(?:руб|₽)", r"примен"),
+            positive=(
+                r"безуслов",
+                r"условн",
+                r"размер",
+                r"\d+\s*%",
+                r"\d+\s*(?:руб|₽)",
+                r"примен",
+            ),
         )
         return self._direct(sentence, 0.97)
 
@@ -56,9 +63,9 @@ class DeterministicCascoExtractor:
         sentence = self._best_sentence(
             chunks,
             required=(
-                r"безs+(?:предоставленияs+)?(?:справ|документ)",
-                r"предоставленw*s+документw*s+неs+явля",
-                r"документw*s+неs+треб",
+                r"без\s+(?:предоставления\s+)?(?:справ|документ)",
+                r"предоставлен\w*\s+документ\w*\s+не\s+явля",
+                r"документ\w*\s+не\s+треб",
             ),
             positive=(r"повреж", r"стекл", r"элемент", r"страхов", r"обратит"),
         )
@@ -67,7 +74,7 @@ class DeterministicCascoExtractor:
     def _extract_gap(self, chunks: list[TextChunk]) -> dict | None:
         sentence = self._best_sentence(
             chunks,
-            required=(r"gap", r"гэп", r"guaranteeds+assets+protection"),
+            required=(r"\bgap\b", r"гэп", r"guaranteed\s+asset\s+protection"),
             positive=(r"стоим", r"утрат", r"уничтож", r"гибел", r"хищен", r"возмещ"),
         )
         return self._direct(sentence, 0.96)
@@ -76,9 +83,9 @@ class DeterministicCascoExtractor:
         for chunk in chunks:
             text = self._clean(chunk.text)
             patterns = (
-                r"(?:полная|конструктивнw*)s+гибелw*[^%]{0,420}?(d{2,3}(?:[.,]d+)?)s*%",
-                r"стоимw*s+восстановительнw*s+ремонтw*[^%]{0,300}?(d{2,3}(?:[.,]d+)?)s*%[^.]{0,220}?(?:страховw*s+сумм|стоим)",
-                r"(d{2,3}(?:[.,]d+)?)s*%[^.]{0,260}?(?:полной|конструктивнw*)s+гибел",
+                r"(?:полная|конструктивн\w*)\s+гибел\w*[^%]{0,420}?(\d{2,3}(?:[.,]\d+)?)\s*%",
+                r"стоим\w*\s+восстановительн\w*\s+ремонт\w*[^%]{0,300}?(\d{2,3}(?:[.,]\d+)?)\s*%[^.]{0,220}?(?:страхов\w*\s+сумм|стоим)",
+                r"(\d{2,3}(?:[.,]\d+)?)\s*%[^.]{0,260}?(?:полной|конструктивн\w*)\s+гибел",
             )
             for pattern in patterns:
                 match = re.search(pattern, text, re.IGNORECASE)
@@ -98,7 +105,7 @@ class DeterministicCascoExtractor:
         sentence = self._best_sentence(
             chunks,
             required=(r"самовозгор", r"возгоран", r"пожар"),
-            positive=(r"страхов", r"риск", r"ущерб", r"покрыв", r"исключ", r"неs+явля"),
+            positive=(r"страхов", r"риск", r"ущерб", r"покрыв", r"исключ", r"не\s+явля"),
         )
         return self._direct(sentence, 0.95)
 
@@ -106,14 +113,14 @@ class DeterministicCascoExtractor:
         sentence = self._best_sentence(
             chunks,
             required=(r"террор", r"диверси"),
-            positive=(r"страхов", r"риск", r"ущерб", r"покрыв", r"исключ", r"неs+явля", r"возмещ"),
+            positive=(r"страхов", r"риск", r"ущерб", r"покрыв", r"исключ", r"не\s+явля", r"возмещ"),
         )
         return self._direct(sentence, 0.95)
 
     def _extract_drone(self, chunks: list[TextChunk]) -> dict | None:
         sentence = self._best_sentence(
             chunks,
-            required=(r"бпла", r"дрон", r"беспилот"),
+            required=(r"\bбпла\b", r"дрон", r"беспилот"),
             positive=(r"ущерб", r"повреж", r"паден", r"атак", r"страхов", r"риск", r"покрыв"),
         )
         return self._direct(sentence, 0.95)
@@ -122,7 +129,7 @@ class DeterministicCascoExtractor:
         sentence = self._best_sentence(
             chunks,
             required=(r"эвакуатор", r"эвакуац"),
-            positive=(r"расход", r"возмещ", r"оплат", r"предостав", r"транспортир", r"лимит", r"d+"),
+            positive=(r"расход", r"возмещ", r"оплат", r"предостав", r"транспортир", r"лимит", r"\d+"),
         )
         return self._direct(sentence, 0.96)
 
@@ -130,29 +137,29 @@ class DeterministicCascoExtractor:
         sentence = self._best_sentence(
             chunks,
             required=(
-                r"стоа",
-                r"станциw*s+техническw*s+обслуж",
-                r"официальнw*s+дилер",
-                r"направленw*s+наs+ремонт",
-                r"денежнw*s+форм",
+                r"\bстоа\b",
+                r"станци\w*\s+техническ\w*\s+обслуж",
+                r"официальн\w*\s+дилер",
+                r"направлен\w*\s+на\s+ремонт",
+                r"денежн\w*\s+форм",
             ),
             positive=(r"возмещ", r"форма", r"ремонт", r"страховщик", r"осуществ"),
-            negative=(r"уступк", r"правоs+требован", r"цесси"),
+            negative=(r"уступк", r"право\s+требован", r"цесси"),
         )
         return self._direct(sentence, 0.95)
 
     def _extract_payment_terms(self, chunks: list[TextChunk]) -> dict | None:
         sentence = self._best_sentence(
             chunks,
-            required=(r"d+s*(?:рабочw*s+|календарнw*s+)?дн",),
+            required=(r"\d+\s*(?:рабоч\w*\s+|календарн\w*\s+)?дн",),
             positive=(
-                r"страховw*s+выплат",
-                r"страховw*s+возмещ",
+                r"страхов\w*\s+выплат",
+                r"страхов\w*\s+возмещ",
                 r"выплатить",
-                r"осуществленw*s+выплат",
-                r"направленw*s+наs+ремонт",
+                r"осуществлен\w*\s+выплат",
+                r"направлен\w*\s+на\s+ремонт",
             ),
-            negative=(r"возвратw*s+прем", r"периодw*s+охлажд", r"расторжен"),
+            negative=(r"возврат\w*\s+прем", r"период\w*\s+охлажд", r"расторжен"),
         )
         return self._direct(sentence, 0.97)
 
@@ -168,16 +175,21 @@ class DeterministicCascoExtractor:
         for chunk in chunks:
             for sentence in self._sentences(chunk):
                 lowered = sentence.text.lower()
-                if not any(re.search(pattern, lowered, re.IGNORECASE) for pattern in required):
+                if not any(
+                    re.search(pattern, lowered, re.IGNORECASE)
+                    for pattern in required
+                ):
                     continue
 
                 score = 20
                 score += sum(
-                    4 for pattern in positive
+                    4
+                    for pattern in positive
                     if re.search(pattern, lowered, re.IGNORECASE)
                 )
                 score -= sum(
-                    12 for pattern in negative
+                    12
+                    for pattern in negative
                     if re.search(pattern, lowered, re.IGNORECASE)
                 )
 
@@ -195,8 +207,7 @@ class DeterministicCascoExtractor:
 
     def _sentences(self, chunk: TextChunk) -> list[EvidenceSentence]:
         text = self._clean(chunk.text)
-        pieces = re.split(r"(?<=[.!?;])s+|
-+", text)
+        pieces = re.split(r"(?<=[.!?;])\s+|\n+", text)
         output: list[EvidenceSentence] = []
         seen: set[str] = set()
 
@@ -248,7 +259,7 @@ class DeterministicCascoExtractor:
 
     @staticmethod
     def _clean(text: str) -> str:
-        return re.sub(r"s+", " ", text).strip()
+        return re.sub(r"\s+", " ", text).strip()
 
     @staticmethod
     def _quote_around(text: str, start: int, end: int, radius: int = 240) -> str:
