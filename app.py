@@ -112,7 +112,7 @@ COMPANY_SOURCES = {
         "url": "https://www.ingos.ru/auto/kasko/",
         "type": "html"
     },
-    "Ренессанс": {
+    "Ренессанс Страхование": {
         "url": "https://www.renins.ru/auto/kasko/",
         "type": "html"
     },
@@ -124,7 +124,7 @@ COMPANY_SOURCES = {
         "url": "https://www.soglasie.ru/individuals/avto/kasko/",
         "type": "html"
     },
-    "РГС": {
+    "Росгосстрах": {
         "url": "https://www.rgs.ru/auto/ekasko/",
         "type": "html"
     },
@@ -156,7 +156,7 @@ KASKO_FIELDS = [
     "without_certificates",
     "gap",
     "total_loss",
-    "fire",
+    "self_ignition",
     "terrorism",
     "drone",
     "tow_truck",
@@ -169,7 +169,7 @@ FIELD_LABELS = {
     "without_certificates": "Без справок",
     "gap": "GAP-страхование",
     "total_loss": "Порог тотала",
-    "fire": "Пожар",
+    "self_ignition": "Самовозгорание",
     "terrorism": "Терроризм",
     "drone": "БПЛА / Дроны",
     "tow_truck": "Эвакуатор",
@@ -182,7 +182,7 @@ FIELD_SEARCH_QUERIES = {
     "without_certificates": "Выплата без справок по КАСКО {company}",
     "gap": "GAP страхование КАСКО {company}",
     "total_loss": "Порог тотала КАСКО {company}",
-    "fire": "Самовозгорание КАСКО {company}",
+    "self_ignition": "Самовозгорание КАСКО {company}",
     "terrorism": "Терроризм КАСКО {company}",
     "drone": "БПЛА КАСКО {company}",
     "tow_truck": "Эвакуатор КАСКО {company}",
@@ -195,7 +195,7 @@ FIELD_GROQ_PROMPTS = {
     "without_certificates": "Найди информацию об условиях выплаты без справок по КАСКО. Что покрывается, сколько раз. Если нет — 'Не найдено'.",
     "gap": "Есть ли GAP страхование? Как включается? Если нет — 'Не найдено'.",
     "total_loss": "Какой порог тотала (полной гибели) в процентах от страховой суммы? Если нет — 'Не найдено'.",
-    "fire": "Покрывается ли самовозгорание / пожар? Если нет — 'Не найдено'.",
+    "self_ignition": "Покрывается ли самовозгорание / пожар? Если нет — 'Не найдено'.",
     "terrorism": "Покрывается ли терроризм? Есть ли ограничения (только МСК и МО)? Если нет — 'Не найдено'.",
     "drone": "Покрывается ли ущерб от БПЛА / дронов? Есть ли лимит? Если нет — 'Не найдено'.",
     "tow_truck": "Какие лимиты по эвакуатору (суммы)? Если нет — 'Не найдено'.",
