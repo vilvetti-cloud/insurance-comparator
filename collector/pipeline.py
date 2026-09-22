@@ -118,22 +118,33 @@ class CascoCollectionPipeline:
             document_count += official_documents
 
         try:
-            landing, discovered = self.discovery.discover_casco(official_url=insurer.official_url, casco_url=insurer.casco_url)
+            landing, discovered = self.discovery.discover_casco(
+                official_url=insurer.official_url,
+                casco_url=insurer.casco_url,
+            )
             source_count += len(discovered)
         except FetchError:
             landing, discovered = None, []
+            if insurer.casco_url:
+                try:
+                    landing = self.fetcher.fetch_official(
+                        insurer.casco_url,
+                        referer=insurer.official_url,
+                    )
+                except FetchError:
+                    landing = None
 
         # Level 1: official PDF/rules.
         for source_info in [source for source in discovered if source.source_level == 1][:2]:
             if insurer.rules_url and source_info.url.rstrip("/") == insurer.rules_url.rstrip("/"):
                 continue
             try:
-                result = self.fetcher.fetch(source_info.url)
+                result = self.fetcher.fetch_official(source_info.url, referer=insurer.official_url)
                 source = self.sources.upsert(company_id=company["id"], url=result.url, title=source_info.title, source_type="pdf", source_level=1, http_status=result.status_code, checksum=result.checksum, success=True)
                 document = self.documents.upsert(source_id=source["id"], document_url=result.url, title=source_info.title, checksum=result.checksum)
                 document_count += 1
-                extracted = self.extractor.extract(body=result.body, content_type=result.content_type)
-                if not self._is_casco_rules_text(extracted.text):
+                extracted_text = self._text_from_fetch(result)
+                if not self._is_casco_rules_text(extracted_text):
                     # Do not promote an arbitrary insurer PDF to "official
                     # CASCO rules" just because discovery saw insurance words
                     # in its link or filename.
@@ -147,7 +158,7 @@ class CascoCollectionPipeline:
                     insurer=insurer,
                     source_url=result.url,
                     source_level=1,
-                    text=extracted.text,
+                    text=extracted_text,
                     field_keys=missing_now,
                 )
                 found_fields.update(
@@ -167,7 +178,7 @@ class CascoCollectionPipeline:
         # Level 2: official HTML. Lower levels only fill unresolved fields.
         if landing is not None and not landing.body.lstrip().startswith(b"%PDF"):
             source = self.sources.upsert(company_id=company["id"], url=landing.url, title="Официальная страница КАСКО", source_type="official_site", source_level=2, http_status=landing.status_code, checksum=landing.checksum, success=True)
-            extracted = self.extractor.extract(body=landing.body, content_type=landing.content_type)
+            extracted_text = self._text_from_fetch(landing)
             missing_now = [
                 field["key"]
                 for field in KASKO_FIELDS
@@ -178,7 +189,7 @@ class CascoCollectionPipeline:
                     insurer=insurer,
                     source_url=landing.url,
                     source_level=2,
-                    text=extracted.text,
+                    text=extracted_text,
                     field_keys=missing_now,
                 )
                 found_fields.update(
@@ -249,6 +260,14 @@ class CascoCollectionPipeline:
     def _prepare_item(self, run_id: int, insurer: InsurerConfig) -> dict[str, Any]:
         company = self.companies.upsert(name=insurer.name, slug=insurer.slug, short_name=insurer.short_name, official_url=insurer.official_url)
         return self.runs.start_item(run_id=run_id, company_id=company["id"])
+
+    def _text_from_fetch(self, fetched) -> str:
+        if getattr(fetched, "via_reader", False):
+            return fetched.body.decode("utf-8", errors="replace")
+        return self.extractor.extract(
+            body=fetched.body,
+            content_type=fetched.content_type,
+        ).text
 
     def _extract_with_llm(self, insurer: InsurerConfig, source_url: str, source_level: int, grouped: dict[str, list[TextChunk]]) -> dict[str, dict[str, Any]]:
         return self.llm.extract(company_name=insurer.name, source_url=source_url, source_level=source_level, grouped_chunks=grouped)
@@ -350,12 +369,9 @@ class CascoCollectionPipeline:
 
         for url in insurer.official_doc_urls:
             try:
-                fetched = self.fetcher.fetch(url, referer=insurer.official_url)
-                extracted = self.extractor.extract(
-                    body=fetched.body,
-                    content_type=fetched.content_type,
-                )
-                if not extracted.text.strip():
+                fetched = self.fetcher.fetch_official(url, referer=insurer.official_url)
+                extracted_text = self._text_from_fetch(fetched)
+                if not extracted_text.strip():
                     continue
 
                 source = self.sources.upsert(
@@ -383,7 +399,7 @@ class CascoCollectionPipeline:
                     insurer=insurer,
                     source_url=fetched.url,
                     source_level=2,
-                    text=extracted.text,
+                    text=extracted_text,
                     field_keys=missing,
                 )
                 found.update(
@@ -413,11 +429,15 @@ class CascoCollectionPipeline:
             return set(), 0, 0
 
         try:
-            fetched = self.fetcher.fetch(
+            fetched = self.fetcher.fetch_official(
                 insurer.rules_url,
                 referer=insurer.official_url,
             )
-            is_pdf = "pdf" in fetched.content_type or fetched.body.lstrip().startswith(b"%PDF")
+            is_pdf = (
+                getattr(fetched, "via_reader", False)
+                or "pdf" in fetched.content_type
+                or fetched.body.lstrip().startswith(b"%PDF")
+            )
             if not is_pdf:
                 return set(), 0, 0
 
@@ -467,15 +487,12 @@ class CascoCollectionPipeline:
             if not missing_from_rules:
                 return already_from_rules, 1, 1
 
-            extracted = self.extractor.extract(
-                body=fetched.body,
-                content_type=fetched.content_type,
-            )
+            extracted_text = self._text_from_fetch(fetched)
             values = self._deep_extract_official(
                 insurer=insurer,
                 source_url=fetched.url,
                 source_level=1,
-                text=extracted.text,
+                text=extracted_text,
                 field_keys=missing_from_rules,
             )
             found = set(already_from_rules)
@@ -511,12 +528,16 @@ class CascoCollectionPipeline:
                     continue
                 seen.add(hit.url)
                 try:
-                    fetched = self.fetcher.fetch(hit.url)
-                    is_pdf = "pdf" in fetched.content_type or fetched.body.lstrip().startswith(b"%PDF")
+                    fetched = self.fetcher.fetch_official(hit.url, referer=insurer.official_url)
+                    is_pdf = (
+                        getattr(fetched, "via_reader", False)
+                        or "pdf" in fetched.content_type
+                        or fetched.body.lstrip().startswith(b"%PDF")
+                    )
                     if not is_pdf:
                         continue
-                    extracted = self.extractor.extract(body=fetched.body, content_type=fetched.content_type)
-                    if not self._is_casco_rules_text(extracted.text):
+                    extracted_text = self._text_from_fetch(fetched)
+                    if not self._is_casco_rules_text(extracted_text):
                         continue
 
                     source = self.sources.upsert(
@@ -539,7 +560,7 @@ class CascoCollectionPipeline:
                         insurer=insurer,
                         source_url=fetched.url,
                         source_level=1,
-                        text=extracted.text,
+                        text=extracted_text,
                         field_keys=[field["key"] for field in KASKO_FIELDS],
                     )
                     found = self._persist_values(

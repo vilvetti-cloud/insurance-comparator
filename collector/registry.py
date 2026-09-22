@@ -28,10 +28,10 @@ INSURERS = (
         "ВСК",
         "ВСК",
         "https://vsk.ru/",
+        "https://www.vsk.ru/klientam/avto/kasko-kompakt-minimum",
         rules_url="https://www.vsk.ru/cms/assets/1179953c-dc8f-45f9-9d46-8eaba56b9c10",
         official_doc_urls=(
-            "https://www.vsk.ru/cms/assets/209bfe0b-8b20-474c-8428-82d51132f54b",
-            "https://www.vsk.ru/cms/assets/3274076a-21b6-4bc7-96e8-26f1eb2bbcde.pdf",
+            "https://www.vsk.ru/cms/assets/2f37485b-94f3-4e7e-8007-8fda361fbf50",
         ),
     ),
     InsurerConfig(
@@ -61,8 +61,11 @@ INSURERS = (
         "Согласие",
         "Согласие",
         "https://www.soglasie.ru/",
-        "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
-        "https://api.soglasie.ru/storage/media/originals/126997/c599c1b1-3863-443f-b986-8e409850b2ad.pdf",
+        "https://www.soglasie.ru/individuals/avto/kasko/",
+        "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20%D1%81%D1%82%D1%80%D0%B0%D1%85%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F.pdf",
+        official_doc_urls=(
+            "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
+        ),
     ),
     InsurerConfig(
         "rgs",
@@ -78,6 +81,7 @@ INSURERS = (
         "Т-Страхование",
         "https://www.tbank.ru/",
         "https://www.tbank.ru/insurance/kasko/",
+        "https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf",
         official_doc_urls=(
             "https://www.tbank.ru/insurance/help/auto/kasko/get-kasko/conditions/",
         ),
@@ -95,7 +99,11 @@ INSURERS = (
         "Югория",
         "Югория",
         "https://www.ugsk.ru/",
+        "https://ugsk.ru/",
         rules_url="https://ugsk.ru/pravila/Kasko.pdf",
+        official_doc_urls=(
+            "https://ugsk.ru/about/pravila/Gap.pdf",
+        ),
     ),
     InsurerConfig(
         "sovcom",
