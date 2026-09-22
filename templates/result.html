@@ -7,44 +7,13 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
-  {% set fields=[
-    ('franchise','Франшиза'),
-    ('without_certificates','Без справок'),
-    ('gap','GAP-страхование'),
-    ('total_loss','Порог тотала'),
-    ('self_ignition','Самовозгорание'),
-    ('terrorism','Терроризм'),
-    ('drone','БПЛА / Дроны'),
-    ('tow_truck','Эвакуатор'),
-    ('repair_type','Тип ремонта'),
-    ('payment_terms','Срок выплат')
-  ] %}
-
-  {% set s1 = namespace(found=0, docs=0, review=0, first_url=None) %}
-  {% set s2 = namespace(found=0, docs=0, review=0, first_url=None) %}
-
-  {% for key,label in fields %}
-    {% if data1.get(key, 'Не найдено') != 'Не найдено' %}
-      {% set s1.found = s1.found + 1 %}
-      {% if data1.get(key + '_source_level') == 1 %}{% set s1.docs = s1.docs + 1 %}{% endif %}
-      {% if data1.get(key + '_verification_status') != 'verified' %}{% set s1.review = s1.review + 1 %}{% endif %}
-      {% if not s1.first_url and data1.get(key + '_url') %}{% set s1.first_url = data1.get(key + '_url') %}{% endif %}
-    {% endif %}
-    {% if data2.get(key, 'Не найдено') != 'Не найдено' %}
-      {% set s2.found = s2.found + 1 %}
-      {% if data2.get(key + '_source_level') == 1 %}{% set s2.docs = s2.docs + 1 %}{% endif %}
-      {% if data2.get(key + '_verification_status') != 'verified' %}{% set s2.review = s2.review + 1 %}{% endif %}
-      {% if not s2.first_url and data2.get(key + '_url') %}{% set s2.first_url = data2.get(key + '_url') %}{% endif %}
-    {% endif %}
-  {% endfor %}
-
   <header class="site-header">
     <div class="app-shell site-header__inner">
       <a class="brand" href="/">
         <span class="brand__mark">РЕСО</span>
         <span class="brand__copy">
           <span class="brand__title">Страховой аналитик</span>
-          <span class="brand__subtitle">Сравнение условий КАСКО</span>
+          <span class="brand__subtitle">Аргументы для продажи КАСКО</span>
         </span>
       </a>
 
@@ -58,197 +27,210 @@
   <main class="page result-page">
     <div class="app-shell">
       <nav class="result-nav">
-        <a class="text-link" href="/">
-          <span aria-hidden="true">←</span>
-          <span>Новое сравнение</span>
-        </a>
+        <a class="text-link" href="/">← Новое сравнение</a>
       </nav>
 
-      <section class="result-hero">
+      <section class="result-hero result-hero--compact">
         <div>
-          <div class="eyebrow">Результат сравнения</div>
+          <div class="eyebrow">Подготовка к разговору</div>
           <h1>{{ company1 }} <span class="vs">vs</span> {{ company2 }}</h1>
           <p class="result-hero__lead">
-            Сопоставление найденных условий и источников. Пустые значения не заменяются предположениями.
+            Сначала — аргументы для клиента. Полные условия и источники спрятаны ниже, чтобы не перегружать экран.
           </p>
         </div>
 
-        <div class="updated-pill">
-          <span class="updated-pill__dot" aria-hidden="true"></span>
-          <span>{{ last_updated }}</span>
+        <div class="coverage-strip" aria-label="Покрытие данных">
+          <div class="coverage-strip__item">
+            <strong>{{ found1 }}/10</strong>
+            <span>{{ company1 }}</span>
+          </div>
+          <div class="coverage-strip__divider"></div>
+          <div class="coverage-strip__item">
+            <strong>{{ found2 }}/10</strong>
+            <span>{{ company2 }}</span>
+          </div>
         </div>
       </section>
 
-      <section class="metrics" aria-label="Краткая сводка">
-        <article class="metric-card metric-card--focus">
-          <span class="metric-card__label">Фокус работы</span>
-          <strong class="metric-card__value metric-card__value--small">Сначала факты, затем аргументы</strong>
-          <span class="metric-card__hint">Сравнивайте только те условия, для которых система нашла подтверждающий источник.</span>
-        </article>
-
-        <article class="metric-card">
-          <span class="metric-card__label">{{ company1 }}</span>
-          <strong class="metric-card__value">{{ s1.found }} / 10</strong>
-          <span class="metric-card__hint">найдено условий · {{ s1.docs }} из официальных документов</span>
-        </article>
-
-        <article class="metric-card">
-          <span class="metric-card__label">{{ company2 }}</span>
-          <strong class="metric-card__value">{{ s2.found }} / 10</strong>
-          <span class="metric-card__hint">найдено условий · {{ s2.docs }} из официальных документов</span>
-        </article>
-      </section>
-
-      <section class="comparison-panel">
-        <div class="comparison-panel__header">
-          <div>
-            <h2 class="comparison-panel__title">Условия страхования</h2>
-            <div class="comparison-panel__caption">Основная компания выделена зелёным фоном. Источник доступен прямо в ячейке.</div>
+      <section class="sales-grid">
+        <div class="sales-panel">
+          <div class="sales-panel__head">
+            <div>
+              <span class="section-kicker">Главное для продажи</span>
+              <h2>Что подчеркнуть в {{ company1 }}</h2>
+            </div>
+            {% if sales.advantages %}
+              <span class="sales-status sales-status--advantage">{{ sales.advantages|length }} подтверждённых отличия</span>
+            {% else %}
+              <span class="sales-status">Без искусственного «победителя»</span>
+            {% endif %}
           </div>
 
-          <div class="legend" aria-label="Легенда">
-            <span class="badge badge--document">Документ</span>
-            <span class="badge badge--site">Официальный сайт</span>
-            <span class="badge badge--review">Требует проверки</span>
-          </div>
-        </div>
-
-        <div class="mobile-scroll-hint">Проведите по таблице влево или вправо, чтобы увидеть все колонки.</div>
-
-        <div class="table-scroll">
-          <table class="comparison-table">
-            <thead>
-              <tr>
-                <th>Параметр</th>
-                <th class="primary-company">
-                  <div class="company-head">
-                    <span>{{ company1 }}</span>
-                    <span class="company-head__tag">Ваша компания</span>
+          {% if sales.cards %}
+            <div class="benefit-list">
+              {% for item in sales.cards %}
+                <article class="benefit-card">
+                  <div class="benefit-card__top">
+                    <span class="benefit-card__index">0{{ loop.index }}</span>
+                    <span class="benefit-card__kind {% if item.kind == 'advantage' %}benefit-card__kind--advantage{% endif %}">
+                      {% if item.kind == 'advantage' %}Преимущество{% else %}Сильная сторона{% endif %}
+                    </span>
                   </div>
-                </th>
-                <th>{{ company2 }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for key,label in fields %}
-              {% set value1 = data1.get(key, 'Не найдено') %}
-              {% set value2 = data2.get(key, 'Не найдено') %}
-              <tr>
-                <td class="parameter-cell">
-                  <div class="parameter">
-                    <span class="parameter__icon">{{ '%02d'|format(loop.index) }}</span>
-                    <span>{{ label }}</span>
-                  </div>
-                </td>
-
-                <td class="primary-cell">
-                  <div class="value-block">
-                    {% if value1 == 'Не найдено' %}
-                      <div class="value-block__text value-block__text--empty">Не найдено</div>
-                      <div class="value-meta">
-                        <span class="badge badge--empty">Нет данных</span>
-                      </div>
-                    {% else %}
-                      <div class="value-block__text">{{ value1 }}</div>
-                      <div class="value-meta">
-                        {% if data1.get(key + '_source_level') == 1 %}
-                          <span class="badge badge--document">Документ</span>
-                        {% elif data1.get(key + '_source_level') == 2 %}
-                          <span class="badge badge--site">Официальный сайт</span>
-                        {% endif %}
-
-                        {% if data1.get(key + '_verification_status') != 'verified' %}
-                          <span class="badge badge--review">Требует проверки</span>
-                        {% endif %}
-
-                        {% if data1.get(key + '_url') %}
-                          <a class="source-link" href="{{ data1.get(key + '_url') }}" target="_blank" rel="noopener">
-                            <span>Источник</span>
-                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                              <path d="M14 5h5v5M19 5l-8 8M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                          </a>
-                        {% endif %}
-                      </div>
-                    {% endif %}
-                  </div>
-                </td>
-
-                <td>
-                  <div class="value-block">
-                    {% if value2 == 'Не найдено' %}
-                      <div class="value-block__text value-block__text--empty">Не найдено</div>
-                      <div class="value-meta">
-                        <span class="badge badge--empty">Нет данных</span>
-                      </div>
-                    {% else %}
-                      <div class="value-block__text">{{ value2 }}</div>
-                      <div class="value-meta">
-                        {% if data2.get(key + '_source_level') == 1 %}
-                          <span class="badge badge--document">Документ</span>
-                        {% elif data2.get(key + '_source_level') == 2 %}
-                          <span class="badge badge--site">Официальный сайт</span>
-                        {% endif %}
-
-                        {% if data2.get(key + '_verification_status') != 'verified' %}
-                          <span class="badge badge--review">Требует проверки</span>
-                        {% endif %}
-
-                        {% if data2.get(key + '_url') %}
-                          <a class="source-link" href="{{ data2.get(key + '_url') }}" target="_blank" rel="noopener">
-                            <span>Источник</span>
-                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                              <path d="M14 5h5v5M19 5l-8 8M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                          </a>
-                        {% endif %}
-                      </div>
-                    {% endif %}
-                  </div>
-                </td>
-              </tr>
+                  <h3>{{ item.title }}</h3>
+                  <p>{{ item.evidence }}</p>
+                  <span class="benefit-card__label">{{ item.label }}</span>
+                </article>
               {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="sources-panel">
-        <div>
-          <h2 class="sources-panel__title">Источники данных</h2>
-          <p class="sources-panel__text">Система хранит источник отдельно для каждого параметра. Здесь показан первый доступный источник по компании.</p>
-        </div>
-
-        <div class="source-list">
-          <div class="source-item">
-            <div class="source-item__company">{{ company1 }}</div>
-            <div class="source-item__url">
-              {% if s1.first_url %}
-                <a href="{{ s1.first_url }}" target="_blank" rel="noopener">{{ s1.first_url }}</a>
-              {% else %}
-                Источник пока не найден
-              {% endif %}
             </div>
+          {% else %}
+            <div class="empty-sales">
+              <strong>Подтверждённых аргументов пока недостаточно</strong>
+              <span>Система не будет придумывать преимущество, если его нельзя доказать текущими источниками.</span>
+            </div>
+          {% endif %}
+
+          {% if sales.cautions %}
+            <div class="sales-note">
+              <strong>Важно учитывать</strong>
+              {% for caution in sales.cautions %}
+                <p>{{ caution }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+
+        <aside class="script-card">
+          <div>
+            <span class="section-kicker">Можно отправить клиенту</span>
+            <h2>Готовая фраза</h2>
           </div>
 
-          <div class="source-item">
-            <div class="source-item__company">{{ company2 }}</div>
-            <div class="source-item__url">
-              {% if s2.first_url %}
-                <a href="{{ s2.first_url }}" target="_blank" rel="noopener">{{ s2.first_url }}</a>
-              {% else %}
-                Источник пока не найден
-              {% endif %}
-            </div>
+          <div id="client-script" class="script-card__text">{{ sales.client_message }}</div>
+
+          <button id="copy-script" class="button script-card__button" type="button">
+            <span>Скопировать текст</span>
+          </button>
+
+          <span id="copy-status" class="copy-status" aria-live="polite"></span>
+        </aside>
+      </section>
+
+      <details class="details-panel">
+        <summary class="details-panel__summary">
+          <div>
+            <strong>Подробное сравнение условий</strong>
+            <span>10 параметров, значения и источники</span>
+          </div>
+          <span class="details-panel__chevron" aria-hidden="true">⌄</span>
+        </summary>
+
+        <div class="details-panel__body">
+          <div class="table-scroll">
+            <table class="comparison-table comparison-table--compact">
+              <thead>
+                <tr>
+                  <th>Параметр</th>
+                  <th class="primary-company">
+                    <div class="company-head">
+                      <span>{{ company1 }}</span>
+                      <span class="company-head__tag">Ваша компания</span>
+                    </div>
+                  </th>
+                  <th>{{ company2 }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for key in fields %}
+                  {% set value1 = data1.get(key, 'Не найдено') %}
+                  {% set value2 = data2.get(key, 'Не найдено') %}
+                  <tr>
+                    <td class="parameter-cell">
+                      <div class="parameter">
+                        <span>{{ field_labels.get(key, key) }}</span>
+                      </div>
+                    </td>
+
+                    <td class="primary-cell">
+                      <div class="value-block">
+                        <div class="value-block__text {% if value1 == 'Не найдено' %}value-block__text--empty{% endif %}">
+                          {{ value1 }}
+                        </div>
+                        {% if value1 != 'Не найдено' %}
+                          <div class="value-meta">
+                            {% if data1.get(key + '_source_level') == 1 %}
+                              <span class="badge badge--document">Официальные правила</span>
+                            {% elif data1.get(key + '_source_level') == 2 %}
+                              <span class="badge badge--site">Официальный сайт</span>
+                            {% elif data1.get(key + '_source_level') == 3 %}
+                              <span class="badge badge--review">Веб-источник</span>
+                            {% elif data1.get(key + '_source_level') == 4 %}
+                              <span class="badge badge--empty">Справочно</span>
+                            {% endif %}
+                            {% if data1.get(key + '_url') %}
+                              <a class="source-link" href="{{ data1.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
+                            {% endif %}
+                          </div>
+                        {% endif %}
+                      </div>
+                    </td>
+
+                    <td>
+                      <div class="value-block">
+                        <div class="value-block__text {% if value2 == 'Не найдено' %}value-block__text--empty{% endif %}">
+                          {{ value2 }}
+                        </div>
+                        {% if value2 != 'Не найдено' %}
+                          <div class="value-meta">
+                            {% if data2.get(key + '_source_level') == 1 %}
+                              <span class="badge badge--document">Официальные правила</span>
+                            {% elif data2.get(key + '_source_level') == 2 %}
+                              <span class="badge badge--site">Официальный сайт</span>
+                            {% elif data2.get(key + '_source_level') == 3 %}
+                              <span class="badge badge--review">Веб-источник</span>
+                            {% elif data2.get(key + '_source_level') == 4 %}
+                              <span class="badge badge--empty">Справочно</span>
+                            {% endif %}
+                            {% if data2.get(key + '_url') %}
+                              <a class="source-link" href="{{ data2.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
+                            {% endif %}
+                          </div>
+                        {% endif %}
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
         </div>
-      </section>
+      </details>
 
       <footer class="page-footer">
-        <a class="button button--secondary" href="/">← Подготовить другое сравнение</a>
-        <span>Значения со статусом «Требует проверки» найдены в источнике, но ещё не подтверждены вручную.</span>
+        <a class="button button--secondary" href="/">← Другое сравнение</a>
+        <span>Скрипт строится только на подтверждённых данных из официальных источников.</span>
       </footer>
     </div>
   </main>
+
+  <script>
+    const copyButton = document.getElementById('copy-script');
+    const copyStatus = document.getElementById('copy-status');
+    const script = document.getElementById('client-script');
+
+    copyButton.addEventListener('click', async () => {
+      const text = script.innerText.trim();
+      try {
+        await navigator.clipboard.writeText(text);
+        copyStatus.textContent = 'Скопировано';
+        copyButton.querySelector('span').textContent = 'Текст скопирован';
+        setTimeout(() => {
+          copyStatus.textContent = '';
+          copyButton.querySelector('span').textContent = 'Скопировать текст';
+        }, 1800);
+      } catch (error) {
+        copyStatus.textContent = 'Не удалось скопировать автоматически';
+      }
+    });
+  </script>
 </body>
 </html>

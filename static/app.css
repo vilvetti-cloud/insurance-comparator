@@ -959,3 +959,362 @@ select:focus {
     transition: none !important;
   }
 }
+
+
+/* Sales-first comparison */
+.result-hero--compact {
+  padding-bottom: 18px;
+}
+
+.coverage-strip {
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 290px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.coverage-strip__item {
+  min-width: 130px;
+  display: grid;
+  gap: 3px;
+  padding: 14px 16px;
+}
+
+.coverage-strip__item strong {
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.coverage-strip__item span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 750;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coverage-strip__divider {
+  width: 1px;
+  background: var(--border);
+}
+
+.sales-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 18px;
+  align-items: start;
+  margin: 14px 0 18px;
+}
+
+.sales-panel,
+.script-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.sales-panel {
+  padding: 24px;
+}
+
+.sales-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.section-kicker {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--reso-green);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sales-panel h2,
+.script-card h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 880;
+  letter-spacing: -0.035em;
+}
+
+.sales-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: var(--muted-bg);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.sales-status--advantage {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.benefit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.benefit-card {
+  position: relative;
+  padding: 18px 18px 17px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+
+.benefit-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.benefit-card__index {
+  color: #b0bbb4;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.benefit-card__kind {
+  display: inline-flex;
+  min-height: 23px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: var(--muted-bg);
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.benefit-card__kind--advantage {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.benefit-card h3 {
+  margin: 10px 0 6px;
+  font-size: 16px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+}
+
+.benefit-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.benefit-card__label {
+  display: inline-block;
+  margin-top: 11px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.sales-note {
+  margin-top: 14px;
+  padding: 14px 15px;
+  border-radius: var(--radius-md);
+  background: #fffaf0;
+  border: 1px solid #efe0b7;
+}
+
+.sales-note strong {
+  display: block;
+  color: #765a12;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.sales-note p {
+  margin: 5px 0 0;
+  color: #7a6a43;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.empty-sales {
+  display: grid;
+  gap: 6px;
+  padding: 20px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+
+.empty-sales strong {
+  font-size: 14px;
+}
+
+.empty-sales span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.script-card {
+  position: sticky;
+  top: 20px;
+  padding: 24px;
+  background: #f2f8f4;
+  border-color: #cfe3d5;
+}
+
+.script-card__text {
+  margin: 18px 0;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid #d8e7dc;
+  color: #26372e;
+  font-size: 13px;
+  line-height: 1.68;
+  box-shadow: var(--shadow-sm);
+}
+
+.script-card__button {
+  width: 100%;
+}
+
+.copy-status {
+  display: block;
+  min-height: 16px;
+  margin-top: 8px;
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.details-panel {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.details-panel__summary {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 22px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.details-panel__summary::-webkit-details-marker {
+  display: none;
+}
+
+.details-panel__summary strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.details-panel__summary span:not(.details-panel__chevron) {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.details-panel__chevron {
+  color: var(--text-secondary);
+  font-size: 22px;
+  transition: transform 0.15s ease;
+}
+
+.details-panel[open] .details-panel__chevron {
+  transform: rotate(180deg);
+}
+
+.details-panel__body {
+  border-top: 1px solid var(--border);
+}
+
+.comparison-table--compact tbody td {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+
+.comparison-table--compact .value-block__text {
+  font-size: 12px;
+}
+
+.comparison-table--compact .parameter {
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .sales-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .script-card {
+    position: static;
+  }
+
+  .coverage-strip {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 640px) {
+  .sales-panel,
+  .script-card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .sales-panel__head {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .coverage-strip {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .coverage-strip__item {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .details-panel {
+    border-radius: 18px;
+  }
+
+  .details-panel__summary {
+    min-height: 70px;
+    padding: 0 17px;
+  }
+}

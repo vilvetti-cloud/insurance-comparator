@@ -11,6 +11,15 @@ GENERIC_VALUES = {
     "беспилотники",
     "ремонт",
     "полная гибель",
+    "mentioned",
+    "present",
+    "not mentioned",
+    "yes",
+    "no",
+    "true",
+    "false",
+    "упоминается",
+    "не упоминается",
 }
 
 
