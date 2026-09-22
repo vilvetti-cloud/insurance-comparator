@@ -8,14 +8,59 @@ from core.catalog import KASKO_FIELDS
 
 FIELD_TERMS: dict[str, tuple[str, ...]] = {
     "franchise": ("франшиз", "безусловн", "условно-безусловн"),
-    "without_certificates": ("без справ", "без документов", "без подтверждающ", "упрощенн"),
-    "gap": ("gap", "гэп", "сохранен стоимости", "стоимости автомобил"),
-    "total_loss": ("тотал", "полная гибел", "конструктивн", "стоимость восстановлен"),
+    "without_certificates": (
+        "без справ",
+        "без документов",
+        "без предоставления документов",
+        "без подтверждающ",
+        "предоставление документов не является обязательным",
+        "документы не требуются",
+        "упрощенн",
+    ),
+    "gap": (
+        "gap",
+        "гэп",
+        "сохранен стоимости",
+        "страховая стоимость по договору",
+        "непогашенная задолженность",
+        "рыночная стоимость тс",
+        "амортизац",
+    ),
+    "total_loss": (
+        "тотал",
+        "полная гибел",
+        "конструктивн",
+        "стоимость восстановительного ремонта",
+        "75%",
+        "75 %",
+    ),
     "self_ignition": ("самовозгора", "возгорани", "пожар", "огн"),
-    "terrorism": ("терроризм", "террористическ", "террористическ акт"),
-    "drone": ("бпла", "дрон", "беспилот", "квадрокоптер"),
-    "tow_truck": ("эвакуатор", "эвакуац", "ассистанс", "техническ помощ"),
-    "repair_type": ("ремонт", "станци", "сто", "дилер", "направлени на ремонт"),
+    "terrorism": ("терроризм", "террористическ", "террористическ акт", "диверси"),
+    "drone": (
+        "бпла",
+        "дрон",
+        "беспилот",
+        "квадрокоптер",
+        "летательн аппарат",
+        "воздушн судн",
+        "падени летательн",
+    ),
+    "tow_truck": (
+        "эвакуатор",
+        "эвакуац",
+        "транспортиров",
+        "буксиров",
+        "ассистанс",
+        "техническ помощ",
+    ),
+    "repair_type": (
+        "восстановительн ремонт",
+        "станци технического обслуживания",
+        "стоа",
+        "официальн дилер",
+        "направлени на ремонт",
+        "денежн форме",
+    ),
     "payment_terms": (
         "срок выплат",
         "срок возмещ",
@@ -23,6 +68,9 @@ FIELD_TERMS: dict[str, tuple[str, ...]] = {
         "рассмотреть претензи",
         "выплатить страховое возмещение",
         "осуществления страховой выплаты",
+        "выплата страхового возмещения производится",
+        "рабочих дней",
+        "выдаче направления на ремонт",
     ),
 }
 
@@ -40,11 +88,42 @@ class RelevanceSelector:
         self.max_chunks_per_field = max_chunks_per_field
 
     def select(self, text: str, *, max_total_chars: int = 18000) -> dict[str, list[TextChunk]]:
+        return self.select_fields(
+            text,
+            field_keys=[field["key"] for field in KASKO_FIELDS],
+            max_total_chars=max_total_chars,
+        )
+
+    def select_fields(
+        self,
+        text: str,
+        *,
+        field_keys: list[str] | set[str] | tuple[str, ...],
+        max_total_chars: int = 30000,
+        window_lines: int | None = None,
+        max_chunks_per_field: int | None = None,
+    ) -> dict[str, list[TextChunk]]:
+        """Select evidence independently for the requested fields.
+
+        Official rulebooks are long. A single global character budget used to
+        squeeze ten topics into a tiny context. Deep extraction can now give
+        every field several independent fragments from the whole document.
+        """
+        requested = set(field_keys)
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         page_numbers = self._page_numbers(lines)
+        window = window_lines if window_lines is not None else self.window_lines
+        chunk_limit = (
+            max_chunks_per_field
+            if max_chunks_per_field is not None
+            else self.max_chunks_per_field
+        )
+
         result: dict[str, list[TextChunk]] = {}
         for field in KASKO_FIELDS:
             key = field["key"]
+            if key not in requested:
+                continue
             terms = FIELD_TERMS.get(key, ())
             candidates: list[TextChunk] = []
             for index, line in enumerate(lines):
@@ -52,13 +131,14 @@ class RelevanceSelector:
                 hits = sum(1 for term in terms if term in lowered)
                 if hits == 0:
                     continue
-                start = max(0, index - self.window_lines)
-                end = min(len(lines), index + self.window_lines + 1)
+                start = max(0, index - window)
+                end = min(len(lines), index + window + 1)
                 fragment = "\n".join(lines[start:end])
                 score = hits * 10 + self._numeric_bonus(fragment, key)
                 candidates.append(TextChunk(fragment, page_numbers.get(index), score))
             candidates.sort(key=lambda item: item.score, reverse=True)
-            result[key] = self._dedupe(candidates[: self.max_chunks_per_field])
+            result[key] = self._dedupe(candidates[:chunk_limit])
+
         return self._fit_budget(result, max_total_chars=max_total_chars)
 
     def _fit_budget(self, grouped: dict[str, list[TextChunk]], *, max_total_chars: int) -> dict[str, list[TextChunk]]:
