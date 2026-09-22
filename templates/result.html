@@ -52,6 +52,7 @@
         </div>
       </section>
 
+      {% if comparison_ready %}
       <section class="sales-grid">
         <div class="sales-panel">
           <div class="sales-panel__head">
@@ -62,7 +63,7 @@
             {% if sales.advantages %}
               <span class="sales-status sales-status--advantage">{{ sales.advantages|length }} подтверждённых отличия</span>
             {% else %}
-              <span class="sales-status">Без искусственного «победителя»</span>
+              <span class="sales-status">Только подтверждённые факты</span>
             {% endif %}
           </div>
 
@@ -88,8 +89,8 @@
             </div>
           {% else %}
             <div class="empty-sales">
-              <strong>Подтверждённых аргументов пока недостаточно</strong>
-              <span>Система не будет придумывать преимущество, если его нельзя доказать текущими источниками.</span>
+              <strong>Подтверждённых отличий пока недостаточно</strong>
+              <span>Система не будет придумывать преимущество, если его нельзя доказать текущими данными обеих компаний.</span>
             </div>
           {% endif %}
 
@@ -118,6 +119,16 @@
           <span id="copy-status" class="copy-status" aria-live="polite"></span>
         </aside>
       </section>
+      {% else %}
+      <section class="comparison-not-ready">
+        <span class="section-kicker">Сравнение пока не готово</span>
+        <h2>Недостаточно данных по {{ company2 }}</h2>
+        <p>
+          У компаний пока нет ни одного параметра, который можно корректно сопоставить.
+          Поэтому сайт не строит выгоды и не генерирует клиентский скрипт — сначала нужно заполнить данные конкурента.
+        </p>
+      </section>
+      {% endif %}
 
       <details class="details-panel">
         <summary class="details-panel__summary">
@@ -227,7 +238,7 @@
     const copyStatus = document.getElementById('copy-status');
     const script = document.getElementById('client-script');
 
-    copyButton.addEventListener('click', async () => {
+    if (copyButton && script) copyButton.addEventListener('click', async () => {
       const text = script.innerText.trim();
       try {
         await navigator.clipboard.writeText(text);
