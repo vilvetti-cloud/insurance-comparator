@@ -72,18 +72,6 @@ def compare():
     snapshot = comparison_service.load_snapshot()
     data1 = _prepare_company_data(snapshot, company1)
     data2 = _prepare_company_data(snapshot, company2)
-    sales = sales_insights_service.analyze(
-        company=company1,
-        competitor=company2,
-        data=data1,
-        competitor_data=data2,
-        field_labels=FIELD_LABELS,
-    )
-    sales = sales_script_ai_service.enrich(
-        company=company1,
-        competitor=company2,
-        sales=sales,
-    )
     found1 = sum(1 for field in FIELD_KEYS if data1.get(field) != "Не найдено")
     found2 = sum(1 for field in FIELD_KEYS if data2.get(field) != "Не найдено")
     comparable_fields = [
@@ -91,6 +79,28 @@ def compare():
         for field in FIELD_KEYS
         if data1.get(field) != "Не найдено" and data2.get(field) != "Не найдено"
     ]
+    comparison_ready = len(comparable_fields) > 0
+
+    if comparison_ready:
+        sales = sales_insights_service.analyze(
+            company=company1,
+            competitor=company2,
+            data=data1,
+            competitor_data=data2,
+            field_labels=FIELD_LABELS,
+        )
+        sales = sales_script_ai_service.enrich(
+            company=company1,
+            competitor=company2,
+            sales=sales,
+        )
+    else:
+        sales = {
+            "advantages": [],
+            "cards": [],
+            "cautions": [],
+            "client_message": "",
+        }
 
     return render_template(
         "result.html",
@@ -101,6 +111,7 @@ def compare():
         fields=comparable_fields,
         field_labels=FIELD_LABELS,
         comparable_count=len(comparable_fields),
+        comparison_ready=comparison_ready,
         sales=sales,
         found1=found1,
         found2=found2,

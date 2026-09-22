@@ -516,9 +516,11 @@ class CascoCollectionPipeline:
                 source_level=source["source_level"],
                 confidence=confidence,
                 verification_status=verification_status,
+                evidence_text=value.get("quote"),
             )
-            # A stronger source may already own the field. Never attach weaker evidence to it.
-            if condition.get("source_id") == source["id"]:
+            # Do not create duplicate evidence on every scheduled refresh when
+            # neither the fact nor its supporting quote changed.
+            if condition.get("source_id") == source["id"] and condition.get("_evidence_needed", True):
                 self.evidence.add(
                     condition_id=condition["id"],
                     source_id=source["id"],
