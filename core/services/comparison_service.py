@@ -7,6 +7,7 @@ from typing import Any
 from psycopg.rows import dict_row
 
 from db import _connect
+from core.evidence_quality import is_supported_condition
 
 
 logger = logging.getLogger(__name__)
@@ -57,12 +58,20 @@ class ComparisonService:
                         cond.checked_at,
                         cond.updated_at,
                         s.url AS source_url,
-                        s.source_type
+                        s.source_type,
+                        ev.text_fragment AS evidence_quote
                     FROM conditions cond
                     JOIN comparison_fields f ON f.id = cond.field_id
                     JOIN products p ON p.id = f.product_id
                     JOIN companies c ON c.id = p.company_id
                     LEFT JOIN sources s ON s.id = cond.source_id
+                    LEFT JOIN LATERAL (
+                        SELECT e.text_fragment
+                        FROM evidence e
+                        WHERE e.condition_id = cond.id
+                        ORDER BY e.id DESC
+                        LIMIT 1
+                    ) ev ON TRUE
                     WHERE cond.status = 'active'
                       AND f.is_active = TRUE
                       AND p.status = 'active'
@@ -95,6 +104,9 @@ class ComparisonService:
             field_key = FIELD_ALIASES.get(original_key, original_key)
 
             company_data = snapshot.setdefault(company, {})
+
+            if not is_supported_condition(field_key, row["value"], row["evidence_quote"]):
+                continue
 
             # Prefer the canonical field when both legacy "fire" and
             # current "self_ignition" happen to exist in the database.

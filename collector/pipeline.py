@@ -12,6 +12,7 @@ from collector.registry import INSURERS, InsurerConfig
 from collector.relevance import RelevanceSelector, TextChunk
 from collector.web_search import DuckDuckGoSearch
 from core.catalog import KASKO_FIELDS
+from core.evidence_quality import is_supported_condition
 from database.repositories.collection import CollectionRepository
 from database.repositories.company import CompanyRepository
 from database.repositories.condition import ConditionRepository
@@ -174,6 +175,8 @@ class CascoCollectionPipeline:
             key = field["key"]
             value = values.get(key, {})
             if not value.get("found") or not value.get("value"):
+                continue
+            if not is_supported_condition(key, value.get("value"), value.get("quote")):
                 continue
             condition = self.conditions.save_candidate(field_id=field_rows[key]["id"], value=value["value"], source_id=source["id"], source_level=source["source_level"], confidence=value.get("confidence"), verification_status="needs_review")
             # A stronger source may already own the field. Never attach weaker evidence to it.

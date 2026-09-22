@@ -38,6 +38,9 @@ class SourceDiscovery:
         raise FetchError(f"Could not discover CASCO source: {last_error}")
 
     def _extract_sources(self, fetched: FetchResult) -> list[DiscoveredSource]:
+        if "pdf" in fetched.content_type or fetched.body.lstrip().startswith(b"%PDF"):
+            return [DiscoveredSource(fetched.url, "Официальные правила КАСКО", "pdf", 1)]
+
         if "html" not in fetched.content_type and not fetched.body.lstrip().startswith(b"<"):
             return [DiscoveredSource(fetched.url, "CASCO source", "official_site", 2)]
 
