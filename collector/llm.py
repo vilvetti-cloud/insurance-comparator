@@ -26,8 +26,8 @@ class GroqExtractor:
         api_key: str | None = None,
         model: str | None = None,
         timeout: int = 60,
-        retries: int = 2,
-        min_request_interval: float = 2.0,
+        retries: int = 5,
+        min_request_interval: float = 12.0,
     ) -> None:
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.model = model or os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
@@ -79,10 +79,17 @@ class GroqExtractor:
                     timeout=self.timeout,
                 )
                 if response.status_code == 429:
+                    retry_after = response.headers.get("retry-after")
+                    try:
+                        wait_seconds = float(retry_after) if retry_after else 15.0 * (attempt + 1)
+                    except (TypeError, ValueError):
+                        wait_seconds = 15.0 * (attempt + 1)
                     if attempt < self.retries:
-                        time.sleep(min(12.0, 3.0 * (attempt + 1)))
+                        time.sleep(max(5.0, min(wait_seconds + 1.0, 90.0)))
                         continue
-                    raise LLMExtractionError("Groq rate limit (429)", status_code=429)
+                    reset_tokens = response.headers.get("x-ratelimit-reset-tokens")
+                    detail = f"Groq rate limit (429), retry-after={retry_after}, token-reset={reset_tokens}"
+                    raise LLMExtractionError(detail, status_code=429)
                 if response.status_code == 413:
                     raise LLMExtractionError("Groq request too large (413)", status_code=413)
                 if response.status_code >= 400:

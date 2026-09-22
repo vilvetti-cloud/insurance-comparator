@@ -89,14 +89,14 @@ class CascoCollectionPipeline:
             landing, discovered = None, []
 
         # Level 1: official PDF/rules.
-        for source_info in [source for source in discovered if source.source_level == 1][:3]:
+        for source_info in [source for source in discovered if source.source_level == 1][:2]:
             try:
                 result = self.fetcher.fetch(source_info.url)
                 source = self.sources.upsert(company_id=company["id"], url=result.url, title=source_info.title, source_type="pdf", source_level=1, http_status=result.status_code, checksum=result.checksum, success=True)
                 document = self.documents.upsert(source_id=source["id"], document_url=result.url, title=source_info.title, checksum=result.checksum)
                 document_count += 1
                 extracted = self.extractor.extract(body=result.body, content_type=result.content_type)
-                grouped = self.selector.select(extracted.text)
+                grouped = self.selector.select(extracted.text, max_total_chars=6000)
                 values = self._extract_with_llm(insurer, result.url, 1, grouped)
                 found_fields.update(self._persist_values(values, field_rows, source=source, document=document))
                 if len(found_fields) == len(KASKO_FIELDS):
@@ -108,9 +108,12 @@ class CascoCollectionPipeline:
         if landing is not None and not landing.body.lstrip().startswith(b"%PDF"):
             source = self.sources.upsert(company_id=company["id"], url=landing.url, title="Официальная страница КАСКО", source_type="official_site", source_level=2, http_status=landing.status_code, checksum=landing.checksum, success=True)
             extracted = self.extractor.extract(body=landing.body, content_type=landing.content_type)
-            grouped = self.selector.select(extracted.text)
-            values = self._extract_with_llm(insurer, landing.url, 2, grouped)
-            found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
+            grouped = self.selector.select(extracted.text, max_total_chars=6000)
+            try:
+                values = self._extract_with_llm(insurer, landing.url, 2, grouped)
+                found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
+            except LLMExtractionError:
+                pass
 
         # Level 3: web search for unresolved parameters.
         missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
@@ -125,10 +128,13 @@ class CascoCollectionPipeline:
                 except Exception:
                     continue
             if search_text_parts:
-                grouped = self.selector.select("\n\n".join(search_text_parts))
+                grouped = self.selector.select("\n\n".join(search_text_parts), max_total_chars=6000)
                 source = self.sources.upsert(company_id=company["id"], url=search_hits[0][0], title="DuckDuckGo result bundle", source_type="web_search", source_level=3, http_status=200, success=True)
-                values = self._extract_with_llm(insurer, search_hits[0][0], 3, grouped)
-                found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
+                try:
+                    values = self._extract_with_llm(insurer, search_hits[0][0], 3, grouped)
+                    found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
+                except LLMExtractionError:
+                    pass
 
         # Level 4: optional curated fallback, only for fields still unresolved.
         missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
