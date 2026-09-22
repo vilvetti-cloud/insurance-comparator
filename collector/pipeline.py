@@ -97,7 +97,7 @@ class CascoCollectionPipeline:
                 document = self.documents.upsert(source_id=source["id"], document_url=result.url, title=source_info.title, checksum=result.checksum)
                 document_count += 1
                 extracted = self.extractor.extract(body=result.body, content_type=result.content_type)
-                grouped = self.selector.select(extracted.text, max_total_chars=6000)
+                grouped = self.selector.select(extracted.text, max_total_chars=10000)
                 values = self._extract_with_llm(insurer, result.url, 1, grouped)
                 found_fields.update(self._persist_values(values, field_rows, source=source, document=document))
                 if len(found_fields) == len(KASKO_FIELDS):
@@ -109,7 +109,7 @@ class CascoCollectionPipeline:
         if landing is not None and not landing.body.lstrip().startswith(b"%PDF"):
             source = self.sources.upsert(company_id=company["id"], url=landing.url, title="Официальная страница КАСКО", source_type="official_site", source_level=2, http_status=landing.status_code, checksum=landing.checksum, success=True)
             extracted = self.extractor.extract(body=landing.body, content_type=landing.content_type)
-            grouped = self.selector.select(extracted.text, max_total_chars=6000)
+            grouped = self.selector.select(extracted.text, max_total_chars=10000)
             try:
                 values = self._extract_with_llm(insurer, landing.url, 2, grouped)
                 found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
@@ -129,7 +129,7 @@ class CascoCollectionPipeline:
                 except Exception:
                     continue
             if search_text_parts:
-                grouped = self.selector.select("\n\n".join(search_text_parts), max_total_chars=6000)
+                grouped = self.selector.select("\n\n".join(search_text_parts), max_total_chars=10000)
                 source = self.sources.upsert(company_id=company["id"], url=search_hits[0][0], title="DuckDuckGo result bundle", source_type="web_search", source_level=3, http_status=200, success=True)
                 try:
                     values = self._extract_with_llm(insurer, search_hits[0][0], 3, grouped)

@@ -146,7 +146,7 @@ class GroqExtractor:
 Для каждого поля верни объект:
 {{"value": string|null, "found": boolean, "confidence": number, "quote": string|null, "page": integer|null, "notes": string|null}}
 Если фрагмент не отвечает на требование поля напрямую: value=null, found=false, quote=null.
-value должен быть кратким содержательным условием, а не одним общим словом.
+value должен быть кратким содержательным условием на русском языке, а не одним общим словом.
 quote должен быть коротким дословным фрагментом из переданного текста, который сам по себе подтверждает value.
 confidence от 0 до 1.
 """
