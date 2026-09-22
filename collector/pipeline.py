@@ -102,6 +102,19 @@ class CascoCollectionPipeline:
                     "fields_found": len(found_fields),
                 }
 
+        # Curated official product documents (KID, product matrix, etc.) are
+        # high-trust level-2 sources. They are useful when the insurer blocks
+        # direct server access to the full rules PDF.
+        if insurer.official_doc_urls:
+            official_found, official_sources, official_documents = self._collect_configured_official_docs(
+                insurer=insurer,
+                company=company,
+                field_rows=field_rows,
+            )
+            found_fields.update(official_found)
+            source_count += official_sources
+            document_count += official_documents
+
         try:
             landing, discovered = self.discovery.discover_casco(official_url=insurer.official_url, casco_url=insurer.casco_url)
             source_count += len(discovered)
@@ -196,6 +209,66 @@ class CascoCollectionPipeline:
 
     def _extract_with_llm(self, insurer: InsurerConfig, source_url: str, source_level: int, grouped: dict[str, list[TextChunk]]) -> dict[str, dict[str, Any]]:
         return self.llm.extract(company_name=insurer.name, source_url=source_url, source_level=source_level, grouped_chunks=grouped)
+
+    def _collect_configured_official_docs(
+        self,
+        *,
+        insurer: InsurerConfig,
+        company: dict[str, Any],
+        field_rows: dict[str, dict[str, Any]],
+    ) -> tuple[set[str], int, int]:
+        found: set[str] = set()
+        source_count = 0
+        document_count = 0
+
+        for url in insurer.official_doc_urls:
+            try:
+                fetched = self.fetcher.fetch(url, referer=insurer.official_url)
+                extracted = self.extractor.extract(
+                    body=fetched.body,
+                    content_type=fetched.content_type,
+                )
+                if not extracted.text.strip():
+                    continue
+
+                source = self.sources.upsert(
+                    company_id=company["id"],
+                    url=fetched.url,
+                    title="Официальный документ КАСКО",
+                    source_type="pdf" if ("pdf" in fetched.content_type or fetched.body.lstrip().startswith(b"%PDF")) else "official_site",
+                    source_level=2,
+                    http_status=fetched.status_code,
+                    checksum=fetched.checksum,
+                    success=True,
+                )
+                document = self.documents.upsert(
+                    source_id=source["id"],
+                    document_url=fetched.url,
+                    title="Официальный документ КАСКО",
+                    checksum=fetched.checksum,
+                )
+                grouped = self.selector.select(extracted.text, max_total_chars=10000)
+                values = self._extract_with_llm(insurer, fetched.url, 2, grouped)
+                missing = {
+                    field["key"]
+                    for field in KASKO_FIELDS
+                    if field["key"] not in found
+                }
+                found.update(
+                    self._persist_values(
+                        values,
+                        field_rows,
+                        source=source,
+                        document=document,
+                        allowed_keys=missing,
+                    )
+                )
+                source_count += 1
+                document_count += 1
+            except (FetchError, LLMExtractionError, ValueError):
+                continue
+
+        return found, source_count, document_count
 
     def _collect_configured_rules(
         self,
