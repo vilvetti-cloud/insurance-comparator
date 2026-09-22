@@ -39,12 +39,12 @@ class GroqExtractor:
         *,
         api_key: str | None = None,
         model: str | None = None,
-        timeout: int = 60,
-        retries: int = 5,
-        min_request_interval: float = 12.0,
+        timeout: int = 35,
+        retries: int = 2,
+        min_request_interval: float = 5.0,
     ) -> None:
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        self.model = model or os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+        self.model = model or os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
         self.timeout = timeout
         self.retries = max(0, retries)
         self.min_request_interval = max(0.0, min_request_interval)
