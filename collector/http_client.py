@@ -137,6 +137,9 @@ class HttpFetcher:
         try:
             return self.fetch(url, referer=referer)
         except FetchError as exc:
-            if exc.status_code not in {401, 403, 406, 429}:
+            # Anti-bot layers may manifest as an HTTP block or as a transport
+            # exception. For public official sources Reader is a safe fallback
+            # transport in both cases.
+            if exc.status_code not in {None, 401, 403, 406, 429}:
                 raise
             return self.fetch_via_reader(url)
