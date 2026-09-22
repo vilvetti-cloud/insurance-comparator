@@ -49,6 +49,7 @@ class DataQualityReportService:
                         "confidence": None,
                         "verification_status": None,
                         "checked_at": None,
+                        "_checked_raw": None,
                         "page_number": None,
                         "evidence_quote": None,
                     }
@@ -185,6 +186,7 @@ class DataQualityReportService:
                     )
                     if found
                     else None,
+                    "_checked_raw": (row["checked_at"] or row["updated_at"]) if found else None,
                     "page_number": row["page_number"] if found else None,
                     "evidence_quote": row["evidence_quote"] if found else None,
                 }
@@ -232,11 +234,15 @@ class DataQualityReportService:
             total_found += len(found_fields)
 
             checked_values = [
-                field["checked_at"]
+                field["_checked_raw"]
                 for field in found_fields
-                if field.get("checked_at")
+                if field.get("_checked_raw") is not None
             ]
-            company["last_checked"] = max(checked_values) if checked_values else None
+            company["last_checked"] = (
+                self._format_dt(max(checked_values)) if checked_values else None
+            )
+            for field in company["fields"]:
+                field.pop("_checked_raw", None)
 
         return {
             "companies": list(companies.values()),
