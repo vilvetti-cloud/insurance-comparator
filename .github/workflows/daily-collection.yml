@@ -66,8 +66,11 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
 
-      - name: Smoke test deterministic extraction
-        run: python -m unittest tests.test_deterministic
+      - name: Compile collector
+        run: python -m py_compile collector/*.py core/*.py database/repositories/*.py
+
+      - name: Smoke test extraction quality
+        run: python -m unittest tests.test_deterministic tests.test_evidence_quality
 
       - name: Run collection
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.insurer == '' || inputs.insurer == matrix.insurer }}

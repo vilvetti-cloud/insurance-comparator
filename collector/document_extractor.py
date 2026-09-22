@@ -4,6 +4,7 @@ import io
 import re
 from dataclasses import dataclass
 
+import fitz
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
@@ -24,14 +25,58 @@ class DocumentExtractor:
         return self._extract_html(body)
 
     def _extract_pdf(self, body: bytes) -> ExtractedDocument:
-        reader = PdfReader(io.BytesIO(body))
+        """Extract embedded PDF text with two independent engines.
+
+        pypdf remains the first choice. PyMuPDF is used when a page is empty or
+        suspiciously sparse, and as a complete fallback if pypdf cannot parse
+        the file. No OCR is performed here.
+        """
+        pypdf_pages: list[str] = []
+        page_count = 0
+
+        try:
+            reader = PdfReader(io.BytesIO(body))
+            page_count = len(reader.pages)
+            for page in reader.pages:
+                try:
+                    text = self._normalize(page.extract_text() or "")
+                except Exception:
+                    text = ""
+                pypdf_pages.append(text)
+        except Exception:
+            pypdf_pages = []
+
+        fitz_pages: list[str] = []
+        try:
+            document = fitz.open(stream=body, filetype="pdf")
+            page_count = max(page_count, document.page_count)
+            for page in document:
+                text = self._normalize(page.get_text("text") or "")
+                fitz_pages.append(text)
+            document.close()
+        except Exception:
+            fitz_pages = []
+
         pages: list[str] = []
-        for index, page in enumerate(reader.pages, start=1):
-            text = page.extract_text() or ""
-            text = self._normalize(text)
-            if text:
-                pages.append(f"[PAGE {index}]\n{text}")
-        return ExtractedDocument(text="\n\n".join(pages), page_count=len(reader.pages))
+        for index in range(max(len(pypdf_pages), len(fitz_pages))):
+            primary = pypdf_pages[index] if index < len(pypdf_pages) else ""
+            alternate = fitz_pages[index] if index < len(fitz_pages) else ""
+
+            # Prefer the richer text representation. This fixes PDFs whose
+            # fonts/layout produce only headings or a few words in pypdf.
+            chosen = primary
+            if len(alternate) > max(120, int(len(primary) * 1.35)):
+                chosen = alternate
+            elif not primary:
+                chosen = alternate
+
+            if chosen:
+                pages.append(f"[PAGE {index + 1}]\n{chosen}")
+
+        return ExtractedDocument(
+            text="\n\n".join(pages),
+            page_count=page_count,
+        )
 
     def _extract_html(self, body: bytes) -> ExtractedDocument:
         soup = BeautifulSoup(body, "html.parser")

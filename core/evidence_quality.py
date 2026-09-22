@@ -20,6 +20,8 @@ GENERIC_VALUES = {
     "false",
     "упоминается",
     "не упоминается",
+    "оплатить",
+    "продлить",
 }
 
 
@@ -35,6 +37,21 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         return False
 
     evidence = f"{value or ''} {quote or ''}".lower()
+
+    navigation_noise = bool(
+        re.search(
+            r"помощь\s+вопросы\s+и\s+ответы|продлить\s+оплатить|"
+            r"активировать\s+проверить|подарочн\w*\s+сертификат",
+            evidence,
+        )
+    )
+    testimonial_noise = bool(
+        re.search(
+            r"плохо\s+себя\s+чувств|ехала\s+на\s+эвакуатор|"
+            r"мне\s+(?:выплат|отремонт|предостав)|мой\s+автомоб",
+            evidence,
+        )
+    )
 
     if field_key == "franchise":
         has_franchise = "франшиз" in evidence
@@ -57,12 +74,27 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         has_meaning = bool(re.search(r"покрыв|страхов\w*\s+(?:случ|риск)|возмещ|включ|исключ|не\s+явля|ущерб", evidence))
         return has_terror and has_meaning
     if field_key == "drone":
+        if navigation_noise:
+            return False
         has_drone = bool(re.search(r"бпла|дрон|беспилот", evidence))
-        has_coverage = bool(re.search(r"ущерб|повреж|атак|паден|страх|риск|покрыв", evidence))
+        has_coverage = bool(
+            re.search(
+                r"ущерб|повреж|атак|паден|покрыв|возмещ|исключ|"
+                r"страхов\w*\s+(?:случ|риск)",
+                evidence,
+            )
+        )
         return has_drone and has_coverage
     if field_key == "tow_truck":
+        if testimonial_noise:
+            return False
         has_tow = bool(re.search(r"эвакуатор|эвакуац", evidence))
-        has_service = bool(re.search(r"расход|возмещ|оплат|предостав|лимит|услуг|транспортир", evidence))
+        has_service = bool(
+            re.search(
+                r"расход|возмещ|оплат|предостав|лимит|услуг|транспортир",
+                evidence,
+            )
+        )
         return has_tow and has_service
     if field_key == "repair_type":
         if re.search(r"уступк|право\s+требован|цесси", evidence):
@@ -71,6 +103,21 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         has_form = bool(re.search(r"форма|возмещ|направлен|осуществ|выплат|стоа|дилер", evidence))
         return has_repair and has_form
     if field_key == "payment_terms":
-        return bool(re.search(r"\d+\s*(?:рабоч\w*\s+)?дн|срок\w*.*\d+", evidence))
+        if navigation_noise:
+            return False
+        has_days = bool(
+            re.search(
+                r"\d+\s*(?:(?:рабоч|календарн)\w*\s+)?дн|срок\w*.*\d+",
+                evidence,
+            )
+        )
+        has_payment_context = bool(
+            re.search(
+                r"выплат|возмещ|направлен\w*\s+на\s+ремонт|"
+                r"принят\w*\s+решен|рассмотрен\w*\s+заяв",
+                evidence,
+            )
+        )
+        return has_days and has_payment_context
 
     return True
