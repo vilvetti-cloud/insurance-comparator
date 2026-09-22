@@ -169,9 +169,13 @@ class DataQualityReportService:
                     "found": found,
                     "value": value if found else None,
                     "source_level": row["source_level"],
-                    "source_label": SOURCE_LABELS.get(
-                        row["source_level"],
-                        row["source_type"] or "Не найдено",
+                    "source_label": (
+                        "Официальный snapshot"
+                        if row["source_type"] == "official_snapshot"
+                        else SOURCE_LABELS.get(
+                            row["source_level"],
+                            row["source_type"] or "Не найдено",
+                        )
                     )
                     if found
                     else "Не найдено",

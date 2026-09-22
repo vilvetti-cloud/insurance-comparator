@@ -9,6 +9,7 @@ from collector.deterministic import DeterministicCascoExtractor
 from collector.fallback import InternalFallback
 from collector.http_client import FetchError, HttpFetcher
 from collector.llm import GroqExtractor, LLMExtractionError
+from collector.official_snapshots import OfficialSnapshotProvider
 from collector.registry import INSURERS, InsurerConfig
 from collector.relevance import RelevanceSelector, TextChunk
 from collector.web_search import DuckDuckGoSearch
@@ -44,6 +45,7 @@ class CascoCollectionPipeline:
         self.llm = GroqExtractor()
         self.search = DuckDuckGoSearch()
         self.fallback = InternalFallback()
+        self.official_snapshots = OfficialSnapshotProvider()
         self.companies = CompanyRepository()
         self.products = ProductRepository()
         self.fields = ComparisonFieldRepository()
@@ -232,30 +234,95 @@ class CascoCollectionPipeline:
             found_fields.update(web_found)
             source_count += extra_sources
 
-        # Level 4: optional curated fallback, only for fields still unresolved.
-        missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
+        # Final fallback: a curated snapshot of facts already checked against
+        # official insurer rules/KIDs/pages. It is used only when live access
+        # cannot resolve a field (for example anti-bot blocks GitHub runners).
+        # Third-party or internal level-4 facts are deliberately not used.
+        missing = [
+            field["key"]
+            for field in KASKO_FIELDS
+            if field["key"] not in found_fields
+        ]
         if missing:
-            fallback_values = self.fallback.get(insurer.slug)
-            if fallback_values:
-                source = self.sources.upsert(
-                    company_id=company["id"],
-                    url=f"internal://fallback/{insurer.slug}",
-                    title="Curated internal fallback",
-                    source_type="fallback",
-                    source_level=4,
-                    status="active",
-                    success=True,
-                )
-                normalized: dict[str, dict[str, Any]] = {}
-                for key in missing:
-                    raw = fallback_values.get(key)
-                    if isinstance(raw, dict):
-                        normalized[key] = raw
-                    elif raw is not None:
-                        normalized[key] = {"value": str(raw), "found": True, "confidence": 0.5, "quote": str(raw), "page": None}
-                found_fields.update(self._persist_values(normalized, field_rows, source=source, document=None))
+            snapshot_found, snapshot_sources = self._collect_official_snapshots(
+                insurer=insurer,
+                company=company,
+                field_rows=field_rows,
+                missing=missing,
+            )
+            found_fields.update(snapshot_found)
+            source_count += snapshot_sources
 
-        return {"source_count": source_count, "document_count": document_count, "fields_found": len(found_fields)}
+        return {
+            "source_count": source_count,
+            "document_count": document_count,
+            "fields_found": len(found_fields),
+        }
+
+    def _collect_official_snapshots(
+        self,
+        *,
+        insurer: InsurerConfig,
+        company: dict[str, Any],
+        field_rows: dict[str, dict[str, Any]],
+        missing: list[str],
+    ) -> tuple[set[str], int]:
+        snapshots = self.official_snapshots.get(insurer.slug, missing)
+        if not snapshots:
+            return set(), 0
+
+        found: set[str] = set()
+        source_ids: set[int] = set()
+
+        for item in snapshots:
+            # Never replace a current fact with a snapshot. Snapshot exists only
+            # to prevent a blank when live official access is unavailable.
+            current = self.conditions.get_current(field_rows[item.field_key]["id"])
+            if current is not None:
+                found.add(item.field_key)
+                continue
+
+            source = self.sources.upsert(
+                company_id=company["id"],
+                url=item.source_url,
+                title=f"Официальный snapshot: {item.title}",
+                source_type="official_snapshot",
+                source_level=item.source_level,
+                http_status=None,
+                checksum=None,
+                success=False,
+            )
+            source_ids.add(source["id"])
+
+            verification_status = (
+                "verified"
+                if item.direct and item.source_level == 1
+                else "needs_review"
+            )
+            condition = self.conditions.save_candidate(
+                field_id=field_rows[item.field_key]["id"],
+                value=item.value,
+                source_id=source["id"],
+                source_level=item.source_level,
+                confidence=item.confidence,
+                verification_status=verification_status,
+                evidence_text=item.evidence,
+            )
+            if (
+                condition.get("source_id") == source["id"]
+                and condition.get("_evidence_needed", True)
+            ):
+                self.evidence.add(
+                    condition_id=condition["id"],
+                    source_id=source["id"],
+                    document_id=None,
+                    page_number=None,
+                    text_fragment=item.evidence,
+                    verification_status=verification_status,
+                )
+            found.add(item.field_key)
+
+        return found, len(source_ids)
 
     def _prepare_item(self, run_id: int, insurer: InsurerConfig) -> dict[str, Any]:
         company = self.companies.upsert(name=insurer.name, slug=insurer.slug, short_name=insurer.short_name, official_url=insurer.official_url)
