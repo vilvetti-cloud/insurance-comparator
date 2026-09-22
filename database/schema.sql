@@ -146,19 +146,6 @@ CREATE TABLE IF NOT EXISTS app_state (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_products_company ON products(company_id);
-CREATE INDEX IF NOT EXISTS idx_fields_product ON comparison_fields(product_id);
-CREATE INDEX IF NOT EXISTS idx_conditions_field ON conditions(field_id);
-CREATE INDEX IF NOT EXISTS idx_conditions_source_level ON conditions(field_id, source_level);
-CREATE INDEX IF NOT EXISTS idx_sources_company ON sources(company_id);
-CREATE INDEX IF NOT EXISTS idx_sources_level ON sources(company_id, source_level);
-CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_id);
-CREATE INDEX IF NOT EXISTS idx_evidence_condition ON evidence(condition_id);
-CREATE INDEX IF NOT EXISTS idx_condition_versions_condition ON condition_versions(condition_id);
-CREATE INDEX IF NOT EXISTS idx_change_log_entity ON change_log(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_collection_items_run ON collection_items(run_id);
-CREATE INDEX IF NOT EXISTS idx_collection_items_company ON collection_items(company_id);
-
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS slug TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS short_name TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS official_url TEXT;
@@ -194,3 +181,17 @@ ALTER TABLE evidence ADD COLUMN IF NOT EXISTS document_id BIGINT REFERENCES docu
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS verified_by TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_products_company ON products(company_id);
+CREATE INDEX IF NOT EXISTS idx_fields_product ON comparison_fields(product_id);
+CREATE INDEX IF NOT EXISTS idx_conditions_field ON conditions(field_id);
+CREATE INDEX IF NOT EXISTS idx_conditions_source_level ON conditions(field_id, source_level);
+CREATE INDEX IF NOT EXISTS idx_sources_company ON sources(company_id);
+CREATE INDEX IF NOT EXISTS idx_sources_level ON sources(company_id, source_level);
+CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_condition ON evidence(condition_id);
+CREATE INDEX IF NOT EXISTS idx_condition_versions_condition ON condition_versions(condition_id);
+CREATE INDEX IF NOT EXISTS idx_change_log_entity ON change_log(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_collection_items_run ON collection_items(run_id);
+CREATE INDEX IF NOT EXISTS idx_collection_items_company ON collection_items(company_id);
+
