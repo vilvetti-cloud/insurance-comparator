@@ -5,6 +5,7 @@ from typing import Any
 
 from collector.discovery import SourceDiscovery
 from collector.document_extractor import DocumentExtractor
+from collector.deterministic import DeterministicCascoExtractor
 from collector.fallback import InternalFallback
 from collector.http_client import FetchError, HttpFetcher
 from collector.llm import GroqExtractor, LLMExtractionError
@@ -39,6 +40,7 @@ class CascoCollectionPipeline:
         self.discovery = SourceDiscovery(self.fetcher)
         self.extractor = DocumentExtractor()
         self.selector = RelevanceSelector()
+        self.deterministic = DeterministicCascoExtractor()
         self.llm = GroqExtractor()
         self.search = DuckDuckGoSearch()
         self.fallback = InternalFallback()
@@ -260,41 +262,61 @@ class CascoCollectionPipeline:
         text: str,
         field_keys: list[str] | set[str] | tuple[str, ...],
     ) -> dict[str, dict[str, Any]]:
-        """Extract official-source facts in focused batches instead of one 10-field prompt."""
+        """Hybrid extraction: deterministic facts first, LLM only for ambiguity."""
         ordered = [
             field["key"]
             for field in KASKO_FIELDS
             if field["key"] in set(field_keys)
         ]
-        result: dict[str, dict[str, Any]] = {}
-        batch_size = 5
+        if not ordered:
+            return {}
 
-        for offset in range(0, len(ordered), batch_size):
-            batch = ordered[offset : offset + batch_size]
-            grouped = self.selector.select_fields(
-                text,
-                field_keys=batch,
-                max_total_chars=10000,
-                window_lines=7,
-                max_chunks_per_field=4,
-            )
-            if not any(grouped.get(key) for key in batch):
+        grouped = self.selector.select_fields(
+            text,
+            field_keys=ordered,
+            max_total_chars=24000,
+            window_lines=7,
+            max_chunks_per_field=4,
+        )
+
+        # 1) Cheap and deterministic extraction from the official document.
+        result = self.deterministic.extract(
+            grouped,
+            field_keys=ordered,
+        )
+
+        # 2) Only unresolved fields go to the LLM. Small batches prevent one
+        # difficult field from consuming the whole insurer's time budget.
+        unresolved = [
+            key
+            for key in ordered
+            if key not in result
+        ]
+        batch_size = 2
+
+        for offset in range(0, len(unresolved), batch_size):
+            batch = unresolved[offset : offset + batch_size]
+            batch_chunks = {
+                key: grouped.get(key, [])
+                for key in batch
+            }
+            if not any(batch_chunks.get(key) for key in batch):
                 continue
             try:
                 values = self.llm.extract_fields(
                     company_name=insurer.name,
                     source_url=source_url,
                     source_level=source_level,
-                    grouped_chunks=grouped,
+                    grouped_chunks=batch_chunks,
                     field_keys=batch,
                 )
             except LLMExtractionError:
-                # One rate-limit or malformed response must not throw away
-                # fields extracted successfully from the other batch.
                 continue
+
             for key in batch:
-                if key in values:
-                    result[key] = values[key]
+                value = values.get(key, {})
+                if value.get("found") and value.get("value"):
+                    result[key] = value
 
         return result
 
