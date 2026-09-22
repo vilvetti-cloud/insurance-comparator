@@ -58,8 +58,25 @@ class SourceDiscovery:
             label = link.get_text(" ", strip=True)
             haystack = f"{href} {label}".lower()
             is_pdf = ".pdf" in parsed.path.lower()
-            is_rule = any(term in haystack for term in ("правил", "услови", "каско", "автотранспорт", "автострах"))
-            if not (is_pdf or is_rule):
+            is_rule = any(
+                term in haystack
+                for term in (
+                    "правил",
+                    "услови",
+                    "каско",
+                    "casco",
+                    "автотранспорт",
+                    "автострах",
+                    "страховани",
+                    "insurance-rule",
+                    "insurance_rule",
+                )
+            )
+            # A PDF on an insurer domain is not automatically a CASCO rules
+            # document (it may be compliance, corporate governance, reports, etc.).
+            if is_pdf and not is_rule:
+                continue
+            if not is_pdf and not is_rule:
                 continue
             if href in seen:
                 continue
