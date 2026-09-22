@@ -53,10 +53,36 @@ INSURERS = (
         "https://api.soglasie.ru/storage/managed/upload/docs/auto/pravila-strakhovaniya-transportnykh-sredstv.pdf",
     ),
     InsurerConfig("rgs", "Росгосстрах", "РГС", "https://www.rgs.ru/", "https://www.rgs.ru/auto/ekasko/kasko-ot-ugona-i-gibeli"),
-    InsurerConfig("t-insurance", "Т-Страхование", "Т-Страхование", "https://www.tbank.ru/", "https://www.tbank.ru/insurance/kasko/"),
-    InsurerConfig("sber", "СберСтрахование", "Сбер", "https://www.sberbank.ru/"),
-    InsurerConfig("yugoria", "Югория", "Югория", "https://www.ugsk.ru/"),
-    InsurerConfig("sovcom", "Совкомбанк Страхование", "Совкомбанк", "https://sovcomins.ru/"),
+    InsurerConfig(
+        "t-insurance",
+        "Т-Страхование",
+        "Т-Страхование",
+        "https://www.tbank.ru/",
+        "https://www.tbank.ru/insurance/kasko/",
+        "https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf",
+    ),
+    InsurerConfig(
+        "sber",
+        "СберСтрахование",
+        "Сбер",
+        "https://sberbankins.ru/",
+        "https://sberbankins.ru/products/kasko/",
+        "https://sberbankins.ru/upload/iblock/4aa/wef0vo0p52bngziwkksqhic13381u1j9/pravila_134_19.pdf",
+    ),
+    InsurerConfig(
+        "yugoria",
+        "Югория",
+        "Югория",
+        "https://www.ugsk.ru/",
+        rules_url="https://ugsk.ru/pravila/Kasko.pdf",
+    ),
+    InsurerConfig(
+        "sovcom",
+        "Совкомбанк Страхование",
+        "Совкомбанк",
+        "https://sovcomins.ru/",
+        "https://sovcomins.ru/product/car/",
+    ),
 )
 
 
