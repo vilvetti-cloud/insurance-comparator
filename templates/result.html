@@ -36,7 +36,7 @@ body{margin:0;min-height:100vh;font-family:Inter,-apple-system,BlinkMacSystemFon
 <table>
 <thead><tr><th class="param">Параметр</th><th>{{ company1 }}</th><th>{{ company2 }}</th></tr></thead>
 <tbody>
-{% set fields=[('franchise','Франшиза'),('without_certificates','Без справок'),('gap','GAP-страхование'),('total_loss','Порог тотала'),('fire','Самовозгорание'),('terrorism','Терроризм'),('drone','БПЛА / Дроны'),('tow_truck','Эвакуатор'),('repair_type','Тип ремонта'),('payment_terms','Срок выплат')] %}
+{% set fields=[('franchise','Франшиза'),('without_certificates','Без справок'),('gap','GAP-страхование'),('total_loss','Порог тотала'),('self_ignition','Самовозгорание'),('terrorism','Терроризм'),('drone','БПЛА / Дроны'),('tow_truck','Эвакуатор'),('repair_type','Тип ремонта'),('payment_terms','Срок выплат')] %}
 {% for key,label in fields %}
 <tr>
 <td class="param">{{ label }}</td>
