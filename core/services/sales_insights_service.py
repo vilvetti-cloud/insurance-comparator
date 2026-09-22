@@ -86,11 +86,14 @@ class SalesInsightsService:
             return None
         return " ".join(str(value).split())
 
-    @staticmethod
-    def _trusted(data: dict[str, Any], key: str) -> bool:
+    @classmethod
+    def _trusted(cls, data: dict[str, Any], key: str) -> bool:
         level = data.get(f"{key}_source_level")
         confidence = data.get(f"{key}_confidence")
+        value = data.get(key)
         if level not in {1, 2}:
+            return False
+        if cls._uncertain(str(value or "")):
             return False
         if confidence is None:
             return True
@@ -98,6 +101,22 @@ class SalesInsightsService:
             return float(confidence) >= 0.75
         except (TypeError, ValueError):
             return False
+
+    @staticmethod
+    def _uncertain(text: str) -> bool:
+        lowered = " ".join(text.lower().split())
+        return bool(
+            re.search(
+                r"зависит от (?:выбранной )?(?:программы|договора|формы)|"
+                r"определяется (?:выбранной )?(?:программой|договором|условиями договора)|"
+                r"не (?:является )?универсальн|"
+                r"не подтвержден|не заявлен|не установлен|не опубликован|"
+                r"не выделен|не указано|не указан|"
+                r"единый .* не|конкретн\w* .* определяется|"
+                r"необходимо (?:проверять|определять) по",
+                lowered,
+            )
+        )
 
     def _compare(
         self,
