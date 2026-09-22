@@ -23,6 +23,7 @@ INSURERS = (
         "https://vsk.ru/",
         rules_url="https://www.vsk.ru/cms/assets/1179953c-dc8f-45f9-9d46-8eaba56b9c10",
         official_doc_urls=(
+            "https://www.vsk.ru/cms/assets/209bfe0b-8b20-474c-8428-82d51132f54b",
             "https://www.vsk.ru/cms/assets/3274076a-21b6-4bc7-96e8-26f1eb2bbcde.pdf",
         ),
     ),
