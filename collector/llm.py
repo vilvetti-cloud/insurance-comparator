@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any
+from typing import Any, Iterable
 
 import requests
 
@@ -32,7 +32,7 @@ class LLMExtractionError(RuntimeError):
 
 
 class GroqExtractor:
-    """One structured Groq request extracts all CASCO fields from one source bundle."""
+    """Structured extraction from evidence selected out of official CASCO sources."""
 
     def __init__(
         self,
@@ -58,10 +58,35 @@ class GroqExtractor:
         source_level: int,
         grouped_chunks: dict[str, list[TextChunk]],
     ) -> dict[str, dict[str, Any]]:
+        return self.extract_fields(
+            company_name=company_name,
+            source_url=source_url,
+            source_level=source_level,
+            grouped_chunks=grouped_chunks,
+            field_keys=[field["key"] for field in KASKO_FIELDS],
+        )
+
+    def extract_fields(
+        self,
+        *,
+        company_name: str,
+        source_url: str,
+        source_level: int,
+        grouped_chunks: dict[str, list[TextChunk]],
+        field_keys: Iterable[str],
+    ) -> dict[str, dict[str, Any]]:
+        requested = [
+            field["key"]
+            for field in KASKO_FIELDS
+            if field["key"] in set(field_keys)
+        ]
+        if not requested:
+            return self._empty_result()
+
         if not self.api_key:
             raise LLMExtractionError("GROQ_API_KEY is not configured")
 
-        context = self._build_context(grouped_chunks)
+        context = self._build_context(grouped_chunks, requested)
         if not context.strip():
             return self._empty_result()
 
@@ -70,10 +95,19 @@ class GroqExtractor:
             "temperature": 0,
             "response_format": {"type": "json_object"},
             "messages": [
-                {"role": "system", "content": self._system_prompt()},
+                {
+                    "role": "system",
+                    "content": self._system_prompt(requested),
+                },
                 {
                     "role": "user",
-                    "content": self._user_prompt(company_name, source_url, source_level, context),
+                    "content": self._user_prompt(
+                        company_name,
+                        source_url,
+                        source_level,
+                        context,
+                        requested,
+                    ),
                 },
             ],
         }
@@ -95,33 +129,47 @@ class GroqExtractor:
                 if response.status_code == 429:
                     retry_after = response.headers.get("retry-after")
                     try:
-                        wait_seconds = float(retry_after) if retry_after else 15.0 * (attempt + 1)
+                        wait_seconds = (
+                            float(retry_after)
+                            if retry_after
+                            else 15.0 * (attempt + 1)
+                        )
                     except (TypeError, ValueError):
                         wait_seconds = 15.0 * (attempt + 1)
                     if attempt < self.retries:
                         time.sleep(max(5.0, min(wait_seconds + 1.0, 90.0)))
                         continue
                     reset_tokens = response.headers.get("x-ratelimit-reset-tokens")
-                    detail = f"Groq rate limit (429), retry-after={retry_after}, token-reset={reset_tokens}"
+                    detail = (
+                        f"Groq rate limit (429), retry-after={retry_after}, "
+                        f"token-reset={reset_tokens}"
+                    )
                     raise LLMExtractionError(detail, status_code=429)
                 if response.status_code == 413:
-                    raise LLMExtractionError("Groq request too large (413)", status_code=413)
+                    raise LLMExtractionError(
+                        "Groq request too large (413)",
+                        status_code=413,
+                    )
                 if response.status_code >= 400:
                     raise LLMExtractionError(
                         f"Groq HTTP {response.status_code}: {response.text[:500]}",
                         status_code=response.status_code,
                     )
+
                 data = response.json()
-                content = data["choices"][0]["message"]["content"]
-                parsed = json.loads(content)
-                return self._normalize_result(parsed)
+                raw_content = data["choices"][0]["message"]["content"]
+                parsed = json.loads(raw_content)
+                return self._normalize_result(parsed, requested)
             except LLMExtractionError:
                 raise
             except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
                 last_error = exc
                 if attempt < self.retries:
                     time.sleep(2.0 * (attempt + 1))
-        raise LLMExtractionError(f"Groq extraction failed: {last_error}") from last_error
+
+        raise LLMExtractionError(
+            f"Groq extraction failed: {last_error}"
+        ) from last_error
 
     def _wait_between_requests(self) -> None:
         elapsed = time.monotonic() - self._last_request_at
@@ -130,24 +178,27 @@ class GroqExtractor:
         self._last_request_at = time.monotonic()
 
     @staticmethod
-    def _system_prompt() -> str:
-        fields = ", ".join(field["key"] for field in KASKO_FIELDS)
+    def _system_prompt(field_keys: list[str]) -> str:
         requirements = "\n".join(
-            f"- {key}: {description}" for key, description in FIELD_REQUIREMENTS.items()
+            f"- {key}: {FIELD_REQUIREMENTS[key]}"
+            for key in field_keys
         )
+        fields = ", ".join(field_keys)
         return f"""Ты извлекаешь условия КАСКО из подтвержденного источника.
 Работай ТОЛЬКО с переданными фрагментами. Не используй знания из памяти.
 Не придумывай отсутствующие значения и не принимай названия меню, кнопок или разделов за условия страхования.
-Нужно вернуть строго JSON-объект с полями: {fields}.
+Нужно вернуть строго JSON-объект только с полями: {fields}.
 
 Что именно означает каждое поле:
 {requirements}
 
 Для каждого поля верни объект:
 {{"value": string|null, "found": boolean, "confidence": number, "quote": string|null, "page": integer|null, "notes": string|null}}
+
 Если фрагмент не отвечает на требование поля напрямую: value=null, found=false, quote=null.
-value должен быть кратким содержательным условием на русском языке, а не одним общим словом.
+value должен быть кратким содержательным условием на русском языке.
 quote должен быть коротким дословным фрагментом из переданного текста, который сам по себе подтверждает value.
+Если ответ зависит от договора/программы, обязательно укажи это в value вместо ложного общего вывода.
 confidence от 0 до 1.
 """
 
@@ -157,20 +208,25 @@ confidence от 0 до 1.
         source_url: str,
         source_level: int,
         context: str,
+        field_keys: list[str],
     ) -> str:
         return (
             f"Компания: {company_name}\n"
             f"Источник: {source_url}\n"
-            f"Уровень источника: {source_level}\n\n"
-            "Извлеки все 10 параметров из контекста ниже. Один ответ должен содержать все поля.\n\n"
+            f"Уровень источника: {source_level}\n"
+            f"Нужно извлечь: {', '.join(field_keys)}\n\n"
+            "Для каждого запрошенного поля внимательно сопоставь все переданные "
+            "фрагменты. Не отвечай по другим полям.\n\n"
             f"КОНТЕКСТ:\n{context}"
         )
 
     @staticmethod
-    def _build_context(grouped_chunks: dict[str, list[TextChunk]]) -> str:
+    def _build_context(
+        grouped_chunks: dict[str, list[TextChunk]],
+        field_keys: list[str],
+    ) -> str:
         parts: list[str] = []
-        for field in KASKO_FIELDS:
-            key = field["key"]
+        for key in field_keys:
             chunks = grouped_chunks.get(key, [])
             if not chunks:
                 continue
@@ -195,12 +251,15 @@ confidence от 0 до 1.
         }
 
     @staticmethod
-    def _normalize_result(parsed: Any) -> dict[str, dict[str, Any]]:
+    def _normalize_result(
+        parsed: Any,
+        field_keys: list[str],
+    ) -> dict[str, dict[str, Any]]:
         if not isinstance(parsed, dict):
             raise LLMExtractionError("Groq returned a non-object JSON response")
+
         result = GroqExtractor._empty_result()
-        for field in KASKO_FIELDS:
-            key = field["key"]
+        for key in field_keys:
             raw = parsed.get(key)
             if not isinstance(raw, dict):
                 continue
@@ -209,9 +268,15 @@ confidence от 0 до 1.
                 "value": str(value).strip() if value is not None else None,
                 "found": bool(raw.get("found")) and value is not None,
                 "confidence": GroqExtractor._confidence(raw.get("confidence")),
-                "quote": str(raw.get("quote")).strip() if raw.get("quote") else None,
-                "page": int(raw["page"]) if str(raw.get("page", "")).isdigit() else None,
-                "notes": str(raw.get("notes")).strip() if raw.get("notes") else None,
+                "quote": str(raw.get("quote")).strip()
+                if raw.get("quote")
+                else None,
+                "page": int(raw["page"])
+                if str(raw.get("page", "")).isdigit()
+                else None,
+                "notes": str(raw.get("notes")).strip()
+                if raw.get("notes")
+                else None,
             }
         return result
 
