@@ -116,26 +116,33 @@ class CascoCollectionPipeline:
             except LLMExtractionError:
                 pass
 
-        # Level 3: web search for unresolved parameters.
+        # Before ordinary web fallback, explicitly search the insurer's own
+        # domain for an official CASCO rules PDF. If found and validated by
+        # document text, it becomes a level-1 authoritative source.
         missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
         if missing:
-            search_text_parts: list[str] = []
-            search_hits: list[tuple[str, str]] = []
-            for query in self.search.build_queries(insurer.name):
-                try:
-                    for hit, text in self.search.collect_text(query, limit=3, max_chars=7000):
-                        search_hits.append((hit.url, text))
-                        search_text_parts.append(f"[URL: {hit.url}]\n{text}")
-                except Exception:
-                    continue
-            if search_text_parts:
-                grouped = self.selector.select("\n\n".join(search_text_parts), max_total_chars=10000)
-                source = self.sources.upsert(company_id=company["id"], url=search_hits[0][0], title="DuckDuckGo result bundle", source_type="web_search", source_level=3, http_status=200, success=True)
-                try:
-                    values = self._extract_with_llm(insurer, search_hits[0][0], 3, grouped)
-                    found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
-                except LLMExtractionError:
-                    pass
+            rules_found, extra_sources, extra_documents = self._discover_official_rules_via_search(
+                insurer=insurer,
+                company=company,
+                field_rows=field_rows,
+            )
+            found_fields.update(rules_found)
+            source_count += extra_sources
+            document_count += extra_documents
+
+        # Level 2/3 fallback: search every still-missing field separately.
+        # Official-domain pages remain level 2; third-party search results are
+        # level 3 and are never treated as equivalent to insurer rules.
+        missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
+        if missing:
+            web_found, extra_sources = self._collect_field_search_fallback(
+                insurer=insurer,
+                company=company,
+                field_rows=field_rows,
+                missing=missing,
+            )
+            found_fields.update(web_found)
+            source_count += extra_sources
 
         # Level 4: optional curated fallback, only for fields still unresolved.
         missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
@@ -169,18 +176,216 @@ class CascoCollectionPipeline:
     def _extract_with_llm(self, insurer: InsurerConfig, source_url: str, source_level: int, grouped: dict[str, list[TextChunk]]) -> dict[str, dict[str, Any]]:
         return self.llm.extract(company_name=insurer.name, source_url=source_url, source_level=source_level, grouped_chunks=grouped)
 
-    def _persist_values(self, values: dict[str, dict[str, Any]], field_rows: dict[str, dict[str, Any]], *, source: dict[str, Any], document: dict[str, Any] | None) -> set[str]:
+    def _discover_official_rules_via_search(
+        self,
+        *,
+        insurer: InsurerConfig,
+        company: dict[str, Any],
+        field_rows: dict[str, dict[str, Any]],
+    ) -> tuple[set[str], int, int]:
+        seen: set[str] = set()
+        for query in self.search.build_rules_queries(insurer.name, insurer.official_url):
+            try:
+                hits = self.search.search(query, limit=5)
+            except Exception:
+                continue
+
+            for hit in hits:
+                if hit.url in seen or not self.search.is_official_url(hit.url, insurer.official_url):
+                    continue
+                seen.add(hit.url)
+                try:
+                    fetched = self.fetcher.fetch(hit.url)
+                    is_pdf = "pdf" in fetched.content_type or fetched.body.lstrip().startswith(b"%PDF")
+                    if not is_pdf:
+                        continue
+                    extracted = self.extractor.extract(body=fetched.body, content_type=fetched.content_type)
+                    if not self._is_casco_rules_text(extracted.text):
+                        continue
+
+                    source = self.sources.upsert(
+                        company_id=company["id"],
+                        url=fetched.url,
+                        title=hit.title or "Официальные правила КАСКО",
+                        source_type="pdf",
+                        source_level=1,
+                        http_status=fetched.status_code,
+                        checksum=fetched.checksum,
+                        success=True,
+                    )
+                    document = self.documents.upsert(
+                        source_id=source["id"],
+                        document_url=fetched.url,
+                        title=hit.title or "Официальные правила КАСКО",
+                        checksum=fetched.checksum,
+                    )
+                    grouped = self.selector.select(extracted.text, max_total_chars=12000)
+                    values = self._extract_with_llm(insurer, fetched.url, 1, grouped)
+                    found = self._persist_values(values, field_rows, source=source, document=document)
+                    return found, 1, 1
+                except (FetchError, LLMExtractionError, ValueError):
+                    continue
+
+        return set(), 0, 0
+
+    def _collect_field_search_fallback(
+        self,
+        *,
+        insurer: InsurerConfig,
+        company: dict[str, Any],
+        field_rows: dict[str, dict[str, Any]],
+        missing: list[str],
+    ) -> tuple[set[str], int]:
+        # One search bundle, but queries are field-specific so every missing
+        # parameter gets a real chance to find evidence.
+        candidates: dict[str, list[tuple[str, str]]] = {key: [] for key in missing}
+        unique_texts: dict[str, str] = {}
+
+        for key in missing:
+            for query in self.search.build_field_queries(insurer.name, insurer.official_url, key):
+                try:
+                    results = self.search.collect_text(query, limit=2, max_chars=5000)
+                except Exception:
+                    continue
+                for hit, text in results:
+                    candidates[key].append((hit.url, text))
+                    unique_texts.setdefault(hit.url, text)
+                    if len(candidates[key]) >= 3:
+                        break
+                if len(candidates[key]) >= 3:
+                    break
+
+        if not unique_texts:
+            return set(), 0
+
+        combined = "\n\n".join(
+            f"[URL: {url}]\n{text}" for url, text in unique_texts.items()
+        )
+        grouped = self.selector.select(combined, max_total_chars=14000)
+
+        try:
+            values = self._extract_with_llm(insurer, "multi-source web search", 3, grouped)
+        except LLMExtractionError:
+            return set(), len(unique_texts)
+
         found: set[str] = set()
-        for field in KASKO_FIELDS:
-            key = field["key"]
+        for key in missing:
             value = values.get(key, {})
             if not value.get("found") or not value.get("value"):
                 continue
             if not is_supported_condition(key, value.get("value"), value.get("quote")):
                 continue
-            condition = self.conditions.save_candidate(field_id=field_rows[key]["id"], value=value["value"], source_id=source["id"], source_level=source["source_level"], confidence=value.get("confidence"), verification_status="needs_review")
+
+            source_url = self._source_for_quote(value.get("quote"), candidates.get(key, []))
+            if not source_url:
+                continue
+            source_level = 2 if self.search.is_official_url(source_url, insurer.official_url) else 3
+            source_type = "official_site" if source_level == 2 else "web_search"
+            source = self.sources.upsert(
+                company_id=company["id"],
+                url=source_url,
+                title="Найденный источник КАСКО",
+                source_type=source_type,
+                source_level=source_level,
+                http_status=200,
+                success=True,
+            )
+            found.update(
+                self._persist_values(
+                    values,
+                    field_rows,
+                    source=source,
+                    document=None,
+                    allowed_keys={key},
+                )
+            )
+
+        return found, len(unique_texts)
+
+    @staticmethod
+    def _source_for_quote(
+        quote: str | None,
+        candidates: list[tuple[str, str]],
+    ) -> str | None:
+        if not candidates:
+            return None
+        if quote:
+            normalized_quote = " ".join(str(quote).lower().split())
+            for url, text in candidates:
+                normalized_text = " ".join(text.lower().split())
+                if normalized_quote and normalized_quote in normalized_text:
+                    return url
+                # The model may shorten a verbatim quote with punctuation
+                # differences. A distinctive prefix is enough to attribute it.
+                if len(normalized_quote) >= 48 and normalized_quote[:48] in normalized_text:
+                    return url
+        return candidates[0][0]
+
+    @staticmethod
+    def _is_casco_rules_text(text: str) -> bool:
+        sample = " ".join(text.lower().split())[:20000]
+        has_rules = "правил" in sample
+        has_product = (
+            "каско" in sample
+            or (
+                "страхован" in sample
+                and ("транспортн" in sample or "автомоб" in sample)
+            )
+        )
+        return has_rules and has_product
+
+    def _persist_values(
+        self,
+        values: dict[str, dict[str, Any]],
+        field_rows: dict[str, dict[str, Any]],
+        *,
+        source: dict[str, Any],
+        document: dict[str, Any] | None,
+        allowed_keys: set[str] | None = None,
+    ) -> set[str]:
+        found: set[str] = set()
+        for field in KASKO_FIELDS:
+            key = field["key"]
+            if allowed_keys is not None and key not in allowed_keys:
+                continue
+            value = values.get(key, {})
+            if not value.get("found") or not value.get("value"):
+                continue
+            if not is_supported_condition(key, value.get("value"), value.get("quote")):
+                continue
+
+            confidence = value.get("confidence")
+            try:
+                confidence_value = float(confidence) if confidence is not None else 0.0
+            except (TypeError, ValueError):
+                confidence_value = 0.0
+
+            # The source itself is authoritative when it is a validated official
+            # CASCO rules PDF. We still require field-specific evidence and a
+            # sensible extraction confidence before auto-verifying the value.
+            verification_status = (
+                "verified"
+                if source.get("source_level") == 1 and confidence_value >= 0.85
+                else "needs_review"
+            )
+
+            condition = self.conditions.save_candidate(
+                field_id=field_rows[key]["id"],
+                value=value["value"],
+                source_id=source["id"],
+                source_level=source["source_level"],
+                confidence=confidence,
+                verification_status=verification_status,
+            )
             # A stronger source may already own the field. Never attach weaker evidence to it.
             if condition.get("source_id") == source["id"]:
-                self.evidence.add(condition_id=condition["id"], source_id=source["id"], document_id=document["id"] if document else None, page_number=value.get("page"), text_fragment=value.get("quote"), verification_status="needs_review")
+                self.evidence.add(
+                    condition_id=condition["id"],
+                    source_id=source["id"],
+                    document_id=document["id"] if document else None,
+                    page_number=value.get("page"),
+                    text_fragment=value.get("quote"),
+                    verification_status=verification_status,
+                )
             found.add(key)
         return found
