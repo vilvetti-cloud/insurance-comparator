@@ -439,7 +439,10 @@ class CascoCollectionPipeline:
                 or fetched.body.lstrip().startswith(b"%PDF")
             )
             if not is_pdf:
-                return set(), 0, 0
+                # Some insurer anti-bot layers return an HTML shell with 200 OK
+                # for a PDF asset. Retry the exact official URL through Reader.
+                fetched = self.fetcher.fetch_via_reader(insurer.rules_url)
+                is_pdf = True
 
             # rules_url is a curated catalog entry: the document has already
             # been confirmed as the insurer's official current CASCO rules.
