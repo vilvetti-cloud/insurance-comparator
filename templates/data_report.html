@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Контроль данных — Страховой аналитик</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="app-shell site-header__inner">
+      <a class="brand" href="/">
+        <span class="brand__mark">РЕСО</span>
+        <span class="brand__copy">
+          <span class="brand__title">Страховой аналитик</span>
+          <span class="brand__subtitle">Контроль источников КАСКО</span>
+        </span>
+      </a>
+
+      <div class="header-actions">
+        <a class="header-link" href="/">Сравнение</a>
+        <span class="header-link header-link--active">Контроль данных</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="page report-page">
+    <div class="app-shell">
+      <section class="report-hero">
+        <div>
+          <div class="eyebrow">Контроль качества базы</div>
+          <h1>Что найдено по каждой страховой</h1>
+          <p>
+            Текущее содержимое базы, источник каждого условия и результат последней автоматической проверки.
+            Значения из официальных правил имеют высший приоритет.
+          </p>
+        </div>
+
+        <div class="report-summary">
+          <div class="report-summary__metric">
+            <strong>{{ report.total_found }} / {{ report.total_possible }}</strong>
+            <span>параметров заполнено</span>
+          </div>
+          <div class="report-summary__metric">
+            <strong>{{ report.coverage_percent }}%</strong>
+            <span>общая наполненность</span>
+          </div>
+          <div class="report-summary__metric">
+            <strong>{{ report.companies|length }}</strong>
+            <span>страховых в контроле</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="report-legend">
+        <span class="badge badge--document">Официальные правила PDF</span>
+        <span class="badge badge--site">Официальный сайт / документ</span>
+        <span class="badge badge--review">Интернет-поиск</span>
+        <span class="badge badge--empty">Не найдено</span>
+      </div>
+
+      <section class="report-company-list">
+        {% for company in report.companies %}
+        <details class="report-company" {% if company.missing_count > 0 %}open{% endif %}>
+          <summary class="report-company__summary">
+            <div class="report-company__identity">
+              <div class="report-company__score {% if company.found_count == 10 %}report-company__score--complete{% elif company.found_count == 0 %}report-company__score--empty{% endif %}">
+                {{ company.found_count }}/10
+              </div>
+              <div>
+                <strong>{{ company.name }}</strong>
+                <span>
+                  {% if company.last_checked %}
+                    Последняя подтверждённая проверка: {{ company.last_checked }}
+                  {% else %}
+                    Подтверждённых данных пока нет
+                  {% endif %}
+                </span>
+              </div>
+            </div>
+
+            <div class="report-company__meta">
+              <div class="source-mix">
+                {% if company.official_pdf_count %}
+                  <span class="source-mix__item source-mix__item--pdf">PDF {{ company.official_pdf_count }}</span>
+                {% endif %}
+                {% if company.official_count %}
+                  <span class="source-mix__item source-mix__item--official">Оф. сайт {{ company.official_count }}</span>
+                {% endif %}
+                {% if company.web_count %}
+                  <span class="source-mix__item source-mix__item--web">Интернет {{ company.web_count }}</span>
+                {% endif %}
+                {% if company.fallback_count %}
+                  <span class="source-mix__item">Fallback {{ company.fallback_count }}</span>
+                {% endif %}
+                {% if company.missing_count %}
+                  <span class="source-mix__item source-mix__item--missing">Пусто {{ company.missing_count }}</span>
+                {% endif %}
+              </div>
+
+              {% if company.latest_run %}
+              <div class="run-pill {% if company.latest_run.item_status == 'failed' %}run-pill--error{% endif %}">
+                Проверка #{{ company.latest_run.run_id }}:
+                {{ company.latest_run.item_status }}
+                · найдено {{ company.latest_run.fields_found }}/10
+              </div>
+              {% endif %}
+            </div>
+
+            <span class="details-panel__chevron" aria-hidden="true">⌄</span>
+          </summary>
+
+          <div class="report-company__body">
+            {% if company.latest_run and company.latest_run.error %}
+            <div class="report-error">
+              Ошибка последней проверки: {{ company.latest_run.error }}
+            </div>
+            {% endif %}
+
+            <div class="report-table-wrap">
+              <table class="report-table">
+                <thead>
+                  <tr>
+                    <th>Параметр</th>
+                    <th>Что хранится сейчас</th>
+                    <th>Источник</th>
+                    <th>Проверено</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for field in company.fields %}
+                  <tr class="{% if not field.found %}report-row--missing{% endif %}">
+                    <td>
+                      <strong class="report-field-name">{{ field.label }}</strong>
+                    </td>
+                    <td>
+                      {% if field.found %}
+                        <div class="report-value">{{ field.value }}</div>
+                        {% if field.evidence_quote %}
+                        <details class="evidence-details">
+                          <summary>Показать подтверждающий фрагмент</summary>
+                          <p>{{ field.evidence_quote }}</p>
+                        </details>
+                        {% endif %}
+                      {% else %}
+                        <span class="report-missing">Не найдено</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if field.found %}
+                        <div class="report-source">
+                          {% if field.source_level == 1 %}
+                            <span class="badge badge--document">{{ field.source_label }}</span>
+                          {% elif field.source_level == 2 %}
+                            <span class="badge badge--site">{{ field.source_label }}</span>
+                          {% elif field.source_level == 3 %}
+                            <span class="badge badge--review">{{ field.source_label }}</span>
+                          {% else %}
+                            <span class="badge badge--empty">{{ field.source_label }}</span>
+                          {% endif %}
+
+                          {% if field.page_number %}
+                            <span class="report-page-number">стр. {{ field.page_number }}</span>
+                          {% endif %}
+
+                          {% if field.source_url %}
+                            <a href="{{ field.source_url }}" target="_blank" rel="noopener">Открыть источник ↗</a>
+                          {% endif %}
+                        </div>
+                      {% else %}
+                        <span class="report-missing">—</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if field.checked_at %}
+                        <span class="report-checked">{{ field.checked_at }}</span>
+                      {% else %}
+                        <span class="report-missing">—</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="report-company__footer">
+              <div>
+                <span>Официальный сайт:</span>
+                <a href="{{ company.official_url }}" target="_blank" rel="noopener">{{ company.official_url }}</a>
+              </div>
+              {% if company.rules_url %}
+              <div>
+                <span>Закреплённые правила:</span>
+                <a href="{{ company.rules_url }}" target="_blank" rel="noopener">{{ company.rules_url }}</a>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </details>
+        {% endfor %}
+      </section>
+    </div>
+  </main>
+</body>
+</html>
