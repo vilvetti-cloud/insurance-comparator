@@ -31,7 +31,7 @@ INSURERS = (
         "https://www.vsk.ru/klientam/avto/kasko-kompakt-minimum",
         rules_url="https://www.vsk.ru/cms/assets/1179953c-dc8f-45f9-9d46-8eaba56b9c10",
         official_doc_urls=(
-            "https://www.vsk.ru/cms/assets/2f37485b-94f3-4e7e-8007-8fda361fbf50",
+            "https://www.vsk.ru/cms/assets/209bfe0b-8b20-474c-8428-82d51132f54b",
         ),
     ),
     InsurerConfig(
@@ -62,7 +62,7 @@ INSURERS = (
         "Согласие",
         "https://www.soglasie.ru/",
         "https://www.soglasie.ru/individuals/avto/kasko/",
-        "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20%D1%81%D1%82%D1%80%D0%B0%D1%85%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F.pdf",
+        "https://api.soglasie.ru/storage/media/originals/61200/c875ad94-8cb7-428b-9ed3-fe7dec1e663d.pdf",
         official_doc_urls=(
             "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
         ),
@@ -93,6 +93,10 @@ INSURERS = (
         "https://sberbankins.ru/",
         "https://sberbankins.ru/products/kasko/",
         "https://sberbankins.ru/upload/iblock/4aa/wef0vo0p52bngziwkksqhic13381u1j9/pravila_134_19.pdf",
+        official_doc_urls=(
+            "https://sberbankins.ru/upload/iblock/c2c/zjn30vv4p5vsvvmr88nfnm5vne7amz1t/Pravila-strakhovaniya-finansovykh-riskov-vladeltsev-transportnykh-sredstv-GAP-_-16.1.pdf",
+            "https://sberbankins.ru/about/disclosure/",
+        ),
     ),
     InsurerConfig(
         "yugoria",
