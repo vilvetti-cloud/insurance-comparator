@@ -48,6 +48,31 @@ class DeterministicCascoExtractorTests(unittest.TestCase):
         })
         self.assertNotIn("repair_type", result)
 
+    def test_testimonial_tow_truck_is_not_used(self) -> None:
+        result = self.extractor.extract({
+            "tow_truck": [
+                TextChunk(
+                    "Плохо себя чувствовала, а машина ехала на эвакуаторе РЕСО.",
+                    page_number=None,
+                )
+            ]
+        })
+        self.assertNotIn("tow_truck", result)
+
+    def test_navigation_block_is_not_a_terrorism_fact(self) -> None:
+        result = self.extractor.extract({
+            "terrorism": [
+                TextChunk(
+                    "Какие риски покрывает страховка\n"
+                    "Противоправные действия третьих лиц\n"
+                    "От царапин на парковке до террористических актов и атак БПЛА\n"
+                    "Пожар\nСамовозгорание",
+                    page_number=None,
+                )
+            ]
+        })
+        self.assertNotIn("terrorism", result)
+
 
 if __name__ == "__main__":
     unittest.main()

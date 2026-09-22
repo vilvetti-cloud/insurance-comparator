@@ -329,7 +329,11 @@ class CascoCollectionPipeline:
         current: set[str] = set()
         for key, field_row in field_rows.items():
             condition = self.conditions.get_current(field_row["id"])
-            if condition and condition.get("source_id") == source_id:
+            if (
+                condition
+                and condition.get("source_id") == source_id
+                and is_supported_condition(key, condition.get("value"))
+            ):
                 current.add(key)
         return current
 
