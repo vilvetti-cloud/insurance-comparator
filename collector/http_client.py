@@ -27,6 +27,7 @@ class FetchResult:
     content_type: str
     body: bytes
     checksum: str
+    via_reader: bool = False
 
     @property
     def is_success(self) -> bool:
@@ -78,6 +79,7 @@ class HttpFetcher:
                     content_type=response.headers.get("Content-Type", "").lower(),
                     body=body,
                     checksum=hashlib.sha256(body).hexdigest(),
+                    via_reader=False,
                 )
             except FetchError:
                 raise
@@ -86,3 +88,55 @@ class HttpFetcher:
                 if attempt + 1 < self.retries:
                     time.sleep(self.backoff * (attempt + 1))
         raise FetchError(f"Failed to fetch {url}: {last_error}") from last_error
+
+
+    def fetch_via_reader(self, url: str) -> FetchResult:
+        """Read a public official URL through Jina Reader when anti-bot blocks direct fetch.
+
+        The returned provenance URL remains the insurer's original URL. Reader is
+        transport only; it is never stored as the factual source.
+        """
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise FetchError(f"Unsupported URL: {url}")
+
+        reader_url = f"https://r.jina.ai/{url}"
+        try:
+            response = self.session.get(
+                reader_url,
+                timeout=max(self.timeout, 35),
+                allow_redirects=True,
+                headers={
+                    "Accept": "text/plain, text/markdown;q=0.9, */*;q=0.8",
+                    "X-Engine": "browser",
+                },
+            )
+            if response.status_code >= 400:
+                raise FetchError(
+                    f"Reader HTTP {response.status_code} for {url}",
+                    status_code=response.status_code,
+                )
+            body = response.content
+            if not body.strip():
+                raise FetchError(f"Reader returned empty body for {url}")
+            return FetchResult(
+                url=url,
+                status_code=200,
+                content_type="text/markdown; transport=jina-reader",
+                body=body,
+                checksum=hashlib.sha256(body).hexdigest(),
+                via_reader=True,
+            )
+        except FetchError:
+            raise
+        except requests.RequestException as exc:
+            raise FetchError(f"Reader failed for {url}: {exc}") from exc
+
+    def fetch_official(self, url: str, *, referer: str | None = None) -> FetchResult:
+        """Direct fetch first; reader fallback only for blocked public official sources."""
+        try:
+            return self.fetch(url, referer=referer)
+        except FetchError as exc:
+            if exc.status_code not in {401, 403, 406, 429}:
+                raise
+            return self.fetch_via_reader(url)
