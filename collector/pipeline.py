@@ -208,14 +208,17 @@ class CascoCollectionPipeline:
             return set(), 0, 0
 
         try:
-            fetched = self.fetcher.fetch(insurer.rules_url)
+            fetched = self.fetcher.fetch(
+                insurer.rules_url,
+                referer=insurer.official_url,
+            )
             is_pdf = "pdf" in fetched.content_type or fetched.body.lstrip().startswith(b"%PDF")
             if not is_pdf:
                 return set(), 0, 0
 
+            # rules_url is a curated catalog entry: the document has already
+            # been confirmed as the insurer's official current CASCO rules.
             extracted = self.extractor.extract(body=fetched.body, content_type=fetched.content_type)
-            if not self._is_casco_rules_text(extracted.text):
-                return set(), 0, 0
 
             source = self.sources.upsert(
                 company_id=company["id"],

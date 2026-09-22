@@ -47,7 +47,7 @@ class HttpFetcher:
         self.session = requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
 
-    def fetch(self, url: str) -> FetchResult:
+    def fetch(self, url: str, *, referer: str | None = None) -> FetchResult:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise FetchError(f"Unsupported URL: {url}")
@@ -55,7 +55,13 @@ class HttpFetcher:
         last_error: Exception | None = None
         for attempt in range(self.retries):
             try:
-                response = self.session.get(url, timeout=self.timeout, allow_redirects=True)
+                request_headers = {"Referer": referer} if referer else None
+                response = self.session.get(
+                    url,
+                    timeout=self.timeout,
+                    allow_redirects=True,
+                    headers=request_headers,
+                )
                 if response.status_code == 429 or response.status_code >= 500:
                     if attempt + 1 < self.retries:
                         time.sleep(self.backoff * (attempt + 1))
