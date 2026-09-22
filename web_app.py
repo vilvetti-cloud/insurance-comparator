@@ -5,11 +5,13 @@ from flask import Flask, jsonify, redirect, render_template, request
 from collector.registry import INSURERS
 from core.catalog import KASKO_FIELDS
 from core.services.comparison_service import ComparisonService
+from core.services.sales_insights_service import SalesInsightsService
 
 
 app = Flask(__name__)
 
 comparison_service = ComparisonService()
+sales_insights_service = SalesInsightsService()
 COMPANIES = [insurer.name for insurer in INSURERS]
 FIELD_KEYS = [field["key"] for field in KASKO_FIELDS]
 FIELD_LABELS = {field["key"]: field["label"] for field in KASKO_FIELDS}
@@ -68,6 +70,15 @@ def compare():
     snapshot = comparison_service.load_snapshot()
     data1 = _prepare_company_data(snapshot, company1)
     data2 = _prepare_company_data(snapshot, company2)
+    sales = sales_insights_service.analyze(
+        company=company1,
+        competitor=company2,
+        data=data1,
+        competitor_data=data2,
+        field_labels=FIELD_LABELS,
+    )
+    found1 = sum(1 for field in FIELD_KEYS if data1.get(field) != "Не найдено")
+    found2 = sum(1 for field in FIELD_KEYS if data2.get(field) != "Не найдено")
 
     return render_template(
         "result.html",
@@ -77,6 +88,9 @@ def compare():
         data2=data2,
         fields=FIELD_KEYS,
         field_labels=FIELD_LABELS,
+        sales=sales,
+        found1=found1,
+        found2=found2,
         last_updated=snapshot.get("_last_updated", "Не обновлялось"),
     )
 
