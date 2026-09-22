@@ -10,6 +10,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from collector.pipeline import CascoCollectionPipeline
+from db import init_db
 
 
 def main() -> int:
@@ -32,6 +33,10 @@ def main() -> int:
     if not os.getenv("GROQ_API_KEY"):
         print("GROQ_API_KEY is not configured", file=sys.stderr)
         return 2
+
+    if not init_db():
+        print("Database schema initialization failed", file=sys.stderr)
+        return 3
 
     result = CascoCollectionPipeline().run(
         insurer_slugs=args.insurers,
