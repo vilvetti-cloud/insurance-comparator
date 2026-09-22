@@ -86,17 +86,27 @@ finally:
 # PostgreSQL is the persistent source of truth when DATABASE_URL exists.
 # The legacy JSON implementation remains the local-development fallback.
 import db
+from core.services.comparison_service import ComparisonService
 
 db.init_db()
+comparison_service = ComparisonService()
 
 legacy_load_data = module.load_data
 legacy_save_data = module.save_data
 
 
 def load_data():
+    # The normalized collector tables are the primary source for the UI.
+    data = comparison_service.load_snapshot()
+    if data:
+        return data
+
+    # app_state is kept as a migration fallback for deployments that have not
+    # collected normalized conditions yet.
     data = db.load_data()
     if data:
         return data
+
     return legacy_load_data()
 
 
