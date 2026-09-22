@@ -94,6 +94,34 @@ comparison_service = ComparisonService()
 legacy_load_data = module.load_data
 legacy_save_data = module.save_data
 
+LEGACY_COMPANY_ALIASES = {
+    "Ренессанс": "Ренессанс Страхование",
+    "РГС": "Росгосстрах",
+}
+
+
+def _normalize_legacy_snapshot(data):
+    if not isinstance(data, dict):
+        return {}
+
+    normalized = {}
+    for key, value in data.items():
+        if str(key).startswith("_"):
+            normalized[key] = value
+            continue
+
+        company_name = LEGACY_COMPANY_ALIASES.get(key, key)
+        if not isinstance(value, dict):
+            normalized[company_name] = value
+            continue
+
+        company_data = dict(value)
+        if "self_ignition" not in company_data and "fire" in company_data:
+            company_data["self_ignition"] = company_data["fire"]
+        normalized[company_name] = company_data
+
+    return normalized
+
 
 def load_data():
     # The normalized collector tables are the primary source for the UI.
@@ -105,9 +133,9 @@ def load_data():
     # collected normalized conditions yet.
     data = db.load_data()
     if data:
-        return data
+        return _normalize_legacy_snapshot(data)
 
-    return legacy_load_data()
+    return _normalize_legacy_snapshot(legacy_load_data())
 
 
 def save_data(data):
