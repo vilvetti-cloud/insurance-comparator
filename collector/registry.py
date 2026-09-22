@@ -11,6 +11,7 @@ class InsurerConfig:
     official_url: str
     casco_url: str | None = None
     rules_url: str | None = None
+    official_doc_urls: tuple[str, ...] = ()
 
 
 INSURERS = (
@@ -21,6 +22,9 @@ INSURERS = (
         "ВСК",
         "https://vsk.ru/",
         rules_url="https://www.vsk.ru/cms/assets/1179953c-dc8f-45f9-9d46-8eaba56b9c10",
+        official_doc_urls=(
+            "https://www.vsk.ru/cms/assets/3274076a-21b6-4bc7-96e8-26f1eb2bbcde.pdf",
+        ),
     ),
     InsurerConfig(
         "ingos",
