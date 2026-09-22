@@ -75,13 +75,24 @@ class DuckDuckGoSearch:
         output: list[tuple[SearchHit, str]] = []
         for hit in self.search(query, limit=limit):
             try:
-                fetched = fetcher.fetch(hit.url)
-                document = extractor.extract(body=fetched.body, content_type=fetched.content_type)
-                text = document.text[:max_chars]
+                fetched = fetcher.fetch_official(hit.url)
+                if getattr(fetched, "via_reader", False):
+                    text = fetched.body.decode("utf-8", errors="replace")[:max_chars]
+                else:
+                    document = extractor.extract(body=fetched.body, content_type=fetched.content_type)
+                    text = document.text[:max_chars]
                 if text:
                     output.append((hit, text))
+                    continue
             except (FetchError, requests.RequestException, ValueError):
-                continue
+                pass
+
+            # Search-engine snippets are allowed only as a transport fallback.
+            # The caller still verifies that hit.url belongs to the insurer's
+            # official domain before a fact can be persisted.
+            snippet = re.sub(r"\s+", " ", hit.snippet).strip()
+            if snippet:
+                output.append((hit, snippet[:max_chars]))
         return output
 
     @staticmethod
