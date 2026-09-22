@@ -26,7 +26,9 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
     evidence = f"{value or ''} {quote or ''}".lower()
 
     if field_key == "franchise":
-        return "франшиз" in evidence
+        has_franchise = "франшиз" in evidence
+        has_terms = bool(re.search(r"безуслов|условн|размер|сумм|руб|%|примен|устанавл", evidence))
+        return has_franchise and has_terms
     if field_key == "without_certificates":
         return bool(re.search(r"без\s+(?:справ|документ)|упрощ", evidence))
     if field_key == "gap":
