@@ -131,9 +131,27 @@ class CascoCollectionPipeline:
                 document = self.documents.upsert(source_id=source["id"], document_url=result.url, title=source_info.title, checksum=result.checksum)
                 document_count += 1
                 extracted = self.extractor.extract(body=result.body, content_type=result.content_type)
-                grouped = self.selector.select(extracted.text, max_total_chars=10000)
-                values = self._extract_with_llm(insurer, result.url, 1, grouped)
-                found_fields.update(self._persist_values(values, field_rows, source=source, document=document))
+                missing_now = [
+                    field["key"]
+                    for field in KASKO_FIELDS
+                    if field["key"] not in found_fields
+                ]
+                values = self._deep_extract_official(
+                    insurer=insurer,
+                    source_url=result.url,
+                    source_level=1,
+                    text=extracted.text,
+                    field_keys=missing_now,
+                )
+                found_fields.update(
+                    self._persist_values(
+                        values,
+                        field_rows,
+                        source=source,
+                        document=document,
+                        allowed_keys=set(missing_now),
+                    )
+                )
                 if len(found_fields) == len(KASKO_FIELDS):
                     return {"source_count": source_count, "document_count": document_count, "fields_found": len(found_fields)}
             except (FetchError, LLMExtractionError, ValueError):
@@ -143,10 +161,28 @@ class CascoCollectionPipeline:
         if landing is not None and not landing.body.lstrip().startswith(b"%PDF"):
             source = self.sources.upsert(company_id=company["id"], url=landing.url, title="Официальная страница КАСКО", source_type="official_site", source_level=2, http_status=landing.status_code, checksum=landing.checksum, success=True)
             extracted = self.extractor.extract(body=landing.body, content_type=landing.content_type)
-            grouped = self.selector.select(extracted.text, max_total_chars=10000)
+            missing_now = [
+                field["key"]
+                for field in KASKO_FIELDS
+                if field["key"] not in found_fields
+            ]
             try:
-                values = self._extract_with_llm(insurer, landing.url, 2, grouped)
-                found_fields.update(self._persist_values(values, field_rows, source=source, document=None))
+                values = self._deep_extract_official(
+                    insurer=insurer,
+                    source_url=landing.url,
+                    source_level=2,
+                    text=extracted.text,
+                    field_keys=missing_now,
+                )
+                found_fields.update(
+                    self._persist_values(
+                        values,
+                        field_rows,
+                        source=source,
+                        document=None,
+                        allowed_keys=set(missing_now),
+                    )
+                )
             except LLMExtractionError:
                 pass
 
@@ -210,6 +246,48 @@ class CascoCollectionPipeline:
     def _extract_with_llm(self, insurer: InsurerConfig, source_url: str, source_level: int, grouped: dict[str, list[TextChunk]]) -> dict[str, dict[str, Any]]:
         return self.llm.extract(company_name=insurer.name, source_url=source_url, source_level=source_level, grouped_chunks=grouped)
 
+    def _deep_extract_official(
+        self,
+        *,
+        insurer: InsurerConfig,
+        source_url: str,
+        source_level: int,
+        text: str,
+        field_keys: list[str] | set[str] | tuple[str, ...],
+    ) -> dict[str, dict[str, Any]]:
+        """Extract official-source facts in focused batches instead of one 10-field prompt."""
+        ordered = [
+            field["key"]
+            for field in KASKO_FIELDS
+            if field["key"] in set(field_keys)
+        ]
+        result: dict[str, dict[str, Any]] = {}
+        batch_size = 5
+
+        for offset in range(0, len(ordered), batch_size):
+            batch = ordered[offset : offset + batch_size]
+            grouped = self.selector.select_fields(
+                text,
+                field_keys=batch,
+                max_total_chars=36000,
+                window_lines=9,
+                max_chunks_per_field=6,
+            )
+            if not any(grouped.get(key) for key in batch):
+                continue
+            values = self.llm.extract_fields(
+                company_name=insurer.name,
+                source_url=source_url,
+                source_level=source_level,
+                grouped_chunks=grouped,
+                field_keys=batch,
+            )
+            for key in batch:
+                if key in values:
+                    result[key] = values[key]
+
+        return result
+
     def _collect_configured_official_docs(
         self,
         *,
@@ -247,13 +325,18 @@ class CascoCollectionPipeline:
                     title="Официальный документ КАСКО",
                     checksum=fetched.checksum,
                 )
-                grouped = self.selector.select(extracted.text, max_total_chars=10000)
-                values = self._extract_with_llm(insurer, fetched.url, 2, grouped)
                 missing = {
                     field["key"]
                     for field in KASKO_FIELDS
                     if field["key"] not in found
                 }
+                values = self._deep_extract_official(
+                    insurer=insurer,
+                    source_url=fetched.url,
+                    source_level=2,
+                    text=extracted.text,
+                    field_keys=missing,
+                )
                 found.update(
                     self._persist_values(
                         values,
@@ -309,9 +392,19 @@ class CascoCollectionPipeline:
                 title="Официальные правила КАСКО",
                 checksum=fetched.checksum,
             )
-            grouped = self.selector.select(extracted.text, max_total_chars=12000)
-            values = self._extract_with_llm(insurer, fetched.url, 1, grouped)
-            found = self._persist_values(values, field_rows, source=source, document=document)
+            values = self._deep_extract_official(
+                insurer=insurer,
+                source_url=fetched.url,
+                source_level=1,
+                text=extracted.text,
+                field_keys=[field["key"] for field in KASKO_FIELDS],
+            )
+            found = self._persist_values(
+                values,
+                field_rows,
+                source=source,
+                document=document,
+            )
             return found, 1, 1
         except (FetchError, LLMExtractionError, ValueError):
             return set(), 0, 0
@@ -359,9 +452,19 @@ class CascoCollectionPipeline:
                         title=hit.title or "Официальные правила КАСКО",
                         checksum=fetched.checksum,
                     )
-                    grouped = self.selector.select(extracted.text, max_total_chars=12000)
-                    values = self._extract_with_llm(insurer, fetched.url, 1, grouped)
-                    found = self._persist_values(values, field_rows, source=source, document=document)
+                    values = self._deep_extract_official(
+                        insurer=insurer,
+                        source_url=fetched.url,
+                        source_level=1,
+                        text=extracted.text,
+                        field_keys=[field["key"] for field in KASKO_FIELDS],
+                    )
+                    found = self._persist_values(
+                        values,
+                        field_rows,
+                        source=source,
+                        document=document,
+                    )
                     return found, 1, 1
                 except (FetchError, LLMExtractionError, ValueError):
                     continue
@@ -419,8 +522,12 @@ class CascoCollectionPipeline:
             source_url = self._source_for_quote(value.get("quote"), candidates.get(key, []))
             if not source_url:
                 continue
-            source_level = 2 if self.search.is_official_url(source_url, insurer.official_url) else 3
-            source_type = "official_site" if source_level == 2 else "web_search"
+            if not self.search.is_official_url(source_url, insurer.official_url):
+                # Third-party internet results are discovery hints only. They
+                # must never become current comparison facts.
+                continue
+            source_level = 2
+            source_type = "official_site"
             source = self.sources.upsert(
                 company_id=company["id"],
                 url=source_url,
