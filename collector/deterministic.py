@@ -181,22 +181,25 @@ class DeterministicCascoExtractor:
                 ):
                     continue
 
-                score = 20
-                score += sum(
-                    4
+                positive_hits = sum(
+                    1
                     for pattern in positive
                     if re.search(pattern, lowered, re.IGNORECASE)
                 )
-                score -= sum(
-                    12
+                if positive and positive_hits == 0:
+                    continue
+                if any(
+                    re.search(pattern, lowered, re.IGNORECASE)
                     for pattern in negative
-                    if re.search(pattern, lowered, re.IGNORECASE)
-                )
+                ):
+                    continue
+                if len(sentence.text) > 520:
+                    continue
+
+                score = 20 + positive_hits * 4
 
                 if len(sentence.text) < 35:
                     score -= 5
-                if len(sentence.text) > 900:
-                    score -= 3
 
                 if best is None or score > best[0]:
                     best = (score, sentence)
@@ -206,7 +209,10 @@ class DeterministicCascoExtractor:
         return best[1]
 
     def _sentences(self, chunk: TextChunk) -> list[EvidenceSentence]:
-        text = self._clean(chunk.text)
+        # Preserve structural line breaks. HTML extraction often contains
+        # headings/list items without punctuation; collapsing them first turns
+        # an entire page into one false "sentence".
+        text = chunk.text.replace("\r\n", "\n").replace("\r", "\n")
         pieces = re.split(r"(?<=[.!?;])\s+|\n+", text)
         output: list[EvidenceSentence] = []
         seen: set[str] = set()
