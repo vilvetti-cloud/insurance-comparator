@@ -1,6 +1,16 @@
 name: Daily CASCO collection
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "collector/**"
+      - "core/**"
+      - "database/**"
+      - "scripts/run_collection.py"
+      - ".github/workflows/daily-collection.yml"
+      - "requirements.txt"
   schedule:
     # 03:00 UTC every day (06:00 Moscow time).
     - cron: "0 3 * * *"
