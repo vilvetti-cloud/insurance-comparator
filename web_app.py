@@ -7,6 +7,7 @@ from core.catalog import KASKO_FIELDS
 from core.services.comparison_service import ComparisonService
 from core.services.sales_insights_service import SalesInsightsService
 from core.services.sales_script_ai_service import SalesScriptAIService
+from core.services.data_quality_report_service import DataQualityReportService
 
 
 app = Flask(__name__)
@@ -14,6 +15,7 @@ app = Flask(__name__)
 comparison_service = ComparisonService()
 sales_insights_service = SalesInsightsService()
 sales_script_ai_service = SalesScriptAIService()
+data_quality_report_service = DataQualityReportService()
 COMPANIES = [insurer.name for insurer in INSURERS]
 FIELD_KEYS = [field["key"] for field in KASKO_FIELDS]
 FIELD_LABELS = {field["key"]: field["label"] for field in KASKO_FIELDS}
@@ -117,6 +119,12 @@ def compare():
         found2=found2,
         last_updated=snapshot.get("_last_updated", "Не обновлялось"),
     )
+
+
+@app.route("/data-report")
+def data_report():
+    report = data_quality_report_service.load()
+    return render_template("data_report.html", report=report)
 
 
 @app.route("/health")
