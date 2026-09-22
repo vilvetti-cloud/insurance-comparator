@@ -83,14 +83,35 @@ class CascoCollectionPipeline:
         found_fields: set[str] = set()
         source_count = document_count = 0
 
+        # Stable level-1 source catalog. When a current official rules document
+        # is known in advance, do not depend on site navigation/search to
+        # rediscover it every day.
+        if insurer.rules_url:
+            configured_found, configured_sources, configured_documents = self._collect_configured_rules(
+                insurer=insurer,
+                company=company,
+                field_rows=field_rows,
+            )
+            found_fields.update(configured_found)
+            source_count += configured_sources
+            document_count += configured_documents
+            if len(found_fields) == len(KASKO_FIELDS):
+                return {
+                    "source_count": source_count,
+                    "document_count": document_count,
+                    "fields_found": len(found_fields),
+                }
+
         try:
             landing, discovered = self.discovery.discover_casco(official_url=insurer.official_url, casco_url=insurer.casco_url)
-            source_count = len(discovered)
+            source_count += len(discovered)
         except FetchError:
             landing, discovered = None, []
 
         # Level 1: official PDF/rules.
         for source_info in [source for source in discovered if source.source_level == 1][:2]:
+            if insurer.rules_url and source_info.url.rstrip("/") == insurer.rules_url.rstrip("/"):
+                continue
             try:
                 result = self.fetcher.fetch(source_info.url)
                 source = self.sources.upsert(company_id=company["id"], url=result.url, title=source_info.title, source_type="pdf", source_level=1, http_status=result.status_code, checksum=result.checksum, success=True)
@@ -175,6 +196,49 @@ class CascoCollectionPipeline:
 
     def _extract_with_llm(self, insurer: InsurerConfig, source_url: str, source_level: int, grouped: dict[str, list[TextChunk]]) -> dict[str, dict[str, Any]]:
         return self.llm.extract(company_name=insurer.name, source_url=source_url, source_level=source_level, grouped_chunks=grouped)
+
+    def _collect_configured_rules(
+        self,
+        *,
+        insurer: InsurerConfig,
+        company: dict[str, Any],
+        field_rows: dict[str, dict[str, Any]],
+    ) -> tuple[set[str], int, int]:
+        if not insurer.rules_url:
+            return set(), 0, 0
+
+        try:
+            fetched = self.fetcher.fetch(insurer.rules_url)
+            is_pdf = "pdf" in fetched.content_type or fetched.body.lstrip().startswith(b"%PDF")
+            if not is_pdf:
+                return set(), 0, 0
+
+            extracted = self.extractor.extract(body=fetched.body, content_type=fetched.content_type)
+            if not self._is_casco_rules_text(extracted.text):
+                return set(), 0, 0
+
+            source = self.sources.upsert(
+                company_id=company["id"],
+                url=fetched.url,
+                title="Официальные правила КАСКО",
+                source_type="pdf",
+                source_level=1,
+                http_status=fetched.status_code,
+                checksum=fetched.checksum,
+                success=True,
+            )
+            document = self.documents.upsert(
+                source_id=source["id"],
+                document_url=fetched.url,
+                title="Официальные правила КАСКО",
+                checksum=fetched.checksum,
+            )
+            grouped = self.selector.select(extracted.text, max_total_chars=12000)
+            values = self._extract_with_llm(insurer, fetched.url, 1, grouped)
+            found = self._persist_values(values, field_rows, source=source, document=document)
+            return found, 1, 1
+        except (FetchError, LLMExtractionError, ValueError):
+            return set(), 0, 0
 
     def _discover_official_rules_via_search(
         self,
