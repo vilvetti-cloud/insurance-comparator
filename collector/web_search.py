@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -23,8 +23,13 @@ class DuckDuckGoSearch:
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "InsuranceComparatorBot/1.0 (+source-verification)",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/153.0.0.0 Safari/537.36"
+            ),
             "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
         })
 
     def search(self, query: str, *, limit: int = 3) -> list[SearchHit]:
@@ -37,7 +42,9 @@ class DuckDuckGoSearch:
             link = result.select_one("a.result__a")
             if not link or not link.get("href"):
                 continue
-            href = str(link["href"])
+            href = self._unwrap_result_url(str(link["href"]))
+            if not href:
+                continue
             snippet_node = result.select_one(".result__snippet")
             hits.append(
                 SearchHit(
@@ -62,6 +69,23 @@ class DuckDuckGoSearch:
             except (FetchError, requests.RequestException, ValueError):
                 continue
         return output
+
+    @staticmethod
+    def _unwrap_result_url(href: str) -> str | None:
+        candidate = href.strip()
+        if candidate.startswith("//"):
+            candidate = "https:" + candidate
+
+        parsed = urlparse(candidate)
+        if parsed.netloc.endswith("duckduckgo.com") and parsed.path.startswith("/l/"):
+            target = parse_qs(parsed.query).get("uddg", [None])[0]
+            if target:
+                candidate = unquote(target)
+
+        parsed = urlparse(candidate)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return candidate
+        return None
 
     @staticmethod
     def build_queries(company_name: str) -> list[str]:
