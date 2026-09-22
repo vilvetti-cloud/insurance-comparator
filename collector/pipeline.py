@@ -274,19 +274,24 @@ class CascoCollectionPipeline:
             grouped = self.selector.select_fields(
                 text,
                 field_keys=batch,
-                max_total_chars=18000,
+                max_total_chars=10000,
                 window_lines=7,
                 max_chunks_per_field=4,
             )
             if not any(grouped.get(key) for key in batch):
                 continue
-            values = self.llm.extract_fields(
-                company_name=insurer.name,
-                source_url=source_url,
-                source_level=source_level,
-                grouped_chunks=grouped,
-                field_keys=batch,
-            )
+            try:
+                values = self.llm.extract_fields(
+                    company_name=insurer.name,
+                    source_url=source_url,
+                    source_level=source_level,
+                    grouped_chunks=grouped,
+                    field_keys=batch,
+                )
+            except LLMExtractionError:
+                # One rate-limit or malformed response must not throw away
+                # fields extracted successfully from the other batch.
+                continue
             for key in batch:
                 if key in values:
                     result[key] = values[key]
