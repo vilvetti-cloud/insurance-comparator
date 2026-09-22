@@ -35,7 +35,7 @@ class TextChunk:
 
 
 class RelevanceSelector:
-    def __init__(self, *, window_lines: int = 7, max_chunks_per_field: int = 3) -> None:
+    def __init__(self, *, window_lines: int = 5, max_chunks_per_field: int = 2) -> None:
         self.window_lines = window_lines
         self.max_chunks_per_field = max_chunks_per_field
 
@@ -64,17 +64,40 @@ class RelevanceSelector:
     def _fit_budget(self, grouped: dict[str, list[TextChunk]], *, max_total_chars: int) -> dict[str, list[TextChunk]]:
         output = {key: list(chunks) for key, chunks in grouped.items()}
         total = sum(len(chunk.text) for chunks in output.values() for chunk in chunks)
+
+        # Drop secondary fragments first, but always preserve the strongest
+        # fragment for every field that has evidence.
         while total > max_total_chars:
-            candidates = [
+            removable = [
                 (key, index, chunk.score, len(chunk.text))
                 for key, chunks in output.items()
+                if len(chunks) > 1
                 for index, chunk in enumerate(chunks)
+                if index > 0
             ]
-            if not candidates:
+            if not removable:
                 break
-            key, index, _, length = min(candidates, key=lambda item: (item[2], -item[3]))
+            key, index, _, length = min(removable, key=lambda item: (item[2], -item[3]))
             output[key].pop(index)
             total -= length
+
+        # If one best fragment per field is still over budget, allocate the
+        # budget evenly instead of deleting entire fields.
+        if total > max_total_chars:
+            nonempty = [key for key, chunks in output.items() if chunks]
+            if nonempty:
+                per_field = max(500, max_total_chars // len(nonempty))
+                for key in nonempty:
+                    best = output[key][0]
+                    if len(best.text) <= per_field:
+                        output[key] = [best]
+                        continue
+                    start = max(0, (len(best.text) - per_field) // 2)
+                    trimmed = best.text[start : start + per_field]
+                    output[key] = [
+                        TextChunk(trimmed, best.page_number, best.score)
+                    ]
+
         return output
 
     @staticmethod
