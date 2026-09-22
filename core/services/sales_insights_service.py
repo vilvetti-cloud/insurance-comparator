@@ -61,21 +61,10 @@ class SalesInsightsService:
             cards.append(item)
             used_labels.add(item["label"])
 
-        if not advantages:
+        if not advantages and strengths:
             cautions.append(
-                f"По текущей базе нет трёх подтверждённых отличий, которые позволяли бы "
-                f"корректно утверждать, что {company} лучше {competitor} по всем условиям."
-            )
-
-        missing_competitor = sum(
-            1
-            for key in field_labels
-            if self._value(competitor_data, key) is None
-        )
-        if missing_competitor:
-            cautions.append(
-                f"По {missing_competitor} из {len(field_labels)} параметров у {competitor} "
-                "нет подтверждённых данных; отсутствие данных не означает отсутствие покрытия."
+                f"Ниже показаны сильные стороны {company}. Мы не называем их преимуществами "
+                f"над {competitor}, пока по конкуренту нет подтверждённого противоположного условия."
             )
 
         return {
@@ -296,7 +285,11 @@ class SalesInsightsService:
                 "пока недостаточно подтверждённых отличий. Лучше сравнить цену и конкретные условия предложения."
             )
 
-        phrases = [item["client_phrase"] for item in points]
+        phrases: list[str] = []
+        for item in points:
+            phrase = item["client_phrase"]
+            if phrase not in phrases:
+                phrases.append(phrase)
         if advantages:
             intro = (
                 f"При сравнении {company} и {competitor} я бы обратил внимание не только на цену. "

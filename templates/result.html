@@ -78,6 +78,10 @@
                   </div>
                   <h3>{{ item.title }}</h3>
                   <p>{{ item.evidence }}</p>
+                  <div class="benefit-card__why">
+                    <strong>Почему это важно клиенту</strong>
+                    <span>{{ item.get('why', item.client_phrase) }}</span>
+                  </div>
                   <span class="benefit-card__label">{{ item.label }}</span>
                 </article>
               {% endfor %}
@@ -91,7 +95,7 @@
 
           {% if sales.cautions %}
             <div class="sales-note">
-              <strong>Важно учитывать</strong>
+              <strong>Формулируем корректно</strong>
               {% for caution in sales.cautions %}
                 <p>{{ caution }}</p>
               {% endfor %}
@@ -119,12 +123,13 @@
         <summary class="details-panel__summary">
           <div>
             <strong>Подробное сравнение условий</strong>
-            <span>10 параметров, значения и источники</span>
+            <span>{{ comparable_count }} сопоставимых параметров · только строки без пустых ячеек</span>
           </div>
           <span class="details-panel__chevron" aria-hidden="true">⌄</span>
         </summary>
 
         <div class="details-panel__body">
+          {% if fields %}
           <div class="table-scroll">
             <table class="comparison-table comparison-table--compact">
               <thead>
@@ -202,6 +207,11 @@
               </tbody>
             </table>
           </div>
+          {% else %}
+          <div class="comparison-empty">
+            Пока нет параметров, по которым найдены подтверждённые значения у обеих компаний.
+          </div>
+          {% endif %}
         </div>
       </details>
 

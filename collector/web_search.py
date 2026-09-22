@@ -11,6 +11,20 @@ from collector.http_client import HttpFetcher, FetchError
 from collector.document_extractor import DocumentExtractor
 
 
+FIELD_SEARCH_TERMS = {
+    "franchise": "франшиза размер условия",
+    "without_certificates": "без справок без документов урегулирование",
+    "gap": "GAP сохранение стоимости",
+    "total_loss": "полная гибель тотал процент порог",
+    "self_ignition": "самовозгорание пожар",
+    "terrorism": "терроризм террористический акт",
+    "drone": "БПЛА дрон беспилотник",
+    "tow_truck": "эвакуатор эвакуация",
+    "repair_type": "ремонт СТОА официальный дилер",
+    "payment_terms": "срок страховой выплаты дней",
+}
+
+
 @dataclass(frozen=True)
 class SearchHit:
     title: str
@@ -88,7 +102,41 @@ class DuckDuckGoSearch:
         return None
 
     @staticmethod
+    def _host(url: str) -> str:
+        host = urlparse(url).netloc.lower().split(":")[0]
+        return host[4:] if host.startswith("www.") else host
+
+    @classmethod
+    def build_rules_queries(cls, company_name: str, official_url: str) -> list[str]:
+        host = cls._host(official_url)
+        return [
+            f'site:{host} "{company_name}" КАСКО "правила страхования" pdf',
+            f'site:{host} КАСКО правила страхования транспортных средств filetype:pdf',
+        ]
+
+    @classmethod
+    def build_field_queries(
+        cls,
+        company_name: str,
+        official_url: str,
+        field_key: str,
+    ) -> list[str]:
+        terms = FIELD_SEARCH_TERMS.get(field_key, field_key)
+        host = cls._host(official_url)
+        return [
+            f'site:{host} КАСКО {company_name} {terms}',
+            f'КАСКО {company_name} {terms}',
+        ]
+
+    @classmethod
+    def is_official_url(cls, candidate_url: str, official_url: str) -> bool:
+        candidate = cls._host(candidate_url)
+        official = cls._host(official_url)
+        return candidate == official or candidate.endswith("." + official)
+
+    @staticmethod
     def build_queries(company_name: str) -> list[str]:
+        # Backward-compatible broad queries.
         return [
             f"Какая франшиза у КАСКО {company_name}",
             f"КАСКО {company_name} правила страхования без справок GAP тотал",
