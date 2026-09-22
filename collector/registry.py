@@ -15,7 +15,14 @@ class InsurerConfig:
 
 
 INSURERS = (
-    InsurerConfig("reso", "РЕСО-Гарантия", "РЕСО", "https://reso.ru/", "https://reso.ru/individual/auto/kasko/"),
+    InsurerConfig(
+        "reso",
+        "РЕСО-Гарантия",
+        "РЕСО",
+        "https://reso.ru/",
+        "https://reso.ru/individual/auto/kasko/",
+        "https://reso.ru/about/rules/individual/auto/kasco/sredstv-avtotransporta-tarify-03022025.pdf",
+    ),
     InsurerConfig(
         "vsk",
         "ВСК",
@@ -57,7 +64,14 @@ INSURERS = (
         "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
         "https://api.soglasie.ru/storage/managed/upload/docs/auto/pravila-strakhovaniya-transportnykh-sredstv.pdf",
     ),
-    InsurerConfig("rgs", "Росгосстрах", "РГС", "https://www.rgs.ru/", "https://www.rgs.ru/auto/ekasko/kasko-ot-ugona-i-gibeli"),
+    InsurerConfig(
+        "rgs",
+        "Росгосстрах",
+        "РГС",
+        "https://www.rgs.ru/",
+        "https://www.rgs.ru/auto/ekasko/kasko-ot-ugona-i-gibeli",
+        "https://www-data.rgs.ru/upload/iblock/c24/g1xtpnmp9yuzbacb6jrcwrxd1wf7ljyv/171_-Pravila_24022026.pdf",
+    ),
     InsurerConfig(
         "t-insurance",
         "Т-Страхование",
