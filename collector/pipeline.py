@@ -131,6 +131,11 @@ class CascoCollectionPipeline:
                 document = self.documents.upsert(source_id=source["id"], document_url=result.url, title=source_info.title, checksum=result.checksum)
                 document_count += 1
                 extracted = self.extractor.extract(body=result.body, content_type=result.content_type)
+                if not self._is_casco_rules_text(extracted.text):
+                    # Do not promote an arbitrary insurer PDF to "official
+                    # CASCO rules" just because discovery saw insurance words
+                    # in its link or filename.
+                    continue
                 missing_now = [
                     field["key"]
                     for field in KASKO_FIELDS
