@@ -586,67 +586,106 @@ class CascoCollectionPipeline:
         field_rows: dict[str, dict[str, Any]],
         missing: list[str],
     ) -> tuple[set[str], int]:
-        # One search bundle, but queries are field-specific so every missing
-        # parameter gets a real chance to find evidence.
-        candidates: dict[str, list[tuple[str, str]]] = {key: [] for key in missing}
-        unique_texts: dict[str, str] = {}
+        """Fill unresolved fields from official-domain search evidence only.
+
+        Search snippets are acceptable here only when the result URL belongs to
+        the insurer. They are never treated as level-1 rules and third-party
+        pages are discarded before extraction.
+        """
+        found: set[str] = set()
+        source_urls_seen: set[str] = set()
 
         for key in missing:
-            for query in self.search.build_field_queries(insurer.name, insurer.official_url, key):
+            candidates: list[tuple[str, str]] = []
+            for query in self.search.build_field_queries(
+                insurer.name,
+                insurer.official_url,
+                key,
+            ):
                 try:
-                    results = self.search.collect_text(query, limit=2, max_chars=5000)
+                    results = self.search.collect_text(
+                        query,
+                        limit=5,
+                        max_chars=7000,
+                    )
                 except Exception:
                     continue
+
                 for hit, text in results:
-                    candidates[key].append((hit.url, text))
-                    unique_texts.setdefault(hit.url, text)
-                    if len(candidates[key]) >= 3:
+                    if not self.search.is_official_url(
+                        hit.url,
+                        insurer.official_url,
+                    ):
+                        continue
+                    candidates.append((hit.url, text))
+                    source_urls_seen.add(hit.url)
+                    if len(candidates) >= 5:
                         break
-                if len(candidates[key]) >= 3:
+                if len(candidates) >= 5:
                     break
 
-        if not unique_texts:
-            return set(), 0
-
-        combined = "\n\n".join(
-            f"[URL: {url}]\n{text}" for url, text in unique_texts.items()
-        )
-        grouped = self.selector.select(combined, max_total_chars=14000)
-
-        try:
-            values = self._extract_with_llm(insurer, "multi-source web search", 3, grouped)
-        except LLMExtractionError:
-            return set(), len(unique_texts)
-
-        found: set[str] = set()
-        for key in missing:
-            value = values.get(key, {})
-            if not value.get("found") or not value.get("value"):
-                continue
-            if not is_supported_condition(key, value.get("value"), value.get("quote")):
+            if not candidates:
                 continue
 
-            source_url = self._source_for_quote(value.get("quote"), candidates.get(key, []))
+            combined = "\n\n".join(
+                f"[URL: {url}]\n{text}"
+                for url, text in candidates
+            )
+            grouped = self.selector.select_fields(
+                combined,
+                field_keys=[key],
+                max_total_chars=9000,
+                window_lines=5,
+                max_chunks_per_field=5,
+            )
+
+            values = self.deterministic.extract(
+                grouped,
+                field_keys=[key],
+            )
+            value = values.get(key)
+
+            if not value:
+                try:
+                    llm_values = self.llm.extract_fields(
+                        company_name=insurer.name,
+                        source_url="official search evidence",
+                        source_level=2,
+                        grouped_chunks=grouped,
+                        field_keys=[key],
+                    )
+                    value = llm_values.get(key)
+                except LLMExtractionError:
+                    value = None
+
+            if not value or not value.get("found") or not value.get("value"):
+                continue
+            if not is_supported_condition(
+                key,
+                value.get("value"),
+                value.get("quote"),
+            ):
+                continue
+
+            source_url = self._source_for_quote(
+                value.get("quote"),
+                candidates,
+            )
             if not source_url:
                 continue
-            if not self.search.is_official_url(source_url, insurer.official_url):
-                # Third-party internet results are discovery hints only. They
-                # must never become current comparison facts.
-                continue
-            source_level = 2
-            source_type = "official_site"
+
             source = self.sources.upsert(
                 company_id=company["id"],
                 url=source_url,
-                title="Найденный источник КАСКО",
-                source_type=source_type,
-                source_level=source_level,
+                title="Официальный источник КАСКО, найденный поиском",
+                source_type="official_site",
+                source_level=2,
                 http_status=200,
                 success=True,
             )
             found.update(
                 self._persist_values(
-                    values,
+                    {key: value},
                     field_rows,
                     source=source,
                     document=None,
@@ -654,7 +693,7 @@ class CascoCollectionPipeline:
                 )
             )
 
-        return found, len(unique_texts)
+        return found, len(source_urls_seen)
 
     @staticmethod
     def _source_for_quote(
