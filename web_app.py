@@ -6,12 +6,14 @@ from collector.registry import INSURERS
 from core.catalog import KASKO_FIELDS
 from core.services.comparison_service import ComparisonService
 from core.services.sales_insights_service import SalesInsightsService
+from core.services.sales_script_ai_service import SalesScriptAIService
 
 
 app = Flask(__name__)
 
 comparison_service = ComparisonService()
 sales_insights_service = SalesInsightsService()
+sales_script_ai_service = SalesScriptAIService()
 COMPANIES = [insurer.name for insurer in INSURERS]
 FIELD_KEYS = [field["key"] for field in KASKO_FIELDS]
 FIELD_LABELS = {field["key"]: field["label"] for field in KASKO_FIELDS}
@@ -77,8 +79,18 @@ def compare():
         competitor_data=data2,
         field_labels=FIELD_LABELS,
     )
+    sales = sales_script_ai_service.enrich(
+        company=company1,
+        competitor=company2,
+        sales=sales,
+    )
     found1 = sum(1 for field in FIELD_KEYS if data1.get(field) != "Не найдено")
     found2 = sum(1 for field in FIELD_KEYS if data2.get(field) != "Не найдено")
+    comparable_fields = [
+        field
+        for field in FIELD_KEYS
+        if data1.get(field) != "Не найдено" and data2.get(field) != "Не найдено"
+    ]
 
     return render_template(
         "result.html",
@@ -86,8 +98,9 @@ def compare():
         company2=company2,
         data1=data1,
         data2=data2,
-        fields=FIELD_KEYS,
+        fields=comparable_fields,
         field_labels=FIELD_LABELS,
+        comparable_count=len(comparable_fields),
         sales=sales,
         found1=found1,
         found2=found2,
