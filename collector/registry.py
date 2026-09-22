@@ -62,7 +62,7 @@ INSURERS = (
         "Согласие",
         "https://www.soglasie.ru/",
         "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
-        "https://api.soglasie.ru/storage/managed/upload/docs/auto/pravila-strakhovaniya-transportnykh-sredstv.pdf",
+        "https://api.soglasie.ru/storage/media/originals/126997/c599c1b1-3863-443f-b986-8e409850b2ad.pdf",
     ),
     InsurerConfig(
         "rgs",
@@ -78,7 +78,9 @@ INSURERS = (
         "Т-Страхование",
         "https://www.tbank.ru/",
         "https://www.tbank.ru/insurance/kasko/",
-        "https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf",
+        official_doc_urls=(
+            "https://www.tbank.ru/insurance/help/auto/kasko/get-kasko/conditions/",
+        ),
     ),
     InsurerConfig(
         "sber",
