@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .base import BaseRepository
+
+
+def _normalize_text(value: str | None) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value)).strip().lower()
 
 
 class ConditionRepository(BaseRepository):
@@ -47,39 +54,208 @@ class ConditionRepository(BaseRepository):
         verification_status: str = "needs_review",
         valid_from: Any = None,
         valid_to: Any = None,
+        evidence_text: str | None = None,
     ) -> dict[str, Any]:
+        """Refresh one comparison field without deleting a good previous fact.
+
+        Rules:
+        - if nothing new is found, this method is never called and the current
+          active value remains untouched;
+        - a weaker source cannot replace a stronger active source;
+        - an unchanged fact only refreshes checked_at;
+        - a changed fact updates the same active condition and stores the
+          previous value in condition_versions + change_log.
+        """
         if source_level is not None and source_level not in {1, 2, 3, 4}:
             raise ValueError("source_level must be between 1 and 4")
 
         current = self.fetch_one(
             """
-            SELECT * FROM conditions
-            WHERE field_id = %s AND status = 'active'
-            ORDER BY source_level NULLS LAST, updated_at DESC, id DESC
+            SELECT c.*,
+                   ev.document_id AS evidence_document_id,
+                   ev.page_number AS evidence_page_number,
+                   ev.text_fragment AS evidence_text
+            FROM conditions c
+            LEFT JOIN LATERAL (
+                SELECT e.document_id, e.page_number, e.text_fragment
+                FROM evidence e
+                WHERE e.condition_id = c.id
+                ORDER BY e.id DESC
+                LIMIT 1
+            ) ev ON TRUE
+            WHERE c.field_id = %s
+              AND c.status = 'active'
+            ORDER BY c.source_level NULLS LAST, c.updated_at DESC, c.id DESC
             LIMIT 1
             """,
             (field_id,),
         )
-        if current and source_level is not None and current.get("source_level") is not None:
-            if current["source_level"] < source_level:
-                return current
 
-        if current:
-            self.execute(
-                "UPDATE conditions SET status = 'superseded', updated_at = NOW() WHERE id = %s",
-                (current["id"],),
+        if current is None:
+            row = self.fetch_one(
+                """
+                INSERT INTO conditions
+                    (field_id, source_id, value, source_level, confidence, status,
+                     verification_status, valid_from, valid_to, checked_at)
+                VALUES (%s, %s, %s, %s, %s, 'active', %s, %s, %s, NOW())
+                RETURNING *
+                """,
+                (
+                    field_id,
+                    source_id,
+                    value,
+                    source_level,
+                    confidence,
+                    verification_status,
+                    valid_from,
+                    valid_to,
+                ),
             )
+            if row is None:
+                raise RuntimeError("Condition candidate insert returned no row")
+            row["_evidence_needed"] = True
+            row["_changed"] = True
+            return row
+
+        current_level = current.get("source_level")
+        if (
+            source_level is not None
+            and current_level is not None
+            and current_level < source_level
+        ):
+            # We found something, but it is less authoritative than what is
+            # already stored. Keep the existing fact exactly as-is.
+            current["_evidence_needed"] = False
+            current["_changed"] = False
+            return current
+
+        same_value = _normalize_text(current.get("value")) == _normalize_text(value)
+        same_evidence = (
+            bool(evidence_text)
+            and _normalize_text(current.get("evidence_text")) == _normalize_text(evidence_text)
+        )
+        same_source = current.get("source_id") == source_id
+        stronger_source = (
+            source_level is not None
+            and current_level is not None
+            and source_level < current_level
+        )
+
+        if same_value or (same_source and same_evidence):
+            evidence_needed = stronger_source or not same_evidence or not same_source
+
+            if stronger_source:
+                row = self.fetch_one(
+                    """
+                    UPDATE conditions
+                    SET source_id = %s,
+                        source_level = %s,
+                        confidence = COALESCE(%s, confidence),
+                        verification_status = CASE
+                            WHEN %s = 'verified' THEN 'verified'
+                            ELSE verification_status
+                        END,
+                        checked_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING *
+                    """,
+                    (
+                        source_id,
+                        source_level,
+                        confidence,
+                        verification_status,
+                        current["id"],
+                    ),
+                )
+                self.execute(
+                    """
+                    INSERT INTO change_log
+                        (entity_type, entity_id, field_name, old_value, new_value, reason)
+                    VALUES ('condition', %s, 'source_level', %s, %s, 'stronger_source')
+                    """,
+                    (
+                        current["id"],
+                        str(current_level) if current_level is not None else None,
+                        str(source_level) if source_level is not None else None,
+                    ),
+                )
+            else:
+                row = self.fetch_one(
+                    """
+                    UPDATE conditions
+                    SET checked_at = NOW(),
+                        confidence = CASE
+                            WHEN %s IS NULL THEN confidence
+                            WHEN confidence IS NULL THEN %s
+                            ELSE GREATEST(confidence, %s)
+                        END,
+                        verification_status = CASE
+                            WHEN %s = 'verified' THEN 'verified'
+                            ELSE verification_status
+                        END
+                    WHERE id = %s
+                    RETURNING *
+                    """,
+                    (
+                        confidence,
+                        confidence,
+                        confidence,
+                        verification_status,
+                        current["id"],
+                    ),
+                )
+
+            if row is None:
+                raise RuntimeError("Condition refresh returned no row")
+            row["_evidence_needed"] = evidence_needed
+            row["_changed"] = False
+            return row
+
+        # The fact changed. Only an equal-or-stronger source can replace it.
+        # Preserve the previous state before changing the active record.
+        self.execute(
+            """
+            INSERT INTO condition_versions
+                (condition_id, value, source_id, document_id, page_number,
+                 text_fragment, verification_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                current["id"],
+                current.get("value"),
+                current.get("source_id"),
+                current.get("evidence_document_id"),
+                current.get("evidence_page_number"),
+                current.get("evidence_text"),
+                current.get("verification_status") or "unverified",
+            ),
+        )
+        self.execute(
+            """
+            INSERT INTO change_log
+                (entity_type, entity_id, field_name, old_value, new_value, reason)
+            VALUES ('condition', %s, 'value', %s, %s, 'source_refresh')
+            """,
+            (current["id"], current.get("value"), value),
+        )
 
         row = self.fetch_one(
             """
-            INSERT INTO conditions
-                (field_id, source_id, value, source_level, confidence, status,
-                 verification_status, valid_from, valid_to, checked_at)
-            VALUES (%s, %s, %s, %s, %s, 'active', %s, %s, %s, NOW())
+            UPDATE conditions
+            SET source_id = %s,
+                value = %s,
+                source_level = %s,
+                confidence = %s,
+                verification_status = %s,
+                valid_from = COALESCE(%s, valid_from),
+                valid_to = %s,
+                checked_at = NOW(),
+                updated_at = NOW()
+            WHERE id = %s
             RETURNING *
             """,
             (
-                field_id,
                 source_id,
                 value,
                 source_level,
@@ -87,10 +263,13 @@ class ConditionRepository(BaseRepository):
                 verification_status,
                 valid_from,
                 valid_to,
+                current["id"],
             ),
         )
         if row is None:
-            raise RuntimeError("Condition candidate insert returned no row")
+            raise RuntimeError("Condition update returned no row")
+        row["_evidence_needed"] = True
+        row["_changed"] = True
         return row
 
     def verify(self, condition_id: int, verified_by: str | None = None) -> dict[str, Any]:
