@@ -575,6 +575,40 @@ class CascoCollectionPipeline:
                     allowed_keys=set(missing_from_rules),
                 )
             )
+
+            # Some insurer PDFs are valid but expose poor/partial text through
+            # pypdf (fonts, object streams, scanned layout). If the direct PDF
+            # pass still leaves gaps, read the exact same official URL through
+            # Reader and analyze only the unresolved fields. The stored source
+            # remains the insurer's official PDF URL.
+            reader_missing = [
+                field["key"]
+                for field in KASKO_FIELDS
+                if field["key"] not in found
+            ]
+            if reader_missing and not getattr(fetched, "via_reader", False):
+                try:
+                    reader_fetch = self.fetcher.fetch_via_reader(insurer.rules_url)
+                    reader_text = self._text_from_fetch(reader_fetch)
+                    reader_values = self._deep_extract_official(
+                        insurer=insurer,
+                        source_url=insurer.rules_url,
+                        source_level=1,
+                        text=reader_text,
+                        field_keys=reader_missing,
+                    )
+                    found.update(
+                        self._persist_values(
+                            reader_values,
+                            field_rows,
+                            source=source,
+                            document=document,
+                            allowed_keys=set(reader_missing),
+                        )
+                    )
+                except (FetchError, LLMExtractionError, ValueError):
+                    pass
+
             return found, 1, 1
         except (FetchError, LLMExtractionError, ValueError):
             return set(), 0, 0
