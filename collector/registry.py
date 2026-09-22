@@ -100,7 +100,8 @@ INSURERS = (
         "Совкомбанк Страхование",
         "Совкомбанк",
         "https://sovcomins.ru/",
-        "https://sovcomins.ru/product/car/",
+        "https://sovcomins.ru/product/superkasko/",
+        "https://sovcomins.ru/upload/pravila/kasko_11_23.pdf",
     ),
 )
 
