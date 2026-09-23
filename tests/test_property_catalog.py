@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from core.property_catalog import (
@@ -183,6 +184,12 @@ class PropertyCatalogTests(unittest.TestCase):
                 },
             )
         )
+
+    def test_all_field_schemas_are_json_serializable(self):
+        for scenario in PROPERTY_SCENARIOS:
+            for field in scenario_fields(scenario):
+                encoded = json.dumps(field["value_schema"], ensure_ascii=False)
+                self.assertTrue(encoded)
 
     def test_unknown_scenario_raises(self):
         with self.assertRaises(KeyError):
