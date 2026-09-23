@@ -2,22 +2,26 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 import requests
 
 
 class SalesScriptAIService:
-    """Rewrite grounded sales facts into clear client language.
+    """Explain why an already proven comparison matters to the client.
 
-    The service never decides whether an insurer wins a comparison. It receives
-    already validated advantage/strength cards and only explains their customer
-    value. If the LLM is unavailable, callers keep the deterministic copy.
+    The LLM never decides the comparison and never rewrites the ready-to-send
+    client script. If enrichment is unsafe or unavailable, deterministic copy
+    is kept unchanged.
     """
 
     def __init__(self) -> None:
         self.api_key = os.getenv("GROQ_API_KEY")
-        self.model = os.getenv("GROQ_SCRIPT_MODEL", os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"))
+        self.model = os.getenv(
+            "GROQ_SCRIPT_MODEL",
+            os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+        )
         self.timeout = 20
         self._cache: dict[str, dict[str, Any]] = {}
 
@@ -51,43 +55,44 @@ class SalesScriptAIService:
                 "label": card.get("label"),
                 "kind": card.get("kind"),
                 "title": card.get("title"),
+                "field_key": card.get("field_key"),
+                "comparison_basis": card.get("comparison_basis"),
+                "own_value": card.get("own_value"),
+                "competitor_value": card.get("competitor_value"),
                 "evidence": card.get("evidence"),
             }
             for card in cards
         ]
 
         prompt = f"""
-Ты помогаешь страховому агенту объяснить клиенту различия КАСКО простым русским языком.
+Ты помогаешь страховому агенту объяснить клиенту уже доказанные различия КАСКО простым русским языком.
 
 Основная компания: {company}
 Конкурент: {competitor}
 
-Ниже переданы ТОЛЬКО уже проверенные факты. Нельзя добавлять факты, которых здесь нет.
-kind=advantage означает, что отличие от конкурента доказано.
-kind=strength означает только сильную сторону основной компании; нельзя утверждать,
-что у конкурента этого нет или что основная компания лучше по этому пункту.
+Ниже переданы ТОЛЬКО уже проверенные сравнительные отличия.
+Нельзя добавлять факты, которых здесь нет, и нельзя заново решать, какая компания лучше.
 
 Факты:
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
 Верни строго JSON:
 {{
-  "client_message": "единый текст 3-5 предложений без повторов и канцелярита",
   "cards": [
     {{
       "label": "точно как во входных данных",
-      "why": "1-2 предложения: почему именно это условие практически выгодно/удобно клиенту; для advantage явно объясни разницу с конкурентом, но только из evidence"
+      "why": "1-2 предложения: почему именно доказанное отличие практически важно клиенту; используй только own_value, competitor_value и evidence"
     }}
   ]
 }}
 
 Правила:
 - не упоминай, что ты ИИ;
-- не используй слова "однозначно лучше", если это не следует из фактов;
+- не добавляй новые цены, проценты, лимиты, сроки и исключения;
+- не делай новых выводов о конкуренте;
+- не меняй клиентский скрипт и не формируй новый итог сравнения;
 - не повторяй одинаковые обороты;
-- не придумывай цены, лимиты, сроки и исключения;
-- не меняй сам клиентский скрипт и не предлагай новый итог сравнения;
-- пиши как нормальный страховой консультант, а не как рекламный баннер.
+- пиши как страховой консультант, а не как рекламный баннер.
 """.strip()
 
         try:
@@ -112,8 +117,8 @@ kind=strength означает только сильную сторону осн
                 timeout=self.timeout,
             )
             response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
-            parsed = json.loads(content)
+            raw_content = response.json()["choices"][0]["message"]["content"]
+            parsed = json.loads(raw_content)
         except (requests.RequestException, ValueError, KeyError, TypeError):
             return sales
 
@@ -123,11 +128,11 @@ kind=strength означает только сильную сторону осн
             if isinstance(item, dict) and item.get("label") and item.get("why")
         }
 
-        enriched_cards = []
+        enriched_cards: list[dict[str, Any]] = []
         for card in cards:
             updated = dict(card)
             why = why_by_label.get(str(card.get("label")))
-            if why:
+            if why and self._safe_why(why, card):
                 updated["why"] = why
             else:
                 updated["why"] = card.get("client_phrase") or card.get("evidence")
@@ -135,11 +140,32 @@ kind=strength означает только сильную сторону осн
 
         result = dict(sales)
         result["cards"] = enriched_cards
-        # The ready-to-send client message remains deterministic. The LLM may
-        # explain customer relevance, but it never rewrites the proven comparison.
+        # The ready-to-send client message remains deterministic. AI may explain
+        # customer relevance, but it never rewrites the proven comparison.
         result["client_message"] = sales.get("client_message", "")
 
         if len(self._cache) > 128:
             self._cache.clear()
         self._cache[cache_key] = result
         return result
+
+    @staticmethod
+    def _safe_why(why: str, card: dict[str, Any]) -> bool:
+        if not why.strip() or len(why) > 700:
+            return False
+
+        supported_text = " ".join(
+            str(card.get(key) or "")
+            for key in ("own_value", "competitor_value", "evidence")
+        )
+        supported_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", supported_text))
+        why_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", why))
+        if why_numbers - supported_numbers:
+            return False
+
+        if re.search(
+            r"однозначно\s+лучше|во\s+всех\s+случаях|гарантированно\s+выгод",
+            why.lower(),
+        ):
+            return False
+        return True
