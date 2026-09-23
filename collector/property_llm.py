@@ -63,6 +63,10 @@ class PropertyGroqExtractor:
         self.model = model or os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
         self.fallback_model = fallback_model or os.getenv(
             "GROQ_FALLBACK_MODEL",
+            "openai/gpt-oss-120b",
+        )
+        self.last_resort_model = os.getenv(
+            "GROQ_LAST_RESORT_MODEL",
             "qwen/qwen3.8-27b",
         )
         self.timeout = timeout
@@ -141,7 +145,11 @@ class PropertyGroqExtractor:
         model_candidates = tuple(
             dict.fromkeys(
                 model_name
-                for model_name in (self.model, self.fallback_model)
+                for model_name in (
+                    self.model,
+                    self.fallback_model,
+                    self.last_resort_model,
+                )
                 if model_name
             )
         )
@@ -196,7 +204,7 @@ class PropertyGroqExtractor:
                         reset_tokens = response.headers.get(
                             "x-ratelimit-reset-tokens"
                         )
-                        raise PropertyExtractionError(
+                        rate_error = PropertyExtractionError(
                             f"Groq rate limit (429) for {model_name}"
                             + (
                                 f"; reset_tokens={reset_tokens}"
@@ -206,6 +214,10 @@ class PropertyGroqExtractor:
                             + (f"; {detail[:240]}" if detail else ""),
                             status_code=429,
                         )
+                        if has_fallback:
+                            last_error = rate_error
+                            break
+                        raise rate_error
 
                     if response.status_code >= 400:
                         raise PropertyExtractionError(
