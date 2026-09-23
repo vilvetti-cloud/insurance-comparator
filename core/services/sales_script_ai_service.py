@@ -86,7 +86,7 @@ kind=strength означает только сильную сторону осн
 - не используй слова "однозначно лучше", если это не следует из фактов;
 - не повторяй одинаковые обороты;
 - не придумывай цены, лимиты, сроки и исключения;
-- если kind=strength, формулируй "в {company} предусмотрено...", а не "у конкурента этого нет";
+- не меняй сам клиентский скрипт и не предлагай новый итог сравнения;
 - пиши как нормальный страховой консультант, а не как рекламный баннер.
 """.strip()
 
@@ -135,9 +135,9 @@ kind=strength означает только сильную сторону осн
 
         result = dict(sales)
         result["cards"] = enriched_cards
-        message = parsed.get("client_message")
-        if isinstance(message, str) and message.strip():
-            result["client_message"] = message.strip()
+        # The ready-to-send client message remains deterministic. The LLM may
+        # explain customer relevance, but it never rewrites the proven comparison.
+        result["client_message"] = sales.get("client_message", "")
 
         if len(self._cache) > 128:
             self._cache.clear()
