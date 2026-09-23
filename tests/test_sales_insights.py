@@ -52,6 +52,31 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(item["own_value"], "Франшиза отсутствует.")
         self.assertIn("20 000", item["competitor_value"])
 
+    def test_negative_without_documents_is_not_read_as_positive(self):
+        result = self.analyze(
+            "without_certificates",
+            field_data(
+                "without_certificates",
+                "Урегулирование без справок не допускается.",
+            ),
+            field_data(
+                "without_certificates",
+                "Для урегулирования справки обязательны.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+
+    def test_franchise_not_provided_counts_as_no_franchise(self):
+        result = self.analyze(
+            "franchise",
+            field_data("franchise", "Франшиза не предусмотрена."),
+            field_data(
+                "franchise",
+                "Предусмотрена безусловная франшиза 15 000 рублей.",
+            ),
+        )
+        self.assertEqual(len(result["advantages"]), 1)
+
     def test_conditional_value_never_becomes_advantage(self):
         result = self.analyze(
             "gap",
