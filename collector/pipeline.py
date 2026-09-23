@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Any
 
 from collector.discovery import SourceDiscovery
@@ -43,7 +44,7 @@ class CascoCollectionPipeline:
         self.extractor = DocumentExtractor()
         self.selector = RelevanceSelector()
         self.deterministic = DeterministicCascoExtractor()
-        self.llm = GroqExtractor()
+        self.llm = GroqExtractor(timeout=25, retries=1, min_request_interval=4.0)
         self.search = DuckDuckGoSearch()
         self.fallback = InternalFallback()
         self.official_snapshots = OfficialSnapshotProvider()
@@ -363,8 +364,17 @@ class CascoCollectionPipeline:
         source_level: int,
         text: str,
         field_keys: list[str] | set[str] | tuple[str, ...],
+        max_llm_batches: int = 3,
+        llm_budget_seconds: float = 210.0,
     ) -> dict[str, dict[str, Any]]:
-        """Hybrid extraction: deterministic facts first, LLM only for ambiguity."""
+        """Hybrid extraction with a bounded LLM budget.
+
+        Official documents can be very large and rate limits are shared across
+        matrix jobs. Deterministic extraction always runs first; LLM enrichment
+        is deliberately bounded so one rulebook cannot consume the whole
+        insurer workflow timeout. Unresolved fields continue through official
+        snapshots/search instead of blocking collection.
+        """
         ordered = [
             field["key"]
             for field in KASKO_FIELDS
@@ -395,8 +405,20 @@ class CascoCollectionPipeline:
             if key not in result
         ]
         batch_size = 2
+        llm_started_at = time.monotonic()
+        batches_attempted = 0
 
         for offset in range(0, len(unresolved), batch_size):
+            elapsed = time.monotonic() - llm_started_at
+            if batches_attempted >= max_llm_batches or elapsed >= llm_budget_seconds:
+                print(
+                    f"[collector] insurer={insurer.slug} stage=llm_budget_exhausted "
+                    f"attempted={batches_attempted} elapsed={elapsed:.1f}s "
+                    f"remaining={','.join(unresolved[offset:])}",
+                    flush=True,
+                )
+                break
+
             batch = unresolved[offset : offset + batch_size]
             batch_chunks = {
                 key: grouped.get(key, [])
@@ -404,6 +426,15 @@ class CascoCollectionPipeline:
             }
             if not any(batch_chunks.get(key) for key in batch):
                 continue
+
+            batches_attempted += 1
+            print(
+                f"[collector] insurer={insurer.slug} stage=llm_batch_start "
+                f"batch={batches_attempted}/{max_llm_batches} "
+                f"fields={','.join(batch)}",
+                flush=True,
+            )
+            batch_started_at = time.monotonic()
             try:
                 values = self.llm.extract_fields(
                     company_name=insurer.name,
@@ -412,9 +443,20 @@ class CascoCollectionPipeline:
                     grouped_chunks=batch_chunks,
                     field_keys=batch,
                 )
-            except LLMExtractionError:
+            except LLMExtractionError as exc:
+                print(
+                    f"[collector] insurer={insurer.slug} stage=llm_batch_error "
+                    f"fields={','.join(batch)} error={str(exc)[:240]}",
+                    flush=True,
+                )
                 continue
 
+            print(
+                f"[collector] insurer={insurer.slug} stage=llm_batch_done "
+                f"fields={','.join(batch)} "
+                f"elapsed={time.monotonic() - batch_started_at:.1f}s",
+                flush=True,
+            )
             for key in batch:
                 value = values.get(key, {})
                 if value.get("found") and value.get("value"):
