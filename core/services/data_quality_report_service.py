@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 
 from collector.registry import INSURERS
 from core.catalog import KASKO_FIELDS
+from core.condition_audit import audit_condition
 from db import _connect
 
 
@@ -52,6 +53,10 @@ class DataQualityReportService:
                         "_checked_raw": None,
                         "page_number": None,
                         "evidence_quote": None,
+                        "quality_status": "missing",
+                        "quality_label": "Не найдено",
+                        "quality_reason": "Значение отсутствует.",
+                        "sales_eligible": False,
                     }
                     for field in KASKO_FIELDS
                 ],
@@ -62,6 +67,9 @@ class DataQualityReportService:
                 "web_count": 0,
                 "fallback_count": 0,
                 "last_checked": None,
+                "confirmed_count": 0,
+                "conditional_count": 0,
+                "review_count": 0,
                 "latest_run": None,
             }
 
@@ -164,6 +172,16 @@ class DataQualityReportService:
             value = row["value"]
             found = value not in (None, "")
 
+            audit = audit_condition(
+                key,
+                value,
+                row["evidence_quote"],
+                source_level=row["source_level"],
+                source_type=row["source_type"],
+                confidence=float(row["confidence"]) if row["confidence"] is not None else None,
+                verification_status=row["verification_status"],
+            )
+
             item.update(
                 {
                     "found": found,
@@ -193,6 +211,10 @@ class DataQualityReportService:
                     "_checked_raw": (row["checked_at"] or row["updated_at"]) if found else None,
                     "page_number": row["page_number"] if found else None,
                     "evidence_quote": row["evidence_quote"] if found else None,
+                    "quality_status": audit.status,
+                    "quality_label": audit.label,
+                    "quality_reason": audit.reason,
+                    "sales_eligible": audit.sales_eligible,
                 }
             )
 
@@ -235,6 +257,15 @@ class DataQualityReportService:
             company["fallback_count"] = sum(
                 1 for field in found_fields if field["source_level"] == 4
             )
+            company["confirmed_count"] = sum(
+                1 for field in found_fields if field["quality_status"] == "confirmed"
+            )
+            company["conditional_count"] = sum(
+                1 for field in found_fields if field["quality_status"] == "conditional"
+            )
+            company["review_count"] = sum(
+                1 for field in found_fields if field["quality_status"] == "review"
+            )
             total_found += len(found_fields)
 
             checked_values = [
@@ -248,13 +279,17 @@ class DataQualityReportService:
             for field in company["fields"]:
                 field.pop("_checked_raw", None)
 
+        company_list = list(companies.values())
         return {
-            "companies": list(companies.values()),
+            "companies": company_list,
             "total_found": total_found,
             "total_possible": total_possible,
             "coverage_percent": round(total_found / total_possible * 100)
             if total_possible
             else 0,
+            "total_confirmed": sum(item["confirmed_count"] for item in company_list),
+            "total_conditional": sum(item["conditional_count"] for item in company_list),
+            "total_review": sum(item["review_count"] for item in company_list),
         }
 
     @staticmethod
