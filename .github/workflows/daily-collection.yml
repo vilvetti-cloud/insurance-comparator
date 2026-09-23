@@ -81,6 +81,7 @@ jobs:
   comparison-qa:
     name: QA all 110 comparisons
     needs: collect
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
