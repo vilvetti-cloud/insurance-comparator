@@ -64,14 +64,14 @@ PROPERTY_VALUE_SCHEMAS: dict[str, dict[str, Any]] = {
             "conditions": "string|null",
         },
         "enum": {
-            "type": {
+            "type": (
                 "none",
                 "conditional",
                 "unconditional",
                 "temporary",
                 "mixed",
                 "unknown",
-            }
+            )
         },
     },
     "acceptance_rule": {
@@ -98,14 +98,14 @@ PROPERTY_VALUE_SCHEMAS: dict[str, dict[str, Any]] = {
             "conditions": "string|null",
         },
         "enum": {
-            "payment_term_type": {"working", "calendar", "unknown", None},
-            "payment_term_event": {
+            "payment_term_type": ("working", "calendar", "unknown", None),
+            "payment_term_event": (
                 "complete_documents",
                 "decision",
                 "payment",
                 "unknown",
                 None,
-            },
+            ),
         },
     },
     "service_bundle": {
