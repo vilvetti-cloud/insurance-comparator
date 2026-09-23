@@ -1,8 +1,8 @@
-"""Vercel entrypoint for the normalized insurance comparator."""
+"""Vercel entrypoint for the normalized insurance comparator.
 
-import db
-
-db.init_db()
+The web function must stay lightweight: schema creation/migrations belong to
+deployment or collection jobs, not to every serverless cold start.
+"""
 
 from web_app import app
 
