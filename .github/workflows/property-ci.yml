@@ -55,4 +55,4 @@ jobs:
         run: python -m py_compile core/property_*.py core/services/property_*.py core/services/reso_property_*.py collector/property_*.py database/repositories/*.py
 
       - name: Run unit tests
-        run: python -m unittest tests.test_deterministic tests.test_evidence_quality tests.test_condition_audit tests.test_sales_insights tests.test_comparison_qa tests.test_sales_script_ai tests.test_property_catalog tests.test_property_schema_service tests.test_property_source_map tests.test_property_reso_baseline tests.test_reso_property_baseline_loader
+        run: python -m unittest tests.test_deterministic tests.test_evidence_quality tests.test_condition_audit tests.test_sales_insights tests.test_comparison_qa tests.test_sales_script_ai tests.test_property_catalog tests.test_property_schema_service tests.test_property_source_map tests.test_property_reso_baseline tests.test_reso_property_baseline_loader tests.test_property_competitor_registry
