@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+import unittest
+
+from core.condition_audit import audit_condition
+
+
+class ConditionAuditTests(unittest.TestCase):
+    def audit(self, key: str, value: str, quote: str, **kwargs):
+        return audit_condition(
+            key,
+            value,
+            quote,
+            source_level=kwargs.get("source_level", 1),
+            source_type=kwargs.get("source_type", "pdf"),
+            confidence=kwargs.get("confidence", 0.95),
+            verification_status=kwargs.get("verification_status", "verified"),
+        )
+
+    def test_confirmed_total_loss(self):
+        result = self.audit(
+            "total_loss",
+            "Полная гибель признаётся при стоимости ремонта 75% страховой суммы и более.",
+            "Стоимость восстановительного ремонта составляет 75% страховой суммы и более — полная гибель.",
+        )
+        self.assertEqual(result.status, "confirmed")
+        self.assertTrue(result.sales_eligible)
+
+    def test_conditional_total_loss(self):
+        result = self.audit(
+            "total_loss",
+            "Критерий полной гибели определяется правилами и условиями договора; единый процент не применяется.",
+            "Критерий полной гибели определяется условиями договора.",
+        )
+        self.assertEqual(result.status, "conditional")
+        self.assertFalse(result.sales_eligible)
+
+    def test_wrong_without_certificates_context(self):
+        result = self.audit(
+            "without_certificates",
+            "Угон ТС без документов и ключей покрывается.",
+            "Угон ТС без документов и ключей покрывается при выполнении условий.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_wrong_repair_fragment(self):
+        result = self.audit(
+            "repair_type",
+            "Компоненты ТС, по которым производился ремонт на соответствующей СТОА.",
+            "Компоненты ТС, по которым производился ремонт на соответствующей СТОА.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_third_party_source_never_sales_eligible(self):
+        result = self.audit(
+            "gap",
+            "GAP сохраняет стоимость автомобиля.",
+            "GAP сохраняет стоимость автомобиля.",
+            source_level=3,
+            source_type="web_search",
+        )
+        self.assertEqual(result.status, "review")
+        self.assertFalse(result.sales_eligible)
+
+
+if __name__ == "__main__":
+    unittest.main()
