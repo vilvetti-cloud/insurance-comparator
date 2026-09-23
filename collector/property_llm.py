@@ -159,6 +159,9 @@ class PropertyGroqExtractor:
         for model_index, model_name in enumerate(model_candidates):
             payload = dict(base_payload)
             payload["model"] = model_name
+            payload["max_completion_tokens"] = (
+                420 if model_name.startswith("qwen/") else 900
+            )
             payload["reasoning_effort"] = (
                 "none" if model_name.startswith("qwen/") else "low"
             )
@@ -224,6 +227,19 @@ class PropertyGroqExtractor:
                         raise rate_error
 
                     if response.status_code >= 400:
+                        detail = response.text.replace("\n", " ").strip()
+                        has_fallback = model_index + 1 < len(model_candidates)
+                        if (
+                            response.status_code == 400
+                            and "json_validate_failed" in detail
+                            and has_fallback
+                        ):
+                            last_error = PropertyExtractionError(
+                                f"Groq JSON validation failed for {model_name}; "
+                                f"switching to {model_candidates[model_index + 1]}",
+                                status_code=400,
+                            )
+                            break
                         raise PropertyExtractionError(
                             f"Groq HTTP {response.status_code} "
                             f"for {model_name}: {response.text[:500]}",
@@ -279,16 +295,22 @@ class PropertyGroqExtractor:
 Не используй знания из памяти, не достраивай отсутствующие значения и не превращай
 условие конкретной программы в универсальное условие страховщика.
 
-Для каждого запрошенного поля верни:
+Верни JSON-объект ВЕРХНЕГО УРОВНЯ, где ключ — точный field_key.
+Даже если запрошено только одно поле, оболочка field_key обязательна.
+Не возвращай "found" на верхнем уровне.
+
+Формат:
 {{
-  "found": boolean,
-  "display_value": string|null,
-  "value_json": object|array|null,
-  "direct": boolean,
-  "confidence": number,
-  "quote": string|null,
-  "page": integer|null,
-  "notes": string|null
+  "<field_key>": {{
+    "found": boolean,
+    "display_value": string|null,
+    "value_json": object|array|null,
+    "direct": boolean,
+    "confidence": number,
+    "quote": string|null,
+    "page": integer|null,
+    "notes": string|null
+  }}
 }}
 
 Требования:
@@ -360,6 +382,13 @@ class PropertyGroqExtractor:
             raise PropertyExtractionError(
                 "Groq returned a non-object JSON response"
             )
+
+        if (
+            len(field_keys) == 1
+            and "found" in parsed
+            and field_keys[0] not in parsed
+        ):
+            parsed = {field_keys[0]: parsed}
 
         result = cls._empty_result(field_keys)
         for key in field_keys:
