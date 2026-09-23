@@ -8,7 +8,7 @@ from psycopg.rows import dict_row
 
 from collector.registry import INSURERS
 from core.catalog import KASKO_FIELDS
-from core.condition_audit import audit_condition
+from core.condition_audit import ConditionAudit, audit_condition
 from db import _connect
 
 
@@ -42,6 +42,8 @@ class DataQualityReportService:
                         "key": field["key"],
                         "label": field["label"],
                         "found": False,
+                        "raw_found": False,
+                        "quarantined": False,
                         "value": None,
                         "source_level": None,
                         "source_label": "Не найдено",
@@ -61,6 +63,8 @@ class DataQualityReportService:
                     for field in KASKO_FIELDS
                 ],
                 "found_count": 0,
+                "raw_found_count": 0,
+                "quarantined_count": 0,
                 "missing_count": len(KASKO_FIELDS),
                 "official_pdf_count": 0,
                 "official_count": 0,
@@ -96,7 +100,9 @@ class DataQualityReportService:
                         s.title AS source_title,
                         s.source_type,
                         ev.page_number,
-                        ev.text_fragment AS evidence_quote
+                        ev.text_fragment AS evidence_quote,
+                        stats.active_candidate_count,
+                        stats.distinct_value_count
                     FROM companies c
                     JOIN products p
                       ON p.company_id = c.id
@@ -116,6 +122,14 @@ class DataQualityReportService:
                             cnd.id DESC
                         LIMIT 1
                     ) cond ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            COUNT(*) AS active_candidate_count,
+                            COUNT(DISTINCT NULLIF(BTRIM(c2.value), '')) AS distinct_value_count
+                        FROM conditions c2
+                        WHERE c2.field_id = f.id
+                          AND c2.status = 'active'
+                    ) stats ON TRUE
                     LEFT JOIN sources s ON s.id = cond.source_id
                     LEFT JOIN LATERAL (
                         SELECT e.page_number, e.text_fragment
@@ -170,7 +184,7 @@ class DataQualityReportService:
             index = field_positions[key]
             item = company["fields"][index]
             value = row["value"]
-            found = value not in (None, "")
+            raw_found = value not in (None, "")
 
             audit = audit_condition(
                 key,
@@ -182,10 +196,27 @@ class DataQualityReportService:
                 verification_status=row["verification_status"],
             )
 
+            if raw_found and (row["distinct_value_count"] or 0) > 1:
+                audit = ConditionAudit(
+                    status="review",
+                    label="Нужно перепроверить",
+                    sales_eligible=False,
+                    reason=(
+                        "В базе одновременно есть несколько разных активных значений "
+                        "по этому параметру. Кандидат изолирован до разрешения конфликта."
+                    ),
+                )
+
+            reportable = raw_found and audit.status in {"confirmed", "conditional"}
+
             item.update(
                 {
-                    "found": found,
-                    "value": value if found else None,
+                    "found": reportable,
+                    "raw_found": raw_found,
+                    "quarantined": raw_found and not reportable,
+                    "value": value if raw_found else None,
+                    "active_candidate_count": row["active_candidate_count"] or 0,
+                    "distinct_value_count": row["distinct_value_count"] or 0,
                     "source_level": row["source_level"],
                     "source_label": (
                         "Официальный snapshot"
@@ -197,20 +228,20 @@ class DataQualityReportService:
                     )
                     if found
                     else "Не найдено",
-                    "source_url": row["source_url"] if found else None,
-                    "source_title": row["source_title"] if found else None,
+                    "source_url": row["source_url"] if raw_found else None,
+                    "source_title": row["source_title"] if raw_found else None,
                     "confidence": float(row["confidence"])
                     if row["confidence"] is not None
                     else None,
-                    "verification_status": row["verification_status"] if found else None,
+                    "verification_status": row["verification_status"] if raw_found else None,
                     "checked_at": self._format_dt(
                         row["checked_at"] or row["updated_at"]
                     )
                     if found
                     else None,
-                    "_checked_raw": (row["checked_at"] or row["updated_at"]) if found else None,
-                    "page_number": row["page_number"] if found else None,
-                    "evidence_quote": row["evidence_quote"] if found else None,
+                    "_checked_raw": (row["checked_at"] or row["updated_at"]) if raw_found else None,
+                    "page_number": row["page_number"] if raw_found else None,
+                    "evidence_quote": row["evidence_quote"] if raw_found else None,
                     "quality_status": audit.status,
                     "quality_label": audit.label,
                     "quality_reason": audit.reason,
@@ -242,8 +273,12 @@ class DataQualityReportService:
         last_checked_dt: datetime | None = None
 
         for company in companies.values():
+            raw_fields = [field for field in company["fields"] if field["raw_found"]]
             found_fields = [field for field in company["fields"] if field["found"]]
+            quarantined_fields = [field for field in company["fields"] if field["quarantined"]]
+            company["raw_found_count"] = len(raw_fields)
             company["found_count"] = len(found_fields)
+            company["quarantined_count"] = len(quarantined_fields)
             company["missing_count"] = len(KASKO_FIELDS) - len(found_fields)
             company["official_pdf_count"] = sum(
                 1 for field in found_fields if field["source_level"] == 1
@@ -264,13 +299,13 @@ class DataQualityReportService:
                 1 for field in found_fields if field["quality_status"] == "conditional"
             )
             company["review_count"] = sum(
-                1 for field in found_fields if field["quality_status"] == "review"
+                1 for field in raw_fields if field["quality_status"] == "review"
             )
             total_found += len(found_fields)
 
             checked_values = [
                 field["_checked_raw"]
-                for field in found_fields
+                for field in raw_fields
                 if field.get("_checked_raw") is not None
             ]
             company["last_checked"] = (
@@ -290,6 +325,7 @@ class DataQualityReportService:
             "total_confirmed": sum(item["confirmed_count"] for item in company_list),
             "total_conditional": sum(item["conditional_count"] for item in company_list),
             "total_review": sum(item["review_count"] for item in company_list),
+            "total_quarantined": sum(item["quarantined_count"] for item in company_list),
         }
 
     @staticmethod
