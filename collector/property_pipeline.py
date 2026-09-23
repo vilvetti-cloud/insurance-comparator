@@ -94,8 +94,8 @@ class PropertyCollector:
         )
         self.llm = llm or PropertyGroqExtractor(
             timeout=25,
-            retries=2,
-            min_request_interval=6.0,
+            retries=3,
+            min_request_interval=12.0,
         )
 
     def collect(
@@ -220,8 +220,8 @@ class PropertyCollector:
                     sources_success += 1
                     continue
 
-                for offset in range(0, len(candidate_keys), 2):
-                    batch = candidate_keys[offset : offset + 2]
+                for offset in range(0, len(candidate_keys), 1):
+                    batch = candidate_keys[offset : offset + 1]
                     values = self.llm.extract_fields(
                         company_name=competitor.name,
                         scenario=scenario,
