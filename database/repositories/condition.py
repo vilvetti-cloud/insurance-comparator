@@ -5,6 +5,7 @@ from typing import Any
 
 from psycopg.rows import dict_row
 
+from core.condition_audit import audit_condition
 from .base import BaseRepository
 
 
@@ -21,9 +22,24 @@ class ConditionRepository(BaseRepository):
     def get_current(self, field_id: int) -> dict[str, Any] | None:
         return self.fetch_one(
             """
-            SELECT * FROM conditions
-            WHERE field_id = %s AND status = 'active'
-            ORDER BY source_level NULLS LAST, updated_at DESC, id DESC
+            SELECT c.*,
+                   f.field_key,
+                   s.source_type,
+                   ev.text_fragment AS evidence_text,
+                   ev.document_id AS evidence_document_id,
+                   ev.page_number AS evidence_page_number
+            FROM conditions c
+            JOIN comparison_fields f ON f.id = c.field_id
+            LEFT JOIN sources s ON s.id = c.source_id
+            LEFT JOIN LATERAL (
+                SELECT e.document_id, e.page_number, e.text_fragment
+                FROM evidence e
+                WHERE e.condition_id = c.id
+                ORDER BY e.id DESC
+                LIMIT 1
+            ) ev ON TRUE
+            WHERE c.field_id = %s AND c.status = 'active'
+            ORDER BY c.source_level NULLS LAST, c.updated_at DESC, c.id DESC
             LIMIT 1
             """,
             (field_id,),
@@ -67,10 +83,14 @@ class ConditionRepository(BaseRepository):
                 cur.execute(
                     """
                     SELECT c.*,
+                           f.field_key,
+                           src.source_type,
                            ev.document_id AS evidence_document_id,
                            ev.page_number AS evidence_page_number,
                            ev.text_fragment AS evidence_text
                     FROM conditions c
+                    JOIN comparison_fields f ON f.id = c.field_id
+                    LEFT JOIN sources src ON src.id = c.source_id
                     LEFT JOIN LATERAL (
                         SELECT e.document_id, e.page_number, e.text_fragment
                         FROM evidence e
@@ -116,10 +136,46 @@ class ConditionRepository(BaseRepository):
                     return row
 
                 current_level = current.get("source_level")
+
+                incoming_source_type = None
+                if source_id is not None:
+                    cur.execute(
+                        "SELECT source_type FROM sources WHERE id = %s",
+                        (source_id,),
+                    )
+                    source_row = cur.fetchone()
+                    incoming_source_type = (
+                        source_row.get("source_type") if source_row else None
+                    )
+
+                current_audit = audit_condition(
+                    current.get("field_key"),
+                    current.get("value"),
+                    current.get("evidence_text"),
+                    source_level=current_level,
+                    source_type=current.get("source_type"),
+                    confidence=float(current["confidence"]) if current.get("confidence") is not None else None,
+                    verification_status=current.get("verification_status"),
+                )
+                incoming_audit = audit_condition(
+                    current.get("field_key"),
+                    value,
+                    evidence_text,
+                    source_level=source_level,
+                    source_type=incoming_source_type,
+                    confidence=float(confidence) if confidence is not None else None,
+                    verification_status=verification_status,
+                )
+                quality_upgrade = (
+                    current_audit.status == "review"
+                    and incoming_audit.status in {"confirmed", "conditional"}
+                )
+
                 if (
                     source_level is not None
                     and current_level is not None
                     and current_level < source_level
+                    and not quality_upgrade
                 ):
                     current["_evidence_needed"] = False
                     current["_changed"] = False
@@ -139,9 +195,14 @@ class ConditionRepository(BaseRepository):
                 )
 
                 if same_value or (same_source and same_evidence):
-                    evidence_needed = stronger_source or not same_evidence or not same_source
+                    evidence_needed = (
+                        stronger_source
+                        or quality_upgrade
+                        or not same_evidence
+                        or not same_source
+                    )
 
-                    if stronger_source:
+                    if stronger_source or quality_upgrade:
                         cur.execute(
                             """
                             UPDATE conditions
@@ -170,12 +231,13 @@ class ConditionRepository(BaseRepository):
                             """
                             INSERT INTO change_log
                                 (entity_type, entity_id, field_name, old_value, new_value, reason)
-                            VALUES ('condition', %s, 'source_level', %s, %s, 'stronger_source')
+                            VALUES ('condition', %s, 'source_level', %s, %s, %s)
                             """,
                             (
                                 current["id"],
                                 str(current_level) if current_level is not None else None,
                                 str(source_level) if source_level is not None else None,
+                                "quality_upgrade" if quality_upgrade else "stronger_source",
                             ),
                         )
                     else:
