@@ -6,7 +6,11 @@ on:
       - main
     paths:
       - "collector/**"
+      - "!collector/property_*.py"
       - "core/**"
+      - "!core/property_*.py"
+      - "!core/services/property_*.py"
+      - "!core/services/reso_property_*.py"
       - "database/**"
       - "scripts/run_collection.py"
       - "scripts/qa_comparisons.py"
