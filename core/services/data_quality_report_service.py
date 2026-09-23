@@ -226,7 +226,7 @@ class DataQualityReportService:
                             row["source_type"] or "Не найдено",
                         )
                     )
-                    if found
+                    if raw_found
                     else "Не найдено",
                     "source_url": row["source_url"] if raw_found else None,
                     "source_title": row["source_title"] if raw_found else None,
@@ -237,7 +237,7 @@ class DataQualityReportService:
                     "checked_at": self._format_dt(
                         row["checked_at"] or row["updated_at"]
                     )
-                    if found
+                    if raw_found
                     else None,
                     "_checked_raw": (row["checked_at"] or row["updated_at"]) if raw_found else None,
                     "page_number": row["page_number"] if raw_found else None,
@@ -305,7 +305,7 @@ class DataQualityReportService:
 
             checked_values = [
                 field["_checked_raw"]
-                for field in raw_fields
+                for field in found_fields
                 if field.get("_checked_raw") is not None
             ]
             company["last_checked"] = (
