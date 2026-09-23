@@ -54,12 +54,17 @@ class PropertyGroqExtractor:
         *,
         api_key: str | None = None,
         model: str | None = None,
+        fallback_model: str | None = None,
         timeout: int = 25,
         retries: int = 1,
         min_request_interval: float = 4.0,
     ) -> None:
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.model = model or os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+        self.fallback_model = fallback_model or os.getenv(
+            "GROQ_FALLBACK_MODEL",
+            "qwen/qwen3.8-27b",
+        )
         self.timeout = timeout
         self.retries = max(0, retries)
         self.min_request_interval = max(0.0, min_request_interval)
@@ -102,11 +107,9 @@ class PropertyGroqExtractor:
         if not context.strip():
             return self._empty_result(requested)
 
-        payload = {
-            "model": self.model,
+        base_payload = {
             "temperature": 0,
             "max_completion_tokens": 1200,
-            "reasoning_effort": "low",
             "include_reasoning": False,
             "response_format": {"type": "json_object"},
             "messages": [
@@ -135,65 +138,104 @@ class PropertyGroqExtractor:
             "Content-Type": "application/json",
         }
 
+        model_candidates = tuple(
+            dict.fromkeys(
+                model_name
+                for model_name in (self.model, self.fallback_model)
+                if model_name
+            )
+        )
         last_error: Exception | None = None
-        for attempt in range(self.retries + 1):
-            self._wait_between_requests()
-            try:
-                response = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=self.timeout,
-                )
-                if response.status_code == 429:
-                    retry_after = response.headers.get("retry-after")
-                    try:
-                        wait_seconds = (
-                            float(retry_after)
-                            if retry_after
-                            else 20.0 * (attempt + 1)
-                        )
-                    except (TypeError, ValueError):
-                        wait_seconds = 20.0 * (attempt + 1)
-                    if attempt < self.retries:
-                        time.sleep(max(4.0, min(wait_seconds + 1.0, 90.0)))
-                        continue
-                    reset_tokens = response.headers.get("x-ratelimit-reset-tokens")
-                    detail = response.text[:240].replace("\n", " ").strip()
-                    raise PropertyExtractionError(
-                        "Groq rate limit (429)"
-                        + (f"; reset_tokens={reset_tokens}" if reset_tokens else "")
-                        + (f"; {detail}" if detail else ""),
-                        status_code=429,
-                    )
-                if response.status_code >= 400:
-                    raise PropertyExtractionError(
-                        f"Groq HTTP {response.status_code}: {response.text[:500]}",
-                        status_code=response.status_code,
-                    )
 
-                data = response.json()
-                raw_content = data["choices"][0]["message"]["content"]
-                parsed = json.loads(raw_content)
-                return self._normalize_result(
-                    parsed=parsed,
-                    field_keys=requested,
-                    context=context,
-                )
-            except PropertyExtractionError:
-                raise
-            except (
-                requests.RequestException,
-                ValueError,
-                KeyError,
-                TypeError,
-            ) as exc:
-                last_error = exc
-                if attempt < self.retries:
-                    time.sleep(2.0 * (attempt + 1))
+        for model_index, model_name in enumerate(model_candidates):
+            payload = dict(base_payload)
+            payload["model"] = model_name
+            payload["reasoning_effort"] = (
+                "none" if model_name.startswith("qwen/") else "low"
+            )
+
+            for attempt in range(self.retries + 1):
+                self._wait_between_requests()
+                try:
+                    response = requests.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers=headers,
+                        json=payload,
+                        timeout=self.timeout,
+                    )
+                    if response.status_code == 429:
+                        detail = response.text.replace("\n", " ").strip()
+                        daily_limit = (
+                            "tokens per day" in detail.lower()
+                            or "tpd" in detail.lower()
+                        )
+                        has_fallback = model_index + 1 < len(model_candidates)
+
+                        if daily_limit and has_fallback:
+                            last_error = PropertyExtractionError(
+                                f"Groq daily token limit for {model_name}; "
+                                f"switching to {model_candidates[model_index + 1]}",
+                                status_code=429,
+                            )
+                            break
+
+                        retry_after = response.headers.get("retry-after")
+                        try:
+                            wait_seconds = (
+                                float(retry_after)
+                                if retry_after and not daily_limit
+                                else 20.0 * (attempt + 1)
+                            )
+                        except (TypeError, ValueError):
+                            wait_seconds = 20.0 * (attempt + 1)
+
+                        if attempt < self.retries and not daily_limit:
+                            time.sleep(max(4.0, min(wait_seconds + 1.0, 90.0)))
+                            continue
+
+                        reset_tokens = response.headers.get(
+                            "x-ratelimit-reset-tokens"
+                        )
+                        raise PropertyExtractionError(
+                            f"Groq rate limit (429) for {model_name}"
+                            + (
+                                f"; reset_tokens={reset_tokens}"
+                                if reset_tokens
+                                else ""
+                            )
+                            + (f"; {detail[:240]}" if detail else ""),
+                            status_code=429,
+                        )
+
+                    if response.status_code >= 400:
+                        raise PropertyExtractionError(
+                            f"Groq HTTP {response.status_code} "
+                            f"for {model_name}: {response.text[:500]}",
+                            status_code=response.status_code,
+                        )
+
+                    data = response.json()
+                    raw_content = data["choices"][0]["message"]["content"]
+                    parsed = json.loads(raw_content)
+                    return self._normalize_result(
+                        parsed=parsed,
+                        field_keys=requested,
+                        context=context,
+                    )
+                except PropertyExtractionError:
+                    raise
+                except (
+                    requests.RequestException,
+                    ValueError,
+                    KeyError,
+                    TypeError,
+                ) as exc:
+                    last_error = exc
+                    if attempt < self.retries:
+                        time.sleep(2.0 * (attempt + 1))
 
         raise PropertyExtractionError(
-            f"Property extraction failed: {last_error}"
+            f"Property extraction failed across models: {last_error}"
         ) from last_error
 
     def _wait_between_requests(self) -> None:
