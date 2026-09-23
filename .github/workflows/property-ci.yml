@@ -16,6 +16,11 @@ on:
       - "scripts/load_reso_property_baseline.py"
       - "tests/test_property*.py"
       - "tests/test_reso_property*.py"
+      - "core/condition_audit.py"
+      - "core/evidence_quality.py"
+      - "core/services/data_quality_report_service.py"
+      - "templates/data_report.html"
+      - "tests/test_condition_audit.py"
       - ".github/workflows/property-ci.yml"
   pull_request:
     paths:
@@ -30,6 +35,11 @@ on:
       - "scripts/load_reso_property_baseline.py"
       - "tests/test_property*.py"
       - "tests/test_reso_property*.py"
+      - "core/condition_audit.py"
+      - "core/evidence_quality.py"
+      - "core/services/data_quality_report_service.py"
+      - "templates/data_report.html"
+      - "tests/test_condition_audit.py"
       - ".github/workflows/property-ci.yml"
 
 jobs:
