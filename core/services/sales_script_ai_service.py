@@ -8,12 +8,48 @@ from typing import Any
 import requests
 
 
-class SalesScriptAIService:
-    """Explain why an already proven comparison matters to the client.
+FIELD_ANCHORS = {
+    "franchise": r"франшиз",
+    "without_certificates": r"справ|документ|урегулир",
+    "gap": r"\bgap\b|гэп|стоимост",
+    "total_loss": r"полн\w*\s+гибел|тотал",
+    "self_ignition": r"самовозгор|возгоран|пожар",
+    "terrorism": r"террор",
+    "drone": r"бпла|дрон|беспилот",
+    "tow_truck": r"эвакуатор|эвакуац",
+    "repair_type": r"стоа|ремонт|денежн\w*\s+(?:выплат|возмещ)",
+    "payment_terms": r"срок|рабоч\w*\s+дн|календарн\w*\s+дн|час|направлен\w*\s+на\s+ремонт|выплат",
+}
 
-    The LLM never decides the comparison and never rewrites the ready-to-send
-    client script. If enrichment is unsafe or unavailable, deterministic copy
-    is kept unchanged.
+FORBIDDEN_CLAIMS = re.compile(
+    r"однозначно\s+лучше|лучше\s+во\s+вс[её]м|"
+    r"сам(?:ый|ая|ое)\s+(?:луч|выгод|над[её]ж)|"
+    r"гарантированно\s+(?:луч|выгод|быстр)|"
+    r"надежнее|надёжнее|без\s+ограничен|"
+    r"в\s+любом\s+случае|любой\s+страхов\w*\s+случай|"
+    r"никогда\s+не|всегда\s+(?:покры|выплат|возмещ)|"
+    r"дешевле|выгоднее\s+по\s+цене|экономи\w*\s+(?:на\s+полис|денег)|"
+    r"скидк|бесплатн|стоимость\s+полиса|цена\s+полиса|"
+    r"оптимальн\w*\s+вариант|предпочтительн\w*\s+вариант",
+    re.I,
+)
+
+STRONG_FIELD_TERMS = {
+    "franchise": r"франшиз",
+    "without_certificates": r"без\s+справ|без\s+документ",
+    "gap": r"\bgap\b|гэп",
+    "terrorism": r"террор",
+    "drone": r"бпла|дрон|беспилот",
+    "tow_truck": r"эвакуатор|эвакуац",
+}
+
+
+class SalesScriptAIService:
+    """Turn proven comparison cards into natural but machine-audited client copy.
+
+    SalesInsightsService still decides every advantage. The LLM may only
+    paraphrase those already-proven cards. Each generated argument is bound to
+    one field_key and is rejected if it introduces unsupported facts.
     """
 
     def __init__(self) -> None:
@@ -41,7 +77,6 @@ class SalesScriptAIService:
                 "company": company,
                 "competitor": competitor,
                 "cards": cards,
-                "cautions": sales.get("cautions") or [],
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -52,47 +87,58 @@ class SalesScriptAIService:
 
         facts = [
             {
-                "label": card.get("label"),
-                "kind": card.get("kind"),
-                "title": card.get("title"),
                 "field_key": card.get("field_key"),
+                "label": card.get("label"),
+                "title": card.get("title"),
                 "comparison_basis": card.get("comparison_basis"),
                 "own_value": card.get("own_value"),
                 "competitor_value": card.get("competitor_value"),
                 "evidence": card.get("evidence"),
+                "safe_reference_phrase": card.get("client_phrase"),
             }
             for card in cards
         ]
 
         prompt = f"""
-Ты помогаешь страховому агенту объяснить клиенту уже доказанные различия КАСКО простым русским языком.
+Ты пишешь короткое сообщение страхового агента клиенту по уже доказанным различиям КАСКО.
 
 Основная компания: {company}
 Конкурент: {competitor}
 
-Ниже переданы ТОЛЬКО уже проверенные сравнительные отличия.
-Нельзя добавлять факты, которых здесь нет, и нельзя заново решать, какая компания лучше.
+ВАЖНО: ты НЕ определяешь преимущества. Они уже определены системой и перечислены ниже.
+Нельзя добавлять ни одного нового условия, риска, лимита, срока, цены или вывода.
 
-Факты:
+Проверенные отличия:
 {json.dumps(facts, ensure_ascii=False, indent=2)}
 
 Верни строго JSON:
 {{
+  "opening": "1 короткое естественное предложение без новых фактов",
+  "arguments": [
+    {{
+      "field_key": "точно один field_key из входных данных",
+      "text": "1-2 естественных предложения только про это доказанное отличие; обязательно назови обе компании"
+    }}
+  ],
+  "closing": "1 короткое нейтральное предложение без новых фактов",
   "cards": [
     {{
-      "label": "точно как во входных данных",
-      "why": "1-2 предложения: почему именно доказанное отличие практически важно клиенту; используй только own_value, competitor_value и evidence"
+      "field_key": "точно как во входных данных",
+      "why": "почему это доказанное отличие practically важно клиенту; без новых фактов"
     }}
   ]
 }}
 
 Правила:
-- не упоминай, что ты ИИ;
-- не добавляй новые цены, проценты, лимиты, сроки и исключения;
-- не делай новых выводов о конкуренте;
-- не меняй клиентский скрипт и не формируй новый итог сравнения;
-- не повторяй одинаковые обороты;
-- пиши как страховой консультант, а не как рекламный баннер.
+- используй каждый переданный field_key ровно один раз;
+- можно менять порядок аргументов;
+- обе компании должны быть названы в каждом argument.text;
+- не добавляй новые цифры, проценты, деньги, сроки, риски, покрытия или исключения;
+- не утверждай, что компания в целом лучше, надёжнее или дешевле;
+- не упоминай цену полиса, если она не является входным фактом;
+- opening и closing должны быть разговорными, но фактически нейтральными;
+- не упоминай, что ты ИИ или что данные прошли внутреннюю проверку;
+- не добавляй приветствие с выдуманным именем клиента.
 """.strip()
 
         try:
@@ -104,12 +150,15 @@ class SalesScriptAIService:
                 },
                 json={
                     "model": self.model,
-                    "temperature": 0.2,
+                    "temperature": 0.35,
                     "response_format": {"type": "json_object"},
                     "messages": [
                         {
                             "role": "system",
-                            "content": "Строго следуй фактам и возвращай только JSON.",
+                            "content": (
+                                "Ты только переформулируешь переданные доказанные "
+                                "факты. Никаких новых фактов. Возвращай только JSON."
+                            ),
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -122,32 +171,311 @@ class SalesScriptAIService:
         except (requests.RequestException, ValueError, KeyError, TypeError):
             return sales
 
-        why_by_label = {
-            str(item.get("label")): str(item.get("why")).strip()
-            for item in parsed.get("cards", [])
-            if isinstance(item, dict) and item.get("label") and item.get("why")
-        }
+        result = dict(sales)
+        validated_message = self._validated_script(
+            parsed=parsed,
+            company=company,
+            competitor=competitor,
+            cards=cards,
+        )
+        if validated_message:
+            result["client_message"] = validated_message
+            result["client_message_mode"] = "ai_validated"
+        else:
+            result["client_message"] = sales.get("client_message", "")
+            result["client_message_mode"] = "deterministic_fallback"
 
+        why_by_field = {
+            str(item.get("field_key")): str(item.get("why")).strip()
+            for item in parsed.get("cards", [])
+            if isinstance(item, dict) and item.get("field_key") and item.get("why")
+        }
         enriched_cards: list[dict[str, Any]] = []
         for card in cards:
             updated = dict(card)
-            why = why_by_label.get(str(card.get("label")))
+            why = why_by_field.get(str(card.get("field_key")))
             if why and self._safe_why(why, card):
                 updated["why"] = why
             else:
                 updated["why"] = card.get("client_phrase") or card.get("evidence")
             enriched_cards.append(updated)
-
-        result = dict(sales)
         result["cards"] = enriched_cards
-        # The ready-to-send client message remains deterministic. AI may explain
-        # customer relevance, but it never rewrites the proven comparison.
-        result["client_message"] = sales.get("client_message", "")
 
         if len(self._cache) > 128:
             self._cache.clear()
         self._cache[cache_key] = result
         return result
+
+    @classmethod
+    def _validated_script(
+        cls,
+        *,
+        parsed: Any,
+        company: str,
+        competitor: str,
+        cards: list[dict[str, Any]],
+    ) -> str | None:
+        if not isinstance(parsed, dict):
+            return None
+
+        opening = str(parsed.get("opening") or "").strip()
+        closing = str(parsed.get("closing") or "").strip()
+        arguments = parsed.get("arguments")
+        if not isinstance(arguments, list):
+            return None
+
+        if not cls._safe_neutral_sentence(opening, company, competitor):
+            return None
+        if not cls._safe_neutral_sentence(closing, company, competitor):
+            return None
+
+        by_field = {
+            str(card.get("field_key")): card
+            for card in cards
+            if card.get("field_key")
+        }
+        if len(by_field) != len(cards):
+            return None
+        if len(arguments) != len(cards):
+            return None
+
+        seen: set[str] = set()
+        approved_arguments: list[str] = []
+        for item in arguments:
+            if not isinstance(item, dict):
+                return None
+            field_key = str(item.get("field_key") or "")
+            text = str(item.get("text") or "").strip()
+            card = by_field.get(field_key)
+            if card is None or field_key in seen:
+                return None
+            if not cls._safe_argument(
+                text=text,
+                field_key=field_key,
+                card=card,
+                company=company,
+                competitor=competitor,
+            ):
+                return None
+            seen.add(field_key)
+            approved_arguments.append(text)
+
+        if seen != set(by_field):
+            return None
+
+        parts = [opening, *approved_arguments, closing]
+        message = " ".join(part for part in parts if part).strip()
+        if len(message) < 80 or len(message) > 1800:
+            return None
+        return message
+
+    @classmethod
+    def _safe_argument(
+        cls,
+        *,
+        text: str,
+        field_key: str,
+        card: dict[str, Any],
+        company: str,
+        competitor: str,
+    ) -> bool:
+        if len(text) < 25 or len(text) > 650:
+            return False
+        if company.lower() not in text.lower() or competitor.lower() not in text.lower():
+            return False
+        if FORBIDDEN_CLAIMS.search(text):
+            return False
+
+        anchor = FIELD_ANCHORS.get(field_key)
+        if anchor and not re.search(anchor, text, re.I):
+            return False
+
+        supported_text = " ".join(
+            str(card.get(key) or "")
+            for key in (
+                "own_value",
+                "competitor_value",
+                "evidence",
+                "client_phrase",
+            )
+        )
+        if not cls._numbers_supported(text, supported_text):
+            return False
+
+        # Prevent an argument tied to one field from silently introducing a
+        # distinct insurance topic that never appears in that field's evidence.
+        for other_key, pattern in STRONG_FIELD_TERMS.items():
+            if other_key == field_key:
+                continue
+            if re.search(pattern, text, re.I) and not re.search(
+                pattern,
+                supported_text,
+                re.I,
+            ):
+                return False
+
+        if cls._contains_new_currency_or_percent_unit(text, supported_text):
+            return False
+        if not cls._direction_supported(
+            text=text,
+            card=card,
+            company=company,
+            competitor=competitor,
+        ):
+            return False
+        return True
+
+    @classmethod
+    def _direction_supported(
+        cls,
+        *,
+        text: str,
+        card: dict[str, Any],
+        company: str,
+        competitor: str,
+    ) -> bool:
+        basis = str(card.get("comparison_basis") or "")
+        lowered = " ".join(text.lower().split())
+        own = re.escape(company.lower())
+        other = re.escape(competitor.lower())
+
+        def near(name_pattern: str, fact_pattern: str, width: int = 180) -> bool:
+            return bool(
+                re.search(
+                    rf"(?:у\\s+)?{name_pattern}[^.!?]{{0,{width}}}{fact_pattern}",
+                    lowered,
+                    re.I,
+                )
+            )
+
+        if basis == "franchise_none_vs_present":
+            own_ok = near(
+                own,
+                r"(?:без\s+франшиз|франшиз\w*[^.!?]{0,45}(?:нет|отсутств|не\s+предусмотр))",
+            )
+            other_ok = near(
+                other,
+                r"(?:с\s+франшиз|франшиз\w*[^.!?]{0,45}(?:есть|предусмотр|установ))",
+            )
+            return own_ok and other_ok
+
+        if basis == "without_documents_positive_vs_negative":
+            own_ok = near(
+                own,
+                r"(?:можно|доступ|предусмотр|урегулир\w*)[^.!?]{0,90}без\s+(?:справ|документ)|"
+                r"без\s+(?:справ|документ)[^.!?]{0,90}(?:можно|доступ|предусмотр|урегулир)",
+            )
+            other_ok = near(
+                other,
+                r"без\s+(?:справ|документ)[^.!?]{0,80}не\s+(?:допуска|предусмотр|возмож)|"
+                r"(?:справ|документ)\w*[^.!?]{0,60}(?:обязательн|требуют|необходим)",
+            )
+            return own_ok and other_ok
+
+        if basis == "gap_positive_vs_negative":
+            own_ok = near(
+                own,
+                r"(?:gap|гэп)[^.!?]{0,70}(?:есть|предусмотр|доступ|защит|включ)|"
+                r"(?:есть|предусмотр|доступ)[^.!?]{0,70}(?:gap|гэп)",
+            )
+            other_ok = near(
+                other,
+                r"(?:gap|гэп)[^.!?]{0,70}(?:нет|отсутств|не\s+предусмотр|не\s+доступ)|"
+                r"(?:нет|отсутств|не\s+предусмотр)[^.!?]{0,70}(?:gap|гэп)",
+            )
+            return own_ok and other_ok
+
+        if basis.endswith("_positive_vs_negative"):
+            field_key = str(card.get("field_key") or "")
+            anchor = FIELD_ANCHORS.get(field_key)
+            if not anchor:
+                return False
+            own_ok = near(
+                own,
+                rf"(?:{anchor})[^.!?]{{0,90}}(?:покрыв|предусмотр|включ|доступ|есть|возмещ|предостав)|"
+                rf"(?:покрыв|предусмотр|включ|доступ|есть|возмещ|предостав)[^.!?]{{0,90}}(?:{anchor})",
+            )
+            other_ok = near(
+                other,
+                rf"(?:{anchor})[^.!?]{{0,90}}(?:не\s+покрыв|не\s+предусмотр|не\s+включ|нет|отсутств)|"
+                rf"(?:не\s+покрыв|не\s+предусмотр|не\s+включ|нет|отсутств)[^.!?]{{0,90}}(?:{anchor})",
+            )
+            return own_ok and other_ok
+
+        if basis == "repair_stoa_vs_cash_only":
+            own_ok = near(
+                own,
+                r"(?:ремонт|стоа|направлен\w*\s+на\s+ремонт)",
+            )
+            other_ok = near(
+                other,
+                r"денежн\w*\s+(?:выплат|возмещ|форм)",
+            )
+            return own_ok and other_ok
+
+        if basis.startswith("payment_term_"):
+            numbers = re.findall(r"(\d+)", basis)
+            if len(numbers) < 2:
+                return False
+            own_amount, other_amount = numbers[-2], numbers[-1]
+            own_ok = near(own, rf"[^.!?]{{0,80}}\b{re.escape(own_amount)}\b")
+            other_ok = near(other, rf"[^.!?]{{0,80}}\b{re.escape(other_amount)}\b")
+            return own_ok and other_ok
+
+        # Unknown comparison types are not allowed into an AI-generated script.
+        return False
+
+    @staticmethod
+    def _safe_neutral_sentence(
+        text: str,
+        company: str,
+        competitor: str,
+    ) -> bool:
+        if not text or len(text) > 260:
+            return False
+        if re.search(r"\d", text):
+            return False
+        if FORBIDDEN_CLAIMS.search(text):
+            return False
+
+        # Intro/outro must not smuggle in an insurance condition. They may name
+        # the compared companies, but all substantive facts belong to arguments.
+        factual_terms = (
+            r"франшиз|gap|гэп|справ|документ|тотал|полн\w*\s+гибел|"
+            r"самовозгор|пожар|террор|бпла|дрон|эвакуатор|эвакуац|"
+            r"стоа|ремонт|выплат|срок|дешев|цен\w*\s+полис"
+        )
+        if re.search(factual_terms, text, re.I):
+            return False
+
+        allowed_names = {company.lower(), competitor.lower()}
+        # Do not require both names here: a natural opening may say
+        # "Посмотрел оба варианта". Company-specific claims are forbidden above.
+        return bool(text.strip()) and bool(allowed_names)
+
+    @staticmethod
+    def _numbers_supported(text: str, supported_text: str) -> bool:
+        supported_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", supported_text))
+        candidate_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", text))
+        return not (candidate_numbers - supported_numbers)
+
+    @staticmethod
+    def _contains_new_currency_or_percent_unit(
+        text: str,
+        supported_text: str,
+    ) -> bool:
+        units = (
+            ("₽", r"₽|руб(?:\.|л|лей|ля|.)?"),
+            ("%", r"%|процент"),
+        )
+        for _, pattern in units:
+            if re.search(pattern, text, re.I) and not re.search(
+                pattern,
+                supported_text,
+                re.I,
+            ):
+                return True
+        return False
 
     @staticmethod
     def _safe_why(why: str, card: dict[str, Any]) -> bool:
@@ -156,16 +484,15 @@ class SalesScriptAIService:
 
         supported_text = " ".join(
             str(card.get(key) or "")
-            for key in ("own_value", "competitor_value", "evidence")
+            for key in ("own_value", "competitor_value", "evidence", "client_phrase")
         )
-        supported_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", supported_text))
-        why_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", why))
-        if why_numbers - supported_numbers:
+        if not SalesScriptAIService._numbers_supported(why, supported_text):
             return False
-
-        if re.search(
-            r"однозначно\s+лучше|во\s+всех\s+случаях|гарантированно\s+выгод",
-            why.lower(),
+        if SalesScriptAIService._contains_new_currency_or_percent_unit(
+            why,
+            supported_text,
         ):
+            return False
+        if FORBIDDEN_CLAIMS.search(why):
             return False
         return True
