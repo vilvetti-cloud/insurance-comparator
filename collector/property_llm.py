@@ -105,6 +105,9 @@ class PropertyGroqExtractor:
         payload = {
             "model": self.model,
             "temperature": 0,
+            "max_completion_tokens": 1200,
+            "reasoning_effort": "low",
+            "include_reasoning": False,
             "response_format": {"type": "json_object"},
             "messages": [
                 {
@@ -148,15 +151,19 @@ class PropertyGroqExtractor:
                         wait_seconds = (
                             float(retry_after)
                             if retry_after
-                            else 12.0 * (attempt + 1)
+                            else 20.0 * (attempt + 1)
                         )
                     except (TypeError, ValueError):
-                        wait_seconds = 12.0 * (attempt + 1)
+                        wait_seconds = 20.0 * (attempt + 1)
                     if attempt < self.retries:
-                        time.sleep(max(4.0, min(wait_seconds + 1.0, 45.0)))
+                        time.sleep(max(4.0, min(wait_seconds + 1.0, 90.0)))
                         continue
+                    reset_tokens = response.headers.get("x-ratelimit-reset-tokens")
+                    detail = response.text[:240].replace("\n", " ").strip()
                     raise PropertyExtractionError(
-                        "Groq rate limit (429)",
+                        "Groq rate limit (429)"
+                        + (f"; reset_tokens={reset_tokens}" if reset_tokens else "")
+                        + (f"; {detail}" if detail else ""),
                         status_code=429,
                     )
                 if response.status_code >= 400:
