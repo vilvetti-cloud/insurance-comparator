@@ -61,9 +61,9 @@
               <h2>Что подчеркнуть в {{ company1 }}</h2>
             </div>
             {% if sales.advantages %}
-              <span class="sales-status sales-status--advantage">{{ sales.advantages|length }} подтверждённых отличия</span>
+              <span class="sales-status sales-status--advantage">Подтверждено отличий: {{ sales.advantages|length }}</span>
             {% else %}
-              <span class="sales-status">Только подтверждённые факты</span>
+              <span class="sales-status">Доказанных преимуществ нет</span>
             {% endif %}
           </div>
 
