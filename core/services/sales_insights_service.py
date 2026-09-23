@@ -337,7 +337,11 @@ class SalesInsightsService:
 
     @staticmethod
     def _franchise_state(text: str) -> str:
-        if re.search(r"без\s+франшиз|франшиз\w*\s+отсутств", text):
+        if re.search(
+            r"без\s+франшиз|франшиз\w*\s+отсутств|"
+            r"франшиз\w*\s+не\s+предусмотр",
+            text,
+        ):
             return "none"
         if "франшиз" in text and re.search(
             r"безуслов|условн|размер|сумм|руб|%|предусмотр|установ",
@@ -348,21 +352,25 @@ class SalesInsightsService:
 
     @staticmethod
     def _without_documents_state(text: str) -> str:
+        negative = bool(
+            re.search(
+                r"без\s+(?:справ|документ)[^.;]{0,80}"
+                r"не\s+(?:допуска|предусмотр|возмож)|"
+                r"не\s+(?:допуска|предусмотр|возмож)[^.;]{0,80}"
+                r"без\s+(?:справ|документ)|"
+                r"(?:справ|документ)\w*\s+(?:обязательн|требуют|необходим)",
+                text,
+            )
+        )
+        if negative:
+            return "negative"
+
         if re.search(
             r"без\s+(?:справ|документ)|"
             r"документ\w*\s+не\s+(?:треб|обязат)|упрощённ|упрощенн",
             text,
-        ) and not re.search(
-            r"не\s+(?:допуска|предусмотр)\w*\s+.*без\s+(?:справ|документ)",
-            text,
         ):
             return "positive"
-        if re.search(
-            r"без\s+(?:справ|документ)\w*\s+не\s+(?:допуска|предусмотр)|"
-            r"(?:справ|документ)\w*\s+(?:обязательн|требуют|необходим)",
-            text,
-        ):
-            return "negative"
         return "unknown"
 
     @classmethod
