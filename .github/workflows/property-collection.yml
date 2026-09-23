@@ -10,12 +10,16 @@ on:
       - "collector/property_relevance.py"
       - "collector/property_competitor_registry.py"
       - "core/property_catalog.py"
+      - "core/property_reso_baseline.py"
+      - "core/property_source_map.py"
       - "core/property_condition_audit.py"
       - "core/services/property_schema_service.py"
+      - "core/services/reso_property_baseline_loader.py"
       - "database/schema.sql"
       - "database/repositories/condition.py"
       - "database/repositories/field.py"
       - "database/repositories/product.py"
+      - "scripts/load_reso_property_baseline.py"
       - "scripts/run_property_collection.py"
       - ".github/workflows/property-collection.yml"
   workflow_dispatch:
@@ -25,8 +29,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  seed-reso:
+    name: Seed RESO apartment + house
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Validate and load RESO property baseline
+        run: python scripts/load_reso_property_baseline.py
+
   collect:
     name: Collect ${{ matrix.insurer }} / ${{ matrix.scenario }}
+    needs: seed-reso
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -37,14 +66,6 @@ jobs:
           - insurer: t-insurance
             scenario: apartment
           - insurer: t-insurance
-            scenario: house
-          - insurer: sber
-            scenario: apartment
-          - insurer: sber
-            scenario: house
-          - insurer: sovcom
-            scenario: apartment
-          - insurer: sovcom
             scenario: house
 
     env:
@@ -68,5 +89,5 @@ jobs:
       - name: Compile property collector
         run: python -m py_compile collector/property_*.py core/property_*.py core/services/property_*.py database/repositories/*.py scripts/run_property_collection.py
 
-      - name: Run property collection
+      - name: Run first competitor collector
         run: python scripts/run_property_collection.py --insurer "${{ matrix.insurer }}" --scenario "${{ matrix.scenario }}"
