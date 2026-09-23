@@ -125,6 +125,12 @@ class ResoPropertyBaselineLoaderTests(unittest.TestCase):
                 for call in conditions.calls
             )
         )
+        self.assertTrue(
+            any(call["is_direct"] is True for call in conditions.calls)
+        )
+        self.assertTrue(
+            any(call["is_direct"] is False for call in conditions.calls)
+        )
 
     def test_internal_sources_use_explicit_internal_scheme(self):
         sources = FakeSourceRepo()

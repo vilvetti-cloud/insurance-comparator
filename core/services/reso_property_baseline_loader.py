@@ -94,6 +94,7 @@ class ResoPropertyBaselineLoader:
                     field_id=field["id"],
                     value_json=fact.value_json,
                     display_value=fact.display_value,
+                    is_direct=fact.direct,
                     source_id=source["id"],
                     source_level=source_level,
                     confidence=fact.confidence,
