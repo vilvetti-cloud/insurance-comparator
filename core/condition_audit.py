@@ -46,6 +46,12 @@ def audit_condition(
     if not value:
         return _result("missing", "Значение отсутствует.")
 
+    if verification_status == "rejected":
+        return _result(
+            "review",
+            "Кандидат ранее отклонён проверкой и не может считаться подтверждённым.",
+        )
+
     text = " ".join(f"{value or ''} {quote or ''}".lower().split())
     normalized_value = " ".join(str(value).lower().split())
 
@@ -98,9 +104,18 @@ def audit_condition(
             "Подтверждающий фрагмент не доказывает именно этот параметр сравнения.",
         )
 
+    # Never silently promote a database candidate that is still explicitly
+    # marked for review. This was the main reason questionable collector output
+    # could appear as "confirmed" in the report.
+    if verification_status != "verified":
+        return _result(
+            "review",
+            "Кандидат ещё не имеет статуса verified и изолирован от итогового отчёта.",
+        )
+
     return _result(
         "confirmed",
-        "Значение подтверждено официальным источником и подходит для сравнительного анализа.",
+        "Значение подтверждено официальным источником, проверено и подходит для сравнительного анализа.",
     )
 
 
