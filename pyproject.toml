@@ -8,6 +8,7 @@ dependencies = [
   "beautifulsoup4",
   "PyPDF2",
   "pypdf",
+  "PyMuPDF",
   "psycopg[binary]>=3.2,<4",
 ]
 
