@@ -13,8 +13,11 @@ PROPERTY_VALUE_SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": {
             "covered": "boolean|null",
             "limit": "number|null",
+            "min_limit": "number|null",
+            "max_limit": "number|null",
             "limit_unit": "string|null",
             "inventory_required": "boolean|null",
+            "variants": "array",
             "conditions": "string|null",
         },
     },
@@ -33,8 +36,11 @@ PROPERTY_VALUE_SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": {
             "covered": "boolean|null",
             "limit": "number|null",
+            "min_limit": "number|null",
+            "max_limit": "number|null",
             "per_claim": "boolean|null",
             "during_repairs": "boolean|null",
+            "variants": "array",
             "conditions": "string|null",
         },
     },
@@ -54,6 +60,7 @@ PROPERTY_VALUE_SCHEMAS: dict[str, dict[str, Any]] = {
             "amount": "number|null",
             "percent": "number|null",
             "from_claim_number": "integer|null",
+            "variants": "array",
             "conditions": "string|null",
         },
         "enum": {
@@ -74,6 +81,7 @@ PROPERTY_VALUE_SCHEMAS: dict[str, dict[str, Any]] = {
             "photos_required": "boolean|null",
             "inventory_required": "boolean|null",
             "valuation_required": "boolean|null",
+            "waiting_period_days": "integer|null",
             "thresholds": "array",
             "conditions": "string|null",
         },
@@ -104,6 +112,8 @@ PROPERTY_VALUE_SCHEMAS: dict[str, dict[str, Any]] = {
         "shape": "object",
         "properties": {
             "services": "array",
+            "per_claim_limit": "number|null",
+            "max_claims": "integer|null",
             "conditions": "string|null",
         },
     },

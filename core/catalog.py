@@ -33,6 +33,7 @@ SOURCE_TYPES = {
     "official_site",
     "rules",
     "policy_terms",
+    "internal_document",
     "tariff",
     "pdf",
     "faq",
