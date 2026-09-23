@@ -94,8 +94,8 @@ class PropertyCollector:
         )
         self.llm = llm or PropertyGroqExtractor(
             timeout=25,
-            retries=1,
-            min_request_interval=4.0,
+            retries=2,
+            min_request_interval=6.0,
         )
 
     def collect(
