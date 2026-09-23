@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from psycopg.types.json import Jsonb
+
 from .base import BaseRepository
 
 
@@ -32,6 +34,7 @@ class ComparisonFieldRepository(BaseRepository):
         field_key: str,
         label: str | None,
         data_type: str = "text",
+        value_schema: dict[str, Any] | None = None,
         category: str | None = None,
         sort_order: int = 0,
         is_active: bool = True,
@@ -39,18 +42,29 @@ class ComparisonFieldRepository(BaseRepository):
         row = self.fetch_one(
             """
             INSERT INTO comparison_fields
-                (product_id, field_key, label, data_type, category, sort_order, is_active)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (product_id, field_key, label, data_type, value_schema,
+                 category, sort_order, is_active)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (product_id, field_key) DO UPDATE SET
                 label = EXCLUDED.label,
                 data_type = EXCLUDED.data_type,
+                value_schema = EXCLUDED.value_schema,
                 category = EXCLUDED.category,
                 sort_order = EXCLUDED.sort_order,
                 is_active = EXCLUDED.is_active,
                 updated_at = NOW()
             RETURNING *
             """,
-            (product_id, field_key, label, data_type, category, sort_order, is_active),
+            (
+                product_id,
+                field_key,
+                label,
+                data_type,
+                Jsonb(value_schema) if value_schema is not None else None,
+                category,
+                sort_order,
+                is_active,
+            ),
         )
         if row is None:
             raise RuntimeError("Comparison field upsert returned no row")
