@@ -86,7 +86,7 @@ class ResoPropertyBaselineLoader:
                     source_type=source_type,
                     source_level=source_level,
                     status="active",
-                    success=bool(source_cfg.public_url),
+                    success=False,
                 )
 
                 field = field_rows[fact.field_key]
