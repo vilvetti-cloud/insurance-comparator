@@ -790,6 +790,14 @@ class CascoCollectionPipeline:
         return found, len(source_urls_seen)
 
     @staticmethod
+    def _stage_log(insurer: InsurerConfig, stage: str, found_fields: set[str]) -> None:
+        print(
+            f"[collector] insurer={insurer.slug} stage={stage} "
+            f"found={len(found_fields)}/10 fields={','.join(sorted(found_fields))}",
+            flush=True,
+        )
+
+    @staticmethod
     def _source_for_quote(
         quote: str | None,
         candidates: list[tuple[str, str]],
