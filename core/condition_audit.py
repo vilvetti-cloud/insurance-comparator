@@ -132,6 +132,9 @@ def _field_mismatch(field_key: str, value: str, text: str) -> str | None:
             return "Фрагмент не определяет форму возмещения или место ремонта."
         if re.match(r"компонент|узл|агрегат", value) and "форма" not in value:
             return "Сохранён соседний фрагмент про детали ремонта, а не сама форма возмещения."
+        if re.search(r"65\s*%|75\s*%|полная\s+гибел", value):
+            if not re.search(r"стоа|дилер|форма\s+возмещ", value):
+                return "В поле типа ремонта сохранён фрагмент про критерий полной гибели."
 
     if field_key == "payment_terms":
         has_time = bool(
