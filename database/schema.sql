@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS conditions (
     source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL,
     value TEXT,
     value_json JSONB,
+    is_direct BOOLEAN,
     source_level SMALLINT CHECK (source_level BETWEEN 1 AND 4),
     confidence NUMERIC(5,4),
     status TEXT NOT NULL DEFAULT 'active',
@@ -100,6 +101,7 @@ CREATE TABLE IF NOT EXISTS condition_versions (
     condition_id BIGINT NOT NULL REFERENCES conditions(id) ON DELETE CASCADE,
     value TEXT,
     value_json JSONB,
+    is_direct BOOLEAN,
     source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL,
     document_id BIGINT REFERENCES documents(id) ON DELETE SET NULL,
     page_number INTEGER,
@@ -177,6 +179,7 @@ ALTER TABLE sources ADD COLUMN IF NOT EXISTS checksum TEXT;
 
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL;
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS value_json JSONB;
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS is_direct BOOLEAN;
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS source_level SMALLINT;
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4);
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
@@ -190,6 +193,7 @@ ALTER TABLE evidence ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS verified_by TEXT;
 
 ALTER TABLE condition_versions ADD COLUMN IF NOT EXISTS value_json JSONB;
+ALTER TABLE condition_versions ADD COLUMN IF NOT EXISTS is_direct BOOLEAN;
 
 CREATE INDEX IF NOT EXISTS idx_products_company ON products(company_id);
 CREATE INDEX IF NOT EXISTS idx_products_type_subtype ON products(product_type, product_subtype);
