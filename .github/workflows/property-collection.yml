@@ -9,6 +9,13 @@ on:
       - "collector/property_llm.py"
       - "collector/property_relevance.py"
       - "collector/property_competitor_registry.py"
+      - "core/property_catalog.py"
+      - "core/property_condition_audit.py"
+      - "core/services/property_schema_service.py"
+      - "database/schema.sql"
+      - "database/repositories/condition.py"
+      - "database/repositories/field.py"
+      - "database/repositories/product.py"
       - "scripts/run_property_collection.py"
       - ".github/workflows/property-collection.yml"
   workflow_dispatch:
