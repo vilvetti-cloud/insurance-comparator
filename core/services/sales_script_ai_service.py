@@ -29,7 +29,8 @@ FORBIDDEN_CLAIMS = re.compile(
     r"в\s+любом\s+случае|любой\s+страхов\w*\s+случай|"
     r"никогда\s+не|всегда\s+(?:покры|выплат|возмещ)|"
     r"дешевле|выгоднее\s+по\s+цене|экономи\w*\s+(?:на\s+полис|денег)|"
-    r"скидк|бесплатн|стоимость\s+полиса|цена\s+полиса",
+    r"скидк|бесплатн|стоимость\s+полиса|цена\s+полиса|"
+    r"оптимальн\w*\s+вариант|предпочтительн\w*\s+вариант",
     re.I,
 )
 
@@ -315,7 +316,114 @@ class SalesScriptAIService:
 
         if cls._contains_new_currency_or_percent_unit(text, supported_text):
             return False
+        if not cls._direction_supported(
+            text=text,
+            card=card,
+            company=company,
+            competitor=competitor,
+        ):
+            return False
         return True
+
+    @classmethod
+    def _direction_supported(
+        cls,
+        *,
+        text: str,
+        card: dict[str, Any],
+        company: str,
+        competitor: str,
+    ) -> bool:
+        basis = str(card.get("comparison_basis") or "")
+        lowered = " ".join(text.lower().split())
+        own = re.escape(company.lower())
+        other = re.escape(competitor.lower())
+
+        def near(name_pattern: str, fact_pattern: str, width: int = 180) -> bool:
+            return bool(
+                re.search(
+                    rf"(?:у\\s+)?{name_pattern}[^.!?]{{0,{width}}}{fact_pattern}",
+                    lowered,
+                    re.I,
+                )
+            )
+
+        if basis == "franchise_none_vs_present":
+            own_ok = near(
+                own,
+                r"(?:без\s+франшиз|франшиз\w*[^.!?]{0,45}(?:нет|отсутств|не\s+предусмотр))",
+            )
+            other_ok = near(
+                other,
+                r"(?:с\s+франшиз|франшиз\w*[^.!?]{0,45}(?:есть|предусмотр|установ))",
+            )
+            return own_ok and other_ok
+
+        if basis == "without_documents_positive_vs_negative":
+            own_ok = near(
+                own,
+                r"(?:можно|доступ|предусмотр|урегулир\w*)[^.!?]{0,90}без\s+(?:справ|документ)|"
+                r"без\s+(?:справ|документ)[^.!?]{0,90}(?:можно|доступ|предусмотр|урегулир)",
+            )
+            other_ok = near(
+                other,
+                r"без\s+(?:справ|документ)[^.!?]{0,80}не\s+(?:допуска|предусмотр|возмож)|"
+                r"(?:справ|документ)\w*[^.!?]{0,60}(?:обязательн|требуют|необходим)",
+            )
+            return own_ok and other_ok
+
+        if basis == "gap_positive_vs_negative":
+            own_ok = near(
+                own,
+                r"(?:gap|гэп)[^.!?]{0,70}(?:есть|предусмотр|доступ|защит|включ)|"
+                r"(?:есть|предусмотр|доступ)[^.!?]{0,70}(?:gap|гэп)",
+            )
+            other_ok = near(
+                other,
+                r"(?:gap|гэп)[^.!?]{0,70}(?:нет|отсутств|не\s+предусмотр|не\s+доступ)|"
+                r"(?:нет|отсутств|не\s+предусмотр)[^.!?]{0,70}(?:gap|гэп)",
+            )
+            return own_ok and other_ok
+
+        if basis.endswith("_positive_vs_negative"):
+            field_key = str(card.get("field_key") or "")
+            anchor = FIELD_ANCHORS.get(field_key)
+            if not anchor:
+                return False
+            own_ok = near(
+                own,
+                rf"(?:{anchor})[^.!?]{{0,90}}(?:покрыв|предусмотр|включ|доступ|есть|возмещ|предостав)|"
+                rf"(?:покрыв|предусмотр|включ|доступ|есть|возмещ|предостав)[^.!?]{{0,90}}(?:{anchor})",
+            )
+            other_ok = near(
+                other,
+                rf"(?:{anchor})[^.!?]{{0,90}}(?:не\s+покрыв|не\s+предусмотр|не\s+включ|нет|отсутств)|"
+                rf"(?:не\s+покрыв|не\s+предусмотр|не\s+включ|нет|отсутств)[^.!?]{{0,90}}(?:{anchor})",
+            )
+            return own_ok and other_ok
+
+        if basis == "repair_stoa_vs_cash_only":
+            own_ok = near(
+                own,
+                r"(?:ремонт|стоа|направлен\w*\s+на\s+ремонт)",
+            )
+            other_ok = near(
+                other,
+                r"денежн\w*\s+(?:выплат|возмещ|форм)",
+            )
+            return own_ok and other_ok
+
+        if basis.startswith("payment_term_"):
+            numbers = re.findall(r"(\d+)", basis)
+            if len(numbers) < 2:
+                return False
+            own_amount, other_amount = numbers[-2], numbers[-1]
+            own_ok = near(own, rf"[^.!?]{{0,80}}\b{re.escape(own_amount)}\b")
+            other_ok = near(other, rf"[^.!?]{{0,80}}\b{re.escape(other_amount)}\b")
+            return own_ok and other_ok
+
+        # Unknown comparison types are not allowed into an AI-generated script.
+        return False
 
     @staticmethod
     def _safe_neutral_sentence(
