@@ -27,7 +27,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: property-collection-pilot
+  group: property-collection-pilot-v2
   cancel-in-progress: true
 
 jobs:
