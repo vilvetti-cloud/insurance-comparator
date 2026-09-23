@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS products (
     name TEXT NOT NULL,
     slug TEXT,
     product_type TEXT NOT NULL DEFAULT 'insurance',
+    product_subtype TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS comparison_fields (
     field_key TEXT NOT NULL,
     label TEXT,
     data_type TEXT NOT NULL DEFAULT 'text',
+    value_schema JSONB,
     category TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -69,6 +71,7 @@ CREATE TABLE IF NOT EXISTS conditions (
     field_id BIGINT NOT NULL REFERENCES comparison_fields(id) ON DELETE CASCADE,
     source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL,
     value TEXT,
+    value_json JSONB,
     source_level SMALLINT CHECK (source_level BETWEEN 1 AND 4),
     confidence NUMERIC(5,4),
     status TEXT NOT NULL DEFAULT 'active',
@@ -96,6 +99,7 @@ CREATE TABLE IF NOT EXISTS condition_versions (
     id BIGSERIAL PRIMARY KEY,
     condition_id BIGINT NOT NULL REFERENCES conditions(id) ON DELETE CASCADE,
     value TEXT,
+    value_json JSONB,
     source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL,
     document_id BIGINT REFERENCES documents(id) ON DELETE SET NULL,
     page_number INTEGER,
@@ -153,10 +157,12 @@ ALTER TABLE companies ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'act
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 ALTER TABLE products ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS product_subtype TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 ALTER TABLE comparison_fields ADD COLUMN IF NOT EXISTS data_type TEXT NOT NULL DEFAULT 'text';
+ALTER TABLE comparison_fields ADD COLUMN IF NOT EXISTS value_schema JSONB;
 ALTER TABLE comparison_fields ADD COLUMN IF NOT EXISTS category TEXT;
 ALTER TABLE comparison_fields ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE comparison_fields ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
@@ -170,6 +176,7 @@ ALTER TABLE sources ADD COLUMN IF NOT EXISTS http_status INTEGER;
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS checksum TEXT;
 
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL;
+ALTER TABLE conditions ADD COLUMN IF NOT EXISTS value_json JSONB;
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS source_level SMALLINT;
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4);
 ALTER TABLE conditions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
@@ -182,7 +189,10 @@ ALTER TABLE evidence ADD COLUMN IF NOT EXISTS captured_at TIMESTAMPTZ NOT NULL D
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS verified_by TEXT;
 
+ALTER TABLE condition_versions ADD COLUMN IF NOT EXISTS value_json JSONB;
+
 CREATE INDEX IF NOT EXISTS idx_products_company ON products(company_id);
+CREATE INDEX IF NOT EXISTS idx_products_type_subtype ON products(product_type, product_subtype);
 CREATE INDEX IF NOT EXISTS idx_fields_product ON comparison_fields(product_id);
 CREATE INDEX IF NOT EXISTS idx_conditions_field ON conditions(field_id);
 CREATE INDEX IF NOT EXISTS idx_conditions_source_level ON conditions(field_id, source_level);
