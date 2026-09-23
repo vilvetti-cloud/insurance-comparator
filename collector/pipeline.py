@@ -111,11 +111,14 @@ class CascoCollectionPipeline:
         # high-trust level-2 sources. They are useful when the insurer blocks
         # direct server access to the full rules PDF.
         if insurer.official_doc_urls:
+            self._stage_log(insurer, "configured_official_docs:start", found_fields)
             official_found, official_sources, official_documents = self._collect_configured_official_docs(
                 insurer=insurer,
                 company=company,
                 field_rows=field_rows,
+                already_found=found_fields,
             )
+            self._stage_log(insurer, "configured_official_docs:done", found_fields | official_found)
             found_fields.update(official_found)
             source_count += official_sources
             document_count += official_documents
@@ -446,12 +449,20 @@ class CascoCollectionPipeline:
         insurer: InsurerConfig,
         company: dict[str, Any],
         field_rows: dict[str, dict[str, Any]],
+        already_found: set[str] | None = None,
     ) -> tuple[set[str], int, int]:
-        found: set[str] = set()
+        found: set[str] = set(already_found or set())
         source_count = 0
         document_count = 0
 
         for url in insurer.official_doc_urls:
+            unresolved = {
+                field["key"]
+                for field in KASKO_FIELDS
+                if field["key"] not in found
+            }
+            if not unresolved:
+                break
             try:
                 fetched = self.fetcher.fetch_official(url, referer=insurer.official_url)
                 extracted_text = self._text_from_fetch(fetched)
@@ -474,11 +485,7 @@ class CascoCollectionPipeline:
                     title="Официальный документ КАСКО",
                     checksum=fetched.checksum,
                 )
-                missing = {
-                    field["key"]
-                    for field in KASKO_FIELDS
-                    if field["key"] not in found
-                }
+                missing = unresolved
                 values = self._deep_extract_official(
                     insurer=insurer,
                     source_url=fetched.url,
