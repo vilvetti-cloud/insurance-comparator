@@ -135,6 +135,7 @@ class ConditionRepository(BaseRepository):
                         raise RuntimeError("Condition candidate insert returned no row")
                     row["_evidence_needed"] = True
                     row["_changed"] = True
+                    row["_evidence_needed"] = True
                     return row
 
                 current_level = current.get("source_level")
@@ -273,6 +274,11 @@ class ConditionRepository(BaseRepository):
                         raise RuntimeError("Condition refresh returned no row")
                     row["_evidence_needed"] = evidence_needed
                     row["_changed"] = False
+                    row["_evidence_needed"] = bool(
+                        replace_source
+                        or current.get("verification_status") != verification_status
+                        or current.get("is_direct") != is_direct
+                    )
                     return row
 
                 # A genuinely changed value from an equal-or-stronger source.
@@ -406,12 +412,25 @@ class ConditionRepository(BaseRepository):
                     return row
 
                 current_level = current.get("source_level")
+                incoming_verified_direct = (
+                    verification_status == "verified" and is_direct is True
+                )
+                current_verified_direct = (
+                    current.get("verification_status") == "verified"
+                    and current.get("is_direct") is True
+                )
+                quality_upgrade = (
+                    incoming_verified_direct and not current_verified_direct
+                )
+
                 if (
                     source_level is not None
                     and current_level is not None
                     and current_level < source_level
+                    and not quality_upgrade
                 ):
                     current["_changed"] = False
+                    current["_evidence_needed"] = False
                     return current
 
                 same_value = current.get("value_json") == value_json
@@ -420,6 +439,7 @@ class ConditionRepository(BaseRepository):
                     and current_level is not None
                     and source_level < current_level
                 )
+                replace_source = stronger_source or quality_upgrade
 
                 if same_value:
                     cur.execute(
@@ -444,9 +464,9 @@ class ConditionRepository(BaseRepository):
                         RETURNING *
                         """,
                         (
-                            stronger_source,
+                            replace_source,
                             source_id,
-                            stronger_source,
+                            replace_source,
                             source_level,
                             display_value,
                             is_direct,
@@ -529,6 +549,7 @@ class ConditionRepository(BaseRepository):
                 if row is None:
                     raise RuntimeError("Structured condition update returned no row")
                 row["_changed"] = True
+                row["_evidence_needed"] = True
                 return row
 
     def verify(self, condition_id: int, verified_by: str | None = None) -> dict[str, Any]:
