@@ -409,6 +409,7 @@ class ConditionRepository(BaseRepository):
                     if row is None:
                         raise RuntimeError("Structured condition insert returned no row")
                     row["_changed"] = True
+                    row["_evidence_needed"] = True
                     return row
 
                 current_level = current.get("source_level")
@@ -481,6 +482,11 @@ class ConditionRepository(BaseRepository):
                     if row is None:
                         raise RuntimeError("Structured condition refresh returned no row")
                     row["_changed"] = False
+                    row["_evidence_needed"] = bool(
+                        replace_source
+                        or current.get("verification_status") != verification_status
+                        or current.get("is_direct") != is_direct
+                    )
                     return row
 
                 cur.execute(
