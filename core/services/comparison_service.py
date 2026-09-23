@@ -7,7 +7,7 @@ from typing import Any
 from psycopg.rows import dict_row
 
 from db import _connect
-from core.evidence_quality import is_supported_condition
+from core.condition_audit import audit_condition
 
 
 logger = logging.getLogger(__name__)
@@ -105,8 +105,15 @@ class ComparisonService:
 
             company_data = snapshot.setdefault(company, {})
 
-            if not is_supported_condition(field_key, row["value"], row["evidence_quote"]):
-                continue
+            audit = audit_condition(
+                field_key,
+                row["value"],
+                row["evidence_quote"],
+                source_level=row["source_level"],
+                source_type=row["source_type"],
+                confidence=float(row["confidence"]) if row["confidence"] is not None else None,
+                verification_status=row["verification_status"],
+            )
 
             # Prefer the canonical field when both legacy "fire" and
             # current "self_ignition" happen to exist in the database.
@@ -120,6 +127,12 @@ class ComparisonService:
                 "source_level": row["source_level"],
                 "confidence": float(row["confidence"]) if row["confidence"] is not None else None,
                 "verification_status": row["verification_status"],
+                "source_type": row["source_type"],
+                "evidence_quote": row["evidence_quote"],
+                "quality_status": audit.status,
+                "quality_label": audit.label,
+                "quality_reason": audit.reason,
+                "sales_eligible": audit.sales_eligible,
             }
 
             timestamp = row["checked_at"] or row["updated_at"]

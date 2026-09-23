@@ -36,6 +36,18 @@ def _prepare_company_data(snapshot: dict, company: str) -> dict:
             prepared[f"{field}_verification_status"] = field_data.get(
                 "verification_status", "unverified"
             )
+            prepared[f"{field}_quality_status"] = field_data.get(
+                "quality_status", "review"
+            )
+            prepared[f"{field}_quality_label"] = field_data.get(
+                "quality_label", "Нужно перепроверить"
+            )
+            prepared[f"{field}_quality_reason"] = field_data.get(
+                "quality_reason"
+            )
+            prepared[f"{field}_sales_eligible"] = bool(
+                field_data.get("sales_eligible", False)
+            )
         else:
             prepared[field] = "Не найдено"
             prepared[f"{field}_source"] = "none"
@@ -43,6 +55,10 @@ def _prepare_company_data(snapshot: dict, company: str) -> dict:
             prepared[f"{field}_source_level"] = None
             prepared[f"{field}_confidence"] = None
             prepared[f"{field}_verification_status"] = "unverified"
+            prepared[f"{field}_quality_status"] = "missing"
+            prepared[f"{field}_quality_label"] = "Не найдено"
+            prepared[f"{field}_quality_reason"] = "Значение отсутствует."
+            prepared[f"{field}_sales_eligible"] = False
 
     return prepared
 

@@ -14,6 +14,7 @@ from collector.registry import INSURERS, InsurerConfig
 from collector.relevance import RelevanceSelector, TextChunk
 from collector.web_search import DuckDuckGoSearch
 from core.catalog import KASKO_FIELDS
+from core.condition_audit import audit_condition
 from core.evidence_quality import is_supported_condition
 from database.repositories.collection import CollectionRepository
 from database.repositories.company import CompanyRepository
@@ -279,8 +280,18 @@ class CascoCollectionPipeline:
             # to prevent a blank when live official access is unavailable.
             current = self.conditions.get_current(field_rows[item.field_key]["id"])
             if current is not None:
-                found.add(item.field_key)
-                continue
+                current_audit = audit_condition(
+                    item.field_key,
+                    current.get("value"),
+                    current.get("evidence_text"),
+                    source_level=current.get("source_level"),
+                    source_type=current.get("source_type"),
+                    confidence=float(current["confidence"]) if current.get("confidence") is not None else None,
+                    verification_status=current.get("verification_status"),
+                )
+                if current_audit.status in {"confirmed", "conditional"}:
+                    found.add(item.field_key)
+                    continue
 
             source = self.sources.upsert(
                 company_id=company["id"],
@@ -415,12 +426,18 @@ class CascoCollectionPipeline:
         current: set[str] = set()
         for key, field_row in field_rows.items():
             condition = self.conditions.get_current(field_row["id"])
-            if (
-                condition
-                and condition.get("source_id") == source_id
-                and is_supported_condition(key, condition.get("value"))
-            ):
-                current.add(key)
+            if condition and condition.get("source_id") == source_id:
+                audit = audit_condition(
+                    key,
+                    condition.get("value"),
+                    condition.get("evidence_text"),
+                    source_level=condition.get("source_level"),
+                    source_type=condition.get("source_type"),
+                    confidence=float(condition["confidence"]) if condition.get("confidence") is not None else None,
+                    verification_status=condition.get("verification_status"),
+                )
+                if audit.status in {"confirmed", "conditional"}:
+                    current.add(key)
         return current
 
     def _collect_configured_official_docs(
@@ -849,5 +866,16 @@ class CascoCollectionPipeline:
                     text_fragment=value.get("quote"),
                     verification_status=verification_status,
                 )
-            found.add(key)
+
+            candidate_audit = audit_condition(
+                key,
+                value.get("value"),
+                value.get("quote"),
+                source_level=source.get("source_level"),
+                source_type=source.get("source_type"),
+                confidence=confidence_value,
+                verification_status=verification_status,
+            )
+            if candidate_audit.status in {"confirmed", "conditional"}:
+                found.add(key)
         return found

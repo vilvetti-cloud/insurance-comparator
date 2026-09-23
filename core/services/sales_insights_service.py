@@ -88,12 +88,16 @@ class SalesInsightsService:
 
     @classmethod
     def _trusted(cls, data: dict[str, Any], key: str) -> bool:
+        # Quality audit is the final gate for sales language. Filled and even
+        # official data can still be conditional or semantically mismatched.
+        if not data.get(f"{key}_sales_eligible", False):
+            return False
+        if data.get(f"{key}_quality_status") != "confirmed":
+            return False
+
         level = data.get(f"{key}_source_level")
         confidence = data.get(f"{key}_confidence")
-        value = data.get(key)
         if level not in {1, 2}:
-            return False
-        if cls._uncertain(str(value or "")):
             return False
         if confidence is None:
             return True

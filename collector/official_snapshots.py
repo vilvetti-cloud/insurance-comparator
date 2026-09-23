@@ -45,6 +45,7 @@ ALFA_RULES = "https://alfastrah.com/upload/iblock/da8/6hxelk9vq4cnlhue3okjcluz1l
 ALFA_KASKO = "https://www.alfastrah.ru/individuals/auto/kasko/"
 INGOS_RULES = "https://cdn.ingos.ru/docs/prav_strakh_ats-2024.pdf"
 INGOS_GAP = "https://cdn.ingos.ru/docs/pravila_strahovania_dop_rashodov_gap-2024.pdf"
+INGOS_CLAIM_FORM = "https://cdn.ingos.ru/docs/zayvlenie_na_viplaty_strahovogo_ozmeshenia.pdf"
 REN_RULES = "https://www.renins.ru/Media/Default/doc/rules/157.pdf"
 REN_SITE = "https://www.renins.ru/"
 T_RULES = "https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf"
@@ -52,8 +53,10 @@ T_SITE = "https://www.tbank.ru/insurance/kasko/"
 SBER_RULES = "https://sberbankins.ru/upload/iblock/4aa/wef0vo0p52bngziwkksqhic13381u1j9/pravila_134_19.pdf"
 SBER_GAP = "https://sberbankins.ru/upload/iblock/c2c/zjn30vv4p5vsvvmr88nfnm5vne7amz1t/Pravila-strakhovaniya-finansovykh-riskov-vladeltsev-transportnykh-sredstv-GAP-_-16.1.pdf"
 SBER_KASKO = "https://sberbankins.ru/products/kasko/"
+SBER_STOA = "https://sberbankins.ru/about/partners/upp24/"
 SOVCOM_RULES = "https://sovcomins.ru/upload/pravila/kasko_11_23.pdf"
 SOVCOM_KASKO = "https://sovcomins.ru/product/superkasko/"
+SOVCOM_FIRE = "https://sovcomins.ru/product/articles-car/vozmeshenie-po-kasko-pri-pozhare/"
 VSK_RULES = "https://www.vsk.ru/cms/assets/1179953c-dc8f-45f9-9d46-8eaba56b9c10"
 VSK_KID = "https://www.vsk.ru/cms/assets/209bfe0b-8b20-474c-8428-82d51132f54b"
 VSK_PRODUCT = "https://www.vsk.ru/klientam/avto/kasko-kompakt-minimum"
@@ -113,6 +116,14 @@ OFFICIAL_SNAPSHOTS: dict[str, tuple[OfficialSnapshot, ...]] = {
     ),
     "ingos": (
         _s(
+            "without_certificates",
+            "Урегулирование без справок из компетентных органов возможно до 50 000 рублей, если это допускают условия договора.",
+            INGOS_CLAIM_FORM,
+            "Форма заявления на выплату страхового возмещения Ингосстрах",
+            confidence=0.99,
+            evidence="Урегулирование без справок из компетентных органов возможно до 50 000 рублей.",
+        ),
+        _s(
             "gap",
             "GAP покрывает разницу стоимости при хищении или полной гибели автомобиля при наличии соответствующего договора дополнительного страхования.",
             INGOS_GAP,
@@ -159,6 +170,15 @@ OFFICIAL_SNAPSHOTS: dict[str, tuple[OfficialSnapshot, ...]] = {
     ),
     "t-insurance": (
         _s(
+            "repair_type",
+            "Договор КАСКО может предусматривать восстановительный ремонт на СТОА, в том числе на СТОА официального дилера; направление на ремонт выдаёт страховщик.",
+            T_RULES,
+            "Правила КАСКО Т-Страхование",
+            level=1,
+            confidence=0.98,
+            evidence="Договором страхования может быть предусмотрена форма страхового возмещения в виде ремонта на СТОА официального дилера.",
+        ),
+        _s(
             "terrorism",
             "Отдельное универсальное покрытие террористических рисков в базовом описании КАСКО не заявлено; состав покрываемых событий определяется договором.",
             T_RULES,
@@ -185,6 +205,15 @@ OFFICIAL_SNAPSHOTS: dict[str, tuple[OfficialSnapshot, ...]] = {
         ),
     ),
     "sber": (
+        _s(
+            "repair_type",
+            "Для КАСКО используются партнёрские СТОА; конкретная форма возмещения и выбор СТОА для конкретного повреждения определяются договором и программой.",
+            SBER_STOA,
+            "Партнёрские СТОА СберСтрахование для клиентов КАСКО",
+            confidence=0.92,
+            direct=False,
+            evidence="Официальная страница подтверждает партнёрские СТОА для ремонта и/или замены автостёкол по страховым случаям КАСКО.",
+        ),
         _s(
             "gap",
             "GAP оформляется как отдельное страхование финансового риска владельца автомобиля; наличие покрытия зависит от выбранной программы и договора.",
@@ -238,6 +267,14 @@ OFFICIAL_SNAPSHOTS: dict[str, tuple[OfficialSnapshot, ...]] = {
         ),
     ),
     "sovcom": (
+        _s(
+            "self_ignition",
+            "КАСКО покрывает пожар, взрыв и самовозгорание автомобиля из-за неисправной проводки; действуют исключения, указанные в условиях страхования.",
+            SOVCOM_FIRE,
+            "Возмещение по КАСКО при пожаре — Совкомбанк Страхование",
+            confidence=0.99,
+            evidence="Пожар, взрыв, возгорание, в том числе самовозгорание автомобиля из-за неисправной проводки.",
+        ),
         _s(
             "gap",
             "GAP является дополнительной опцией: при хищении или уничтожении автомобиля позволяет компенсировать потерю стоимости без учёта износа в пределах условий договора.",

@@ -1429,7 +1429,7 @@ select:focus {
 
 .report-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -1641,10 +1641,11 @@ select:focus {
   text-transform: uppercase;
 }
 
-.report-table th:nth-child(1) { width: 17%; }
-.report-table th:nth-child(2) { width: 45%; }
-.report-table th:nth-child(3) { width: 25%; }
-.report-table th:nth-child(4) { width: 13%; }
+.report-table th:nth-child(1) { width: 15%; }
+.report-table th:nth-child(2) { width: 35%; }
+.report-table th:nth-child(3) { width: 20%; }
+.report-table th:nth-child(4) { width: 20%; }
+.report-table th:nth-child(5) { width: 10%; }
 
 .report-table td {
   padding: 14px 16px;
@@ -1806,4 +1807,75 @@ select:focus {
     height: 48px;
     flex-basis: 48px;
   }
+}
+
+
+.quality-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.quality-badge--confirmed {
+  background: #edf8f0;
+  color: #237442;
+  border: 1px solid #cfe9d7;
+}
+
+.quality-badge--conditional {
+  background: #fff8e7;
+  color: #8b6816;
+  border: 1px solid #eddca8;
+}
+
+.quality-badge--review {
+  background: #fff0f0;
+  color: #9d3d3d;
+  border: 1px solid #efcccc;
+}
+
+.quality-badge--missing {
+  background: #f3f5f3;
+  color: #777f79;
+  border: 1px solid #e2e6e3;
+}
+
+.quality-cell {
+  display: grid;
+  gap: 7px;
+  align-items: start;
+}
+
+.quality-reason {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.source-mix__item--quality-ok {
+  background: #edf8f0;
+  color: #237442;
+}
+
+.source-mix__item--quality-conditional {
+  background: #fff8e7;
+  color: #8b6816;
+}
+
+.source-mix__item--quality-review {
+  background: #fff0f0;
+  color: #9d3d3d;
+}
+
+.report-row--review td {
+  background: #fffafa;
+}
+
+.report-row--conditional td {
+  background: #fffdf7;
 }
