@@ -71,7 +71,7 @@ jobs:
         run: python -m py_compile collector/*.py core/*.py database/repositories/*.py
 
       - name: Smoke test extraction and comparison quality
-        run: python -m unittest tests.test_deterministic tests.test_evidence_quality tests.test_condition_audit tests.test_sales_insights tests.test_comparison_qa tests.test_sales_script_ai tests.test_property_catalog tests.test_property_schema_service
+        run: python -m unittest tests.test_deterministic tests.test_evidence_quality tests.test_condition_audit tests.test_sales_insights tests.test_comparison_qa tests.test_sales_script_ai tests.test_property_catalog tests.test_property_schema_service tests.test_property_source_map
 
       - name: Run collection
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.insurer == '' || inputs.insurer == matrix.insurer }}
