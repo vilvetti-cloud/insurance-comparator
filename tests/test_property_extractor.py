@@ -133,6 +133,38 @@ class PropertyStructuredExtractorTests(unittest.TestCase):
         self.assertTrue(result["special_risks"]["found"])
         self.assertFalse(result["special_risks"]["direct"])
 
+    def test_accepts_single_field_object_without_outer_key(self):
+        context = (
+            "Безусловная франшиза составляет 10 000 рублей по договору."
+        )
+        parsed = {
+            "found": True,
+            "display_value": "Безусловная франшиза 10 000 рублей.",
+            "value_json": {
+                "type": "unconditional",
+                "amount": 10000,
+                "percent": None,
+                "from_claim_number": None,
+                "variants": [],
+                "conditions": None,
+            },
+            "direct": True,
+            "confidence": 0.95,
+            "quote": (
+                "Безусловная франшиза составляет 10 000 рублей по договору."
+            ),
+            "page": 5,
+            "notes": None,
+        }
+
+        result = PropertyGroqExtractor._normalize_result(
+            parsed=parsed,
+            field_keys=["franchise"],
+            context=context,
+        )
+        self.assertTrue(result["franchise"]["found"])
+        self.assertEqual(result["franchise"]["value_json"]["amount"], 10000)
+
     def test_requires_quote_long_enough_to_be_meaningful(self):
         context = "Пожар входит в страховое покрытие по договору."
         parsed = {
