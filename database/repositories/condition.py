@@ -341,6 +341,7 @@ class ConditionRepository(BaseRepository):
         field_id: int,
         value_json: dict[str, Any] | list[Any],
         display_value: str | None,
+        is_direct: bool | None = None,
         source_id: int | None = None,
         source_level: int | None = None,
         confidence: float | None = None,
@@ -379,10 +380,10 @@ class ConditionRepository(BaseRepository):
                     cur.execute(
                         """
                         INSERT INTO conditions
-                            (field_id, source_id, value, value_json, source_level,
-                             confidence, status, verification_status, valid_from,
-                             valid_to, checked_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, 'active', %s, %s, %s, NOW())
+                            (field_id, source_id, value, value_json, is_direct,
+                             source_level, confidence, status, verification_status,
+                             valid_from, valid_to, checked_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s, %s, %s, NOW())
                         RETURNING *
                         """,
                         (
@@ -390,6 +391,7 @@ class ConditionRepository(BaseRepository):
                             source_id,
                             display_value,
                             Jsonb(value_json),
+                            is_direct,
                             source_level,
                             confidence,
                             verification_status,
@@ -426,6 +428,7 @@ class ConditionRepository(BaseRepository):
                         SET source_id = CASE WHEN %s THEN %s ELSE source_id END,
                             source_level = CASE WHEN %s THEN %s ELSE source_level END,
                             value = COALESCE(%s, value),
+                            is_direct = COALESCE(%s, is_direct),
                             confidence = CASE
                                 WHEN %s IS NULL THEN confidence
                                 WHEN confidence IS NULL THEN %s
@@ -446,6 +449,7 @@ class ConditionRepository(BaseRepository):
                             stronger_source,
                             source_level,
                             display_value,
+                            is_direct,
                             confidence,
                             confidence,
                             confidence,
@@ -462,9 +466,9 @@ class ConditionRepository(BaseRepository):
                 cur.execute(
                     """
                     INSERT INTO condition_versions
-                        (condition_id, value, value_json, source_id,
+                        (condition_id, value, value_json, is_direct, source_id,
                          verification_status)
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (
                         current["id"],
@@ -472,6 +476,7 @@ class ConditionRepository(BaseRepository):
                         Jsonb(current.get("value_json"))
                         if current.get("value_json") is not None
                         else None,
+                        current.get("is_direct"),
                         current.get("source_id"),
                         current.get("verification_status") or "unverified",
                     ),
@@ -496,6 +501,7 @@ class ConditionRepository(BaseRepository):
                     SET source_id = %s,
                         value = %s,
                         value_json = %s,
+                        is_direct = %s,
                         source_level = %s,
                         confidence = %s,
                         verification_status = %s,
@@ -510,6 +516,7 @@ class ConditionRepository(BaseRepository):
                         source_id,
                         display_value,
                         Jsonb(value_json),
+                        is_direct,
                         source_level,
                         confidence,
                         verification_status,
