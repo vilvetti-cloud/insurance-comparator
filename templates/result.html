@@ -182,6 +182,9 @@
                             {% elif data1.get(key + '_source_level') == 4 %}
                               <span class="badge badge--empty">Справочно</span>
                             {% endif %}
+                            <span class="quality-badge quality-badge--{{ data1.get(key + '_quality_status', 'review') }}" title="{{ data1.get(key + '_quality_reason', '') }}">
+                              {{ data1.get(key + '_quality_label', 'Нужно перепроверить') }}
+                            </span>
                             {% if data1.get(key + '_url') %}
                               <a class="source-link" href="{{ data1.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
                             {% endif %}
@@ -206,6 +209,9 @@
                             {% elif data2.get(key + '_source_level') == 4 %}
                               <span class="badge badge--empty">Справочно</span>
                             {% endif %}
+                            <span class="quality-badge quality-badge--{{ data2.get(key + '_quality_status', 'review') }}" title="{{ data2.get(key + '_quality_reason', '') }}">
+                              {{ data2.get(key + '_quality_label', 'Нужно перепроверить') }}
+                            </span>
                             {% if data2.get(key + '_url') %}
                               <a class="source-link" href="{{ data2.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
                             {% endif %}
@@ -228,7 +234,7 @@
 
       <footer class="page-footer">
         <a class="button button--secondary" href="/">← Другое сравнение</a>
-        <span>Скрипт строится только на подтверждённых данных из официальных источников.</span>
+        <span>Скрипт строится только на данных со статусом «Подтверждено» из официальных источников.</span>
       </footer>
     </div>
   </main>
