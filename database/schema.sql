@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS condition_versions (
     id BIGSERIAL PRIMARY KEY,
     condition_id BIGINT NOT NULL REFERENCES conditions(id) ON DELETE CASCADE,
     value TEXT,
+    value_json JSONB,
     source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL,
     document_id BIGINT REFERENCES documents(id) ON DELETE SET NULL,
     page_number INTEGER,
@@ -187,6 +188,8 @@ ALTER TABLE evidence ADD COLUMN IF NOT EXISTS document_id BIGINT REFERENCES docu
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS verified_by TEXT;
+
+ALTER TABLE condition_versions ADD COLUMN IF NOT EXISTS value_json JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_products_company ON products(company_id);
 CREATE INDEX IF NOT EXISTS idx_products_type_subtype ON products(product_type, product_subtype);
