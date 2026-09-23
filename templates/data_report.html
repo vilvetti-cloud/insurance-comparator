@@ -39,7 +39,7 @@
         <div class="report-summary">
           <div class="report-summary__metric">
             <strong>{{ report.total_found }} / {{ report.total_possible }}</strong>
-            <span>параметров заполнено</span>
+            <span>параметров допущено в отчёт</span>
           </div>
           <div class="report-summary__metric">
             <strong>{{ report.coverage_percent }}%</strong>
@@ -55,7 +55,7 @@
           </div>
           <div class="report-summary__metric">
             <strong>{{ report.total_review }}</strong>
-            <span>перепроверить</span>
+            <span>изолировано на проверку</span>
           </div>
         </div>
       </section>
@@ -104,8 +104,11 @@
                 {% if company.fallback_count %}
                   <span class="source-mix__item">Fallback {{ company.fallback_count }}</span>
                 {% endif %}
+                {% if company.quarantined_count %}
+                  <span class="source-mix__item source-mix__item--quality-review">Карантин {{ company.quarantined_count }}</span>
+                {% endif %}
                 {% if company.missing_count %}
-                  <span class="source-mix__item source-mix__item--missing">Пусто {{ company.missing_count }}</span>
+                  <span class="source-mix__item source-mix__item--missing">Не допущено {{ company.missing_count }}</span>
                 {% endif %}
                 <span class="source-mix__item source-mix__item--quality-ok">Подтверждено {{ company.confirmed_count }}</span>
                 {% if company.conditional_count %}
@@ -148,12 +151,15 @@
                 </thead>
                 <tbody>
                   {% for field in company.fields %}
-                  <tr class="{% if not field.found %}report-row--missing{% elif field.quality_status == 'review' %}report-row--review{% elif field.quality_status == 'conditional' %}report-row--conditional{% endif %}">
+                  <tr class="{% if field.quarantined %}report-row--review{% elif not field.raw_found %}report-row--missing{% elif field.quality_status == 'conditional' %}report-row--conditional{% endif %}">
                     <td>
                       <strong class="report-field-name">{{ field.label }}</strong>
                     </td>
                     <td>
-                      {% if field.found %}
+                      {% if field.raw_found %}
+                        {% if field.quarantined %}
+                          <div class="quality-badge quality-badge--review">Кандидат изолирован — не используется в сравнении</div>
+                        {% endif %}
                         <div class="report-value">{{ field.value }}</div>
                         {% if field.evidence_quote %}
                         <details class="evidence-details">
@@ -166,7 +172,7 @@
                       {% endif %}
                     </td>
                     <td>
-                      {% if field.found %}
+                      {% if field.raw_found %}
                         <div class="report-source">
                           {% if field.source_level == 1 %}
                             <span class="badge badge--document">{{ field.source_label }}</span>
@@ -191,7 +197,7 @@
                       {% endif %}
                     </td>
                     <td>
-                      {% if field.found %}
+                      {% if field.raw_found %}
                         <div class="quality-cell">
                           <span class="quality-badge quality-badge--{{ field.quality_status }}">{{ field.quality_label }}</span>
                           <span class="quality-reason">{{ field.quality_reason }}</span>
