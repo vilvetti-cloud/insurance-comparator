@@ -111,11 +111,14 @@ class CascoCollectionPipeline:
         # high-trust level-2 sources. They are useful when the insurer blocks
         # direct server access to the full rules PDF.
         if insurer.official_doc_urls:
+            self._stage_log(insurer, "configured_official_docs:start", found_fields)
             official_found, official_sources, official_documents = self._collect_configured_official_docs(
                 insurer=insurer,
                 company=company,
                 field_rows=field_rows,
+                already_found=found_fields,
             )
+            self._stage_log(insurer, "configured_official_docs:done", found_fields | official_found)
             found_fields.update(official_found)
             source_count += official_sources
             document_count += official_documents
@@ -207,44 +210,16 @@ class CascoCollectionPipeline:
             except LLMExtractionError:
                 pass
 
-        # Before ordinary web fallback, explicitly search the insurer's own
-        # domain for an official CASCO rules PDF. If found and validated by
-        # document text, it becomes a level-1 authoritative source.
-        missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
-        if missing:
-            rules_found, extra_sources, extra_documents = self._discover_official_rules_via_search(
-                insurer=insurer,
-                company=company,
-                field_rows=field_rows,
-            )
-            found_fields.update(rules_found)
-            source_count += extra_sources
-            document_count += extra_documents
-
-        # Level 2/3 fallback: search every still-missing field separately.
-        # Official-domain pages remain level 2; third-party search results are
-        # level 3 and are never treated as equivalent to insurer rules.
-        missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
-        if missing:
-            web_found, extra_sources = self._collect_field_search_fallback(
-                insurer=insurer,
-                company=company,
-                field_rows=field_rows,
-                missing=missing,
-            )
-            found_fields.update(web_found)
-            source_count += extra_sources
-
-        # Final fallback: a curated snapshot of facts already checked against
-        # official insurer rules/KIDs/pages. It is used only when live access
-        # cannot resolve a field (for example anti-bot blocks GitHub runners).
-        # Third-party or internal level-4 facts are deliberately not used.
+        # Prefer curated official snapshots before expensive search. They
+        # originate from insurer-owned rules/KIDs/pages and exist specifically
+        # to cover fields that live parsing cannot resolve reliably.
         missing = [
             field["key"]
             for field in KASKO_FIELDS
             if field["key"] not in found_fields
         ]
         if missing:
+            self._stage_log(insurer, "official_snapshots:start", found_fields)
             snapshot_found, snapshot_sources = self._collect_official_snapshots(
                 insurer=insurer,
                 company=company,
@@ -253,6 +228,36 @@ class CascoCollectionPipeline:
             )
             found_fields.update(snapshot_found)
             source_count += snapshot_sources
+            self._stage_log(insurer, "official_snapshots:done", found_fields)
+
+        # Network search is now a true last resort for fields not resolved by
+        # known official sources or official snapshots.
+        missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
+        if missing:
+            self._stage_log(insurer, "rules_search:start", found_fields)
+            rules_found, extra_sources, extra_documents = self._discover_official_rules_via_search(
+                insurer=insurer,
+                company=company,
+                field_rows=field_rows,
+                missing=missing,
+            )
+            found_fields.update(rules_found)
+            source_count += extra_sources
+            document_count += extra_documents
+            self._stage_log(insurer, "rules_search:done", found_fields)
+
+        missing = [field["key"] for field in KASKO_FIELDS if field["key"] not in found_fields]
+        if missing:
+            self._stage_log(insurer, "field_search:start", found_fields)
+            web_found, extra_sources = self._collect_field_search_fallback(
+                insurer=insurer,
+                company=company,
+                field_rows=field_rows,
+                missing=missing,
+            )
+            found_fields.update(web_found)
+            source_count += extra_sources
+            self._stage_log(insurer, "field_search:done", found_fields)
 
         return {
             "source_count": source_count,
@@ -446,12 +451,20 @@ class CascoCollectionPipeline:
         insurer: InsurerConfig,
         company: dict[str, Any],
         field_rows: dict[str, dict[str, Any]],
+        already_found: set[str] | None = None,
     ) -> tuple[set[str], int, int]:
-        found: set[str] = set()
+        found: set[str] = set(already_found or set())
         source_count = 0
         document_count = 0
 
         for url in insurer.official_doc_urls:
+            unresolved = {
+                field["key"]
+                for field in KASKO_FIELDS
+                if field["key"] not in found
+            }
+            if not unresolved:
+                break
             try:
                 fetched = self.fetcher.fetch_official(url, referer=insurer.official_url)
                 extracted_text = self._text_from_fetch(fetched)
@@ -474,11 +487,7 @@ class CascoCollectionPipeline:
                     title="Официальный документ КАСКО",
                     checksum=fetched.checksum,
                 )
-                missing = {
-                    field["key"]
-                    for field in KASKO_FIELDS
-                    if field["key"] not in found
-                }
+                missing = unresolved
                 values = self._deep_extract_official(
                     insurer=insurer,
                     source_url=fetched.url,
@@ -602,6 +611,7 @@ class CascoCollectionPipeline:
         insurer: InsurerConfig,
         company: dict[str, Any],
         field_rows: dict[str, dict[str, Any]],
+        missing: list[str] | None = None,
     ) -> tuple[set[str], int, int]:
         seen: set[str] = set()
         for query in self.search.build_rules_queries(insurer.name, insurer.official_url):
@@ -648,7 +658,7 @@ class CascoCollectionPipeline:
                         source_url=fetched.url,
                         source_level=1,
                         text=extracted_text,
-                        field_keys=[field["key"] for field in KASKO_FIELDS],
+                        field_keys=missing or [field["key"] for field in KASKO_FIELDS],
                     )
                     found = self._persist_values(
                         values,
@@ -778,6 +788,14 @@ class CascoCollectionPipeline:
             )
 
         return found, len(source_urls_seen)
+
+    @staticmethod
+    def _stage_log(insurer: InsurerConfig, stage: str, found_fields: set[str]) -> None:
+        print(
+            f"[collector] insurer={insurer.slug} stage={stage} "
+            f"found={len(found_fields)}/10 fields={','.join(sorted(found_fields))}",
+            flush=True,
+        )
 
     @staticmethod
     def _source_for_quote(
