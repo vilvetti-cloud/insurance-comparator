@@ -17,6 +17,7 @@ class PairQA:
     company: str
     competitor: str
     advantage_count: int
+    advantage_fields: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 
@@ -101,9 +102,31 @@ class ComparisonQAService:
                         company=company,
                         competitor=competitor,
                         advantage_count=len(advantages),
+                        advantage_fields=[
+                            str(item.get("field_key"))
+                            for item in advantages
+                            if item.get("field_key")
+                        ],
                         errors=errors,
                     )
                 )
+
+        by_pair = {
+            (item.company, item.competitor): item
+            for item in pair_results
+        }
+        for item in pair_results:
+            reverse = by_pair.get((item.competitor, item.company))
+            if reverse is None:
+                continue
+            impossible = set(item.advantage_fields) & set(reverse.advantage_fields)
+            if impossible:
+                message = (
+                    "same field is an advantage in both directions: "
+                    + ", ".join(sorted(impossible))
+                )
+                if message not in item.errors:
+                    item.errors.append(message)
 
         error_count = sum(len(item.errors) for item in pair_results)
         return ComparisonQAReport(
