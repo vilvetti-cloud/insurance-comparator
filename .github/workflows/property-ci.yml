@@ -1,0 +1,58 @@
+name: Property CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "core/property_*.py"
+      - "core/services/property_*.py"
+      - "core/services/reso_property_*.py"
+      - "collector/property_*.py"
+      - "database/schema.sql"
+      - "database/repositories/product.py"
+      - "database/repositories/field.py"
+      - "database/repositories/condition.py"
+      - "scripts/load_reso_property_baseline.py"
+      - "tests/test_property*.py"
+      - "tests/test_reso_property*.py"
+      - ".github/workflows/property-ci.yml"
+  pull_request:
+    paths:
+      - "core/property_*.py"
+      - "core/services/property_*.py"
+      - "core/services/reso_property_*.py"
+      - "collector/property_*.py"
+      - "database/schema.sql"
+      - "database/repositories/product.py"
+      - "database/repositories/field.py"
+      - "database/repositories/condition.py"
+      - "scripts/load_reso_property_baseline.py"
+      - "tests/test_property*.py"
+      - "tests/test_reso_property*.py"
+      - ".github/workflows/property-ci.yml"
+
+jobs:
+  tests:
+    name: Property regression tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Compile property modules
+        run: python -m py_compile core/property_*.py core/services/property_*.py core/services/reso_property_*.py collector/property_*.py database/repositories/*.py
+
+      - name: Run unit tests
+        run: python -m unittest tests.test_deterministic tests.test_evidence_quality tests.test_condition_audit tests.test_sales_insights tests.test_comparison_qa tests.test_sales_script_ai tests.test_property_catalog tests.test_property_schema_service tests.test_property_source_map tests.test_property_reso_baseline tests.test_reso_property_baseline_loader
