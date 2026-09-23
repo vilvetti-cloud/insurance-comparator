@@ -109,7 +109,7 @@ class PropertyGroqExtractor:
 
         base_payload = {
             "temperature": 0,
-            "max_completion_tokens": 1200,
+            "max_completion_tokens": 420,
             "include_reasoning": False,
             "response_format": {"type": "json_object"},
             "messages": [
