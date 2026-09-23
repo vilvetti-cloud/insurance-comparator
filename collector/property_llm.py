@@ -73,6 +73,7 @@ class PropertyGroqExtractor:
         self.retries = max(0, retries)
         self.min_request_interval = max(0.0, min_request_interval)
         self._last_request_at = 0.0
+        self._blocked_models: set[str] = set()
 
     def extract_fields(
         self,
@@ -150,7 +151,7 @@ class PropertyGroqExtractor:
                     self.fallback_model,
                     self.last_resort_model,
                 )
-                if model_name
+                if model_name and model_name not in self._blocked_models
             )
         )
         last_error: Exception | None = None
@@ -163,7 +164,7 @@ class PropertyGroqExtractor:
             )
 
             for attempt in range(self.retries + 1):
-                self._wait_between_requests()
+                self._wait_between_requests(model_name)
                 try:
                     response = requests.post(
                         "https://api.groq.com/openai/v1/chat/completions",
@@ -178,6 +179,9 @@ class PropertyGroqExtractor:
                             or "tpd" in detail.lower()
                         )
                         has_fallback = model_index + 1 < len(model_candidates)
+
+                        if daily_limit:
+                            self._blocked_models.add(model_name)
 
                         if daily_limit and has_fallback:
                             last_error = PropertyExtractionError(
@@ -250,10 +254,13 @@ class PropertyGroqExtractor:
             f"Property extraction failed across models: {last_error}"
         ) from last_error
 
-    def _wait_between_requests(self) -> None:
+    def _wait_between_requests(self, model_name: str) -> None:
+        interval = self.min_request_interval
+        if model_name.startswith("qwen/"):
+            interval = max(interval, 12.0)
         elapsed = time.monotonic() - self._last_request_at
-        if elapsed < self.min_request_interval:
-            time.sleep(self.min_request_interval - elapsed)
+        if elapsed < interval:
+            time.sleep(interval - elapsed)
         self._last_request_at = time.monotonic()
 
     @staticmethod
