@@ -46,8 +46,16 @@
             <span>общая наполненность</span>
           </div>
           <div class="report-summary__metric">
-            <strong>{{ report.companies|length }}</strong>
-            <span>страховых в контроле</span>
+            <strong>{{ report.total_confirmed }}</strong>
+            <span>подтверждено</span>
+          </div>
+          <div class="report-summary__metric">
+            <strong>{{ report.total_conditional }}</strong>
+            <span>зависит от договора</span>
+          </div>
+          <div class="report-summary__metric">
+            <strong>{{ report.total_review }}</strong>
+            <span>перепроверить</span>
           </div>
         </div>
       </section>
@@ -57,6 +65,9 @@
         <span class="badge badge--site">Официальный сайт / документ</span>
         <span class="badge badge--review">Интернет-поиск</span>
         <span class="badge badge--empty">Не найдено</span>
+        <span class="quality-badge quality-badge--confirmed">Подтверждено</span>
+        <span class="quality-badge quality-badge--conditional">Зависит от договора</span>
+        <span class="quality-badge quality-badge--review">Перепроверить</span>
       </div>
 
       <section class="report-company-list">
@@ -96,6 +107,13 @@
                 {% if company.missing_count %}
                   <span class="source-mix__item source-mix__item--missing">Пусто {{ company.missing_count }}</span>
                 {% endif %}
+                <span class="source-mix__item source-mix__item--quality-ok">Подтверждено {{ company.confirmed_count }}</span>
+                {% if company.conditional_count %}
+                  <span class="source-mix__item source-mix__item--quality-conditional">Условно {{ company.conditional_count }}</span>
+                {% endif %}
+                {% if company.review_count %}
+                  <span class="source-mix__item source-mix__item--quality-review">Перепроверить {{ company.review_count }}</span>
+                {% endif %}
               </div>
 
               {% if company.latest_run %}
@@ -124,12 +142,13 @@
                     <th>Параметр</th>
                     <th>Что хранится сейчас</th>
                     <th>Источник</th>
+                    <th>Качество</th>
                     <th>Проверено</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for field in company.fields %}
-                  <tr class="{% if not field.found %}report-row--missing{% endif %}">
+                  <tr class="{% if not field.found %}report-row--missing{% elif field.quality_status == 'review' %}report-row--review{% elif field.quality_status == 'conditional' %}report-row--conditional{% endif %}">
                     <td>
                       <strong class="report-field-name">{{ field.label }}</strong>
                     </td>
@@ -166,6 +185,16 @@
                           {% if field.source_url %}
                             <a href="{{ field.source_url }}" target="_blank" rel="noopener">Открыть источник ↗</a>
                           {% endif %}
+                        </div>
+                      {% else %}
+                        <span class="report-missing">—</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if field.found %}
+                        <div class="quality-cell">
+                          <span class="quality-badge quality-badge--{{ field.quality_status }}">{{ field.quality_label }}</span>
+                          <span class="quality-reason">{{ field.quality_reason }}</span>
                         </div>
                       {% else %}
                         <span class="report-missing">—</span>
