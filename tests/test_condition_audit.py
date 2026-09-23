@@ -70,6 +70,26 @@ class ConditionAuditTests(unittest.TestCase):
         self.assertEqual(result.status, "review")
         self.assertFalse(result.sales_eligible)
 
+    def test_needs_review_cannot_be_promoted_to_confirmed(self):
+        result = self.audit(
+            "gap",
+            "GAP сохраняет страховую стоимость автомобиля.",
+            "GAP сохраняет страховую стоимость автомобиля.",
+            verification_status="needs_review",
+        )
+        self.assertEqual(result.status, "review")
+        self.assertFalse(result.sales_eligible)
+
+    def test_rejected_candidate_stays_review(self):
+        result = self.audit(
+            "franchise",
+            "Безусловная франшиза 20 000 руб.",
+            "Безусловная франшиза составляет 20 000 руб.",
+            verification_status="rejected",
+        )
+        self.assertEqual(result.status, "review")
+        self.assertFalse(result.sales_eligible)
+
 
 if __name__ == "__main__":
     unittest.main()
