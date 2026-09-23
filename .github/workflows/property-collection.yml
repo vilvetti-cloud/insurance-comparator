@@ -1,5 +1,7 @@
 name: Property collection pilot
 
+# First live competitor: Sovcom
+
 on:
   push:
     branches:
