@@ -289,6 +289,9 @@ PROPERTY_COMPETITORS: tuple[PropertyCompetitor, ...] = (
                 "https://sovcomins.ru/product/property/",
                 "https://sovcomins.ru/product/kvartira/",
             ),
+            rules_urls=(
+                "https://sovcomins.ru/upload/pravila/imushestvo_14.24.pdf",
+            ),
             notes=(
                 "«Моя квартира» и классическая программа: конструктив, отделка, "
                 "имущество, ГО, франшиза, без справок и БПЛА/терроризм."
@@ -299,6 +302,9 @@ PROPERTY_COMPETITORS: tuple[PropertyCompetitor, ...] = (
             product_urls=(
                 "https://sovcomins.ru/product/property/",
                 "https://sovcomins.ru/product/dom/",
+            ),
+            rules_urls=(
+                "https://sovcomins.ru/upload/pravila/imushestvo_14.24.pdf",
             ),
             notes=(
                 "Дом/баня/гараж/хозблок, инженерия, ландшафт, специальные риски, "
