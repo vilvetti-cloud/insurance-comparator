@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from core.condition_audit import audit_condition
 from .base import BaseRepository
@@ -330,6 +332,195 @@ class ConditionRepository(BaseRepository):
                 if row is None:
                     raise RuntimeError("Condition update returned no row")
                 row["_evidence_needed"] = True
+                row["_changed"] = True
+                return row
+
+    def save_structured_candidate(
+        self,
+        *,
+        field_id: int,
+        value_json: dict[str, Any] | list[Any],
+        display_value: str | None,
+        source_id: int | None = None,
+        source_level: int | None = None,
+        confidence: float | None = None,
+        verification_status: str = "needs_review",
+        valid_from: Any = None,
+        valid_to: Any = None,
+    ) -> dict[str, Any]:
+        """Save a structured non-CASCO condition without invoking CASCO audit rules.
+
+        The caller must validate value_json against the field's declared schema
+        before calling this method. Source precedence and version history mirror
+        the stable-refresh behavior used by text conditions.
+        """
+        if source_level is not None and source_level not in {1, 2, 3, 4}:
+            raise ValueError("source_level must be between 1 and 4")
+        if not isinstance(value_json, (dict, list)):
+            raise TypeError("value_json must be a dict or list")
+
+        with self.connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM conditions
+                    WHERE field_id = %s
+                      AND status = 'active'
+                    ORDER BY source_level NULLS LAST, updated_at DESC, id DESC
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    (field_id,),
+                )
+                current = cur.fetchone()
+
+                if current is None:
+                    cur.execute(
+                        """
+                        INSERT INTO conditions
+                            (field_id, source_id, value, value_json, source_level,
+                             confidence, status, verification_status, valid_from,
+                             valid_to, checked_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'active', %s, %s, %s, NOW())
+                        RETURNING *
+                        """,
+                        (
+                            field_id,
+                            source_id,
+                            display_value,
+                            Jsonb(value_json),
+                            source_level,
+                            confidence,
+                            verification_status,
+                            valid_from,
+                            valid_to,
+                        ),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        raise RuntimeError("Structured condition insert returned no row")
+                    row["_changed"] = True
+                    return row
+
+                current_level = current.get("source_level")
+                if (
+                    source_level is not None
+                    and current_level is not None
+                    and current_level < source_level
+                ):
+                    current["_changed"] = False
+                    return current
+
+                same_value = current.get("value_json") == value_json
+                stronger_source = (
+                    source_level is not None
+                    and current_level is not None
+                    and source_level < current_level
+                )
+
+                if same_value:
+                    cur.execute(
+                        """
+                        UPDATE conditions
+                        SET source_id = CASE WHEN %s THEN %s ELSE source_id END,
+                            source_level = CASE WHEN %s THEN %s ELSE source_level END,
+                            value = COALESCE(%s, value),
+                            confidence = CASE
+                                WHEN %s IS NULL THEN confidence
+                                WHEN confidence IS NULL THEN %s
+                                ELSE GREATEST(confidence, %s)
+                            END,
+                            verification_status = CASE
+                                WHEN %s = 'verified' THEN 'verified'
+                                ELSE verification_status
+                            END,
+                            checked_at = NOW(),
+                            updated_at = NOW()
+                        WHERE id = %s
+                        RETURNING *
+                        """,
+                        (
+                            stronger_source,
+                            source_id,
+                            stronger_source,
+                            source_level,
+                            display_value,
+                            confidence,
+                            confidence,
+                            confidence,
+                            verification_status,
+                            current["id"],
+                        ),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        raise RuntimeError("Structured condition refresh returned no row")
+                    row["_changed"] = False
+                    return row
+
+                cur.execute(
+                    """
+                    INSERT INTO condition_versions
+                        (condition_id, value, value_json, source_id,
+                         verification_status)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        current["id"],
+                        current.get("value"),
+                        Jsonb(current.get("value_json"))
+                        if current.get("value_json") is not None
+                        else None,
+                        current.get("source_id"),
+                        current.get("verification_status") or "unverified",
+                    ),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO change_log
+                        (entity_type, entity_id, field_name, old_value, new_value, reason)
+                    VALUES ('condition', %s, 'value_json', %s, %s, 'structured_refresh')
+                    """,
+                    (
+                        current["id"],
+                        json.dumps(current.get("value_json"), ensure_ascii=False, sort_keys=True)
+                        if current.get("value_json") is not None
+                        else None,
+                        json.dumps(value_json, ensure_ascii=False, sort_keys=True),
+                    ),
+                )
+                cur.execute(
+                    """
+                    UPDATE conditions
+                    SET source_id = %s,
+                        value = %s,
+                        value_json = %s,
+                        source_level = %s,
+                        confidence = %s,
+                        verification_status = %s,
+                        valid_from = COALESCE(%s, valid_from),
+                        valid_to = %s,
+                        checked_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING *
+                    """,
+                    (
+                        source_id,
+                        display_value,
+                        Jsonb(value_json),
+                        source_level,
+                        confidence,
+                        verification_status,
+                        valid_from,
+                        valid_to,
+                        current["id"],
+                    ),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise RuntimeError("Structured condition update returned no row")
                 row["_changed"] = True
                 return row
 
