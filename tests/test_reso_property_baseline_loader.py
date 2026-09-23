@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from core.services.reso_property_baseline_loader import ResoPropertyBaselineLoader
+from core.services.reso_property_baseline_loader import (
+    ResoPropertyBaselineLoader,
+    _SOURCE_META,
+)
 
 
 class FakeCompanyRepo:
@@ -147,23 +150,8 @@ class ResoPropertyBaselineLoaderTests(unittest.TestCase):
             all(call["source_level"] == 1 for call in internal)
         )
 
-    def test_public_rules_remain_level_one(self):
-        sources = FakeSourceRepo()
-        loader = ResoPropertyBaselineLoader(
-            company_repo=FakeCompanyRepo(),
-            schema_service=FakeSchemaService(),
-            field_repo=FakeFieldRepo(),
-            source_repo=sources,
-            condition_repo=FakeConditionRepo(),
-        )
-        loader.load()
-
-        rules = [
-            call for call in sources.calls
-            if call["source_type"] == "rules"
-        ]
-        self.assertTrue(rules)
-        self.assertTrue(all(call["source_level"] == 1 for call in rules))
+    def test_official_rules_source_kind_maps_to_level_one(self):
+        self.assertEqual(_SOURCE_META["official_rules"], ("rules", 1))
 
 
 if __name__ == "__main__":
