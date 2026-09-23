@@ -51,6 +51,14 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_total_loss_fragment_is_not_repair_type(self):
+        result = self.audit(
+            "repair_type",
+            "Страховщик выдал направление на ремонт; стоимость достигла 65% страховой суммы.",
+            "Для полной гибели стоимость ремонта достигла 65% страховой суммы.",
+        )
+        self.assertEqual(result.status, "review")
+
     def test_third_party_source_never_sales_eligible(self):
         result = self.audit(
             "gap",
