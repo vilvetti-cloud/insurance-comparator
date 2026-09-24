@@ -231,6 +231,14 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "confirmed")
 
+    def test_broken_ocr_repair_fragment_is_rejected(self):
+        result = self.audit(
+            "repair_type",
+            "ния ТС Страховщиком на ремонт на СТОА) не допускает ся.",
+            "ния ТС Страховщиком на ремонт на СТОА) не допускает ся.",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
