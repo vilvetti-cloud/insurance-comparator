@@ -90,6 +90,30 @@ class ConditionAuditTests(unittest.TestCase):
         self.assertEqual(result.status, "review")
         self.assertFalse(result.sales_eligible)
 
+    def test_total_loss_number_must_exist_in_quote(self):
+        result = self.audit(
+            "total_loss",
+            "Полная гибель признаётся при 75% страховой суммы.",
+            "Полная гибель признаётся при 65% страховой суммы.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_positive_coverage_cannot_be_based_on_exclusion(self):
+        result = self.audit(
+            "terrorism",
+            "Террористический риск покрывается.",
+            "Ущерб вследствие террористического акта не является страховым случаем.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_repair_type_must_be_in_quote(self):
+        result = self.audit(
+            "repair_type",
+            "Возмещение производится ремонтом на СТОА страховщика.",
+            "Страховщик осуществляет денежную выплату страхового возмещения.",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
