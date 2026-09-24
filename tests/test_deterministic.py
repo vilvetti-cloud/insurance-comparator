@@ -114,16 +114,23 @@ class DeterministicCascoExtractorTests(unittest.TestCase):
         grouped = {
             "repair_type": [
                 TextChunk(
-                    "Первая длинная строка про общие условия страхования.\n"
-                    "Форма страхового возмещения осуществляется путем направления ТС на ремонт на СТОА страховщика.\n"
-                    "Последняя длинная строка про дополнительные положения договора.",
+                    ("Общее условие страхования и порядок оформления договора. " * 6)
+                    + "\n"
+                    + (
+                        "Форма страхового возмещения осуществляется путем направления "
+                        "ТС на ремонт на СТОА страховщика. "
+                        + "Дополнительное условие ремонта. " * 5
+                    )
+                    + "\n"
+                    + ("Прочие положения договора и порядок взаимодействия сторон. " * 6),
                     page_number=8,
                     score=20,
                 )
             ]
         }
-        trimmed = selector._fit_budget(grouped, max_total_chars=110)["repair_type"][0].text
+        trimmed = selector._fit_budget(grouped, max_total_chars=500)["repair_type"][0].text
         self.assertFalse(trimmed.startswith("ния "))
+        self.assertIn("Форма страхового возмещения", trimmed)
         self.assertIn("СТОА", trimmed)
         self.assertNotIn("\n", trimmed)
 
