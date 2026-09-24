@@ -294,6 +294,32 @@ def semantic_alignment_issue(
                 "цитате: " + ", ".join(missing_terms) + "."
             )
 
+    if field_key == "gap":
+        # GAP summaries may only state mechanics that are present in the
+        # captured evidence. A product/rules title can prove GAP exists, but
+        # cannot prove loss scenarios, depreciation treatment or value
+        # preservation by itself.
+        claim_terms = {
+            "утрата": r"утрат",
+            "уничтожение": r"уничтож",
+            "полная гибель": r"гибел",
+            "хищение": r"хищен",
+            "ущерб": r"ущерб",
+            "стоимость": r"стоим",
+            "амортизация": r"амортиз",
+        }
+        unsupported_terms = [
+            label
+            for label, pattern in claim_terms.items()
+            if re.search(pattern, value_n) and not re.search(pattern, quote_n)
+        ]
+        if unsupported_terms:
+            return (
+                "Значение GAP добавляет детали, которых нет в подтверждающей цитате: "
+                + ", ".join(unsupported_terms)
+                + "."
+            )
+
     if field_key == "total_loss":
         value_pct = re.findall(r"(\d+(?:[.,]\d+)?)\s*%", value_n)
         quote_pct = re.findall(r"(\d+(?:[.,]\d+)?)\s*%", quote_n)
