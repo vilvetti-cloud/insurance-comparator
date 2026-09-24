@@ -60,6 +60,14 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["value"], "75%")
         self.assertTrue(self.repo.completed(self.source["id"], "a"))
 
+    def test_stale_analysis_does_not_overwrite_newer_source(self):
+        self.publish("75%", "a")
+        self.repo.execute("UPDATE sources SET checksum='newer' WHERE id=%s", (self.source["id"],))
+        with self.assertRaises(Exception):
+            self.publish("80%", "older")
+        row = self.repo.fetch_one("SELECT value FROM conditions WHERE field_id=%s AND status='active'", (self.field,))
+        self.assertEqual(row["value"], "75%")
+
     def test_atomic_failure_rolls_back_active_change(self):
         self.publish("75%", "a")
         with self.assertRaises(Exception):

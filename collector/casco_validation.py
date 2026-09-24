@@ -51,7 +51,7 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     pos = r"покрыва|возмещ|включ|оплач|предостав|страховым случаем"
     if re.search(neg, context.lower()) and re.search(pos, value_n) and not re.search(neg, value_n):
         return fail("exclusion_context_requires_review")
-    conditional = r"если[^.]{0,80}(?:предусмотр|договор)|при условии|по соглашению|договором|договоре|дополнительн"
+    conditional = r"если[^.]{0,80}(?:предусмотр|договор)|при условии|по соглашению|договором|договоре|дополнительн\\w*\\s+(?:соглаш|плат|опци|покрыт|услов)"
     if re.search(conditional, quote_lower) and not re.search(conditional + r"|зависит|опци", value_n):
         return fail("omitted_contract_condition")
     # Every digit and unit in the summary must occur in the quotation, for all fields.
@@ -66,7 +66,7 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
         if not set(re.findall(pattern, value_n)).issubset(set(re.findall(pattern, quote_lower))):
             return fail("unsupported_numeric_unit")
     # Use quote-only relevance too: a summary must not supply the missing topic.
-    if not is_supported_condition(key, quote, quote) or not is_supported_condition(key, value, quote):
+    if not is_supported_condition(key, "Проверка условия первоисточника", quote) or not is_supported_condition(key, value, quote):
         return fail("quote_does_not_prove_field")
     issue = semantic_alignment_issue(key, value, quote)
     if issue:

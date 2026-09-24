@@ -24,6 +24,12 @@ class EvidenceTests(unittest.TestCase):
     def test_valid_quote(self):
         self.assertTrue(self.validate().passed)
 
+    def test_long_exact_quote_is_allowed(self):
+        quote = QUOTE + " Дополнительное описание порядка оценки." * 20
+        fact = dict(FACT, exact_quote=quote)
+        self.assertTrue(validate_fact("total_loss", fact, ParsedDocument({3: quote}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf").passed)
+
     def test_wrong_page(self):
         self.assertFalse(self.validate(dict(FACT, page=2)).passed)
 
@@ -119,6 +125,34 @@ class PipelineTests(unittest.TestCase):
         candidates = p.revisions.publish.call_args.kwargs["candidates"]
         self.assertEqual(len(candidates), 10)
         self.assertFalse(any(v.passed for _, _, v in candidates))
+
+    def test_run_history_reports_degraded(self):
+        p = self.pipeline()
+        p.provider = DisabledProvider()
+        p.runs = Mock()
+        p.runs.start_run.return_value = {"id": 1}
+        p.runs.start_item.return_value = {"id": 2}
+        with tempfile.TemporaryDirectory() as d:
+            m = p.checksum_check(directory=Path(d), insurer_slugs=["reso"], track_run=True)
+            p.analyze(directory=Path(d), manifest=m)
+        self.assertEqual(p.runs.finish_item.call_args.kwargs["status"], "degraded")
+        self.assertEqual(p.runs.finish_run.call_args.kwargs["companies_failed"], 1)
+
+    def test_recovery_refuses_alive_source_without_search(self):
+        from scripts.casco_recover_source import recover
+        fetcher, search = Mock(), Mock()
+        with self.assertRaises(ValueError):
+            recover("reso", sources_for("reso")[0].url, fetcher=fetcher, search=search)
+        search.search.assert_not_called()
+
+    def test_recovery_only_on_dead_official_pin(self):
+        from scripts.casco_recover_source import recover
+        from collector.web_search import SearchHit
+        fetcher, search = Mock(), Mock()
+        fetcher.fetch.side_effect = FetchError("gone", status_code=404)
+        search.search.return_value = [SearchHit("rules", "https://reso.ru/new.pdf", ""),
+                                     SearchHit("broker", "https://broker.test/rules.pdf", "")]
+        self.assertEqual(len(recover("reso", sources_for("reso")[0].url, fetcher=fetcher, search=search)), 1)
 
     def test_dead_url_reported_only_no_search(self):
         p = self.pipeline()

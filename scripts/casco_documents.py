@@ -21,7 +21,7 @@ def main():
         return 2
     pipeline = CascoCollectionPipeline()
     if args.stage == "check":
-        result = pipeline.checksum_check(directory=args.directory, insurer_slugs=args.insurer)
+        result = pipeline.checksum_check(directory=args.directory, insurer_slugs=args.insurer, track_run=True)
         if os.getenv("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
                 handle.write(f"pending={len(result['pending'])}\n")

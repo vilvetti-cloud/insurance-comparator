@@ -50,15 +50,23 @@ class CascoCollectionPipeline:
             label=f["label"], category=f["category"], sort_order=f["sort_order"]) for f in KASKO_FIELDS}
         return company, fields
 
-    def checksum_check(self, *, directory: Path, insurer_slugs=None):
+    def checksum_check(self, *, directory: Path, insurer_slugs=None, track_run=False):
         directory.mkdir(parents=True, exist_ok=True)
         if insurer_slugs and set(insurer_slugs) - {i.slug for i in INSURERS}:
             raise ValueError("Unknown insurer slug")
         manifest = {"version": 1, "pending": [], "unchanged": [], "errors": []}
+        if track_run:
+            selected = [i for i in INSURERS if not insurer_slugs or i.slug in insurer_slugs]
+            run = self.runs.start_run(triggered_by="document_checksum", companies_total=len(selected))
+            manifest["run_id"] = run["id"]
+            manifest["items"] = {}
         for insurer in INSURERS:
             if insurer_slugs and insurer.slug not in insurer_slugs:
                 continue
             company, fields = self._prepare(insurer)
+            if track_run:
+                item = self.runs.start_item(run_id=manifest["run_id"], company_id=company["id"])
+                manifest["items"][insurer.slug] = item["id"]
             for pin in sources_for(insurer.slug):
                 try:
                     # Direct bytes are required for checksum/page provenance.
@@ -102,6 +110,7 @@ class CascoCollectionPipeline:
         manifest = manifest or json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         report = {"passed_fields": 0, "review_fields": 0, "degraded": [],
                   "errors": manifest["errors"], "unchanged": len(manifest["unchanged"])}
+        counts = {}
         for item in manifest["pending"]:
             source, checksum = item["source"], item["checksum"]
             if self.revisions.completed(source["id"], checksum):
@@ -127,6 +136,7 @@ class CascoCollectionPipeline:
                 passed = self.revisions.publish(source=source, document=item["document"],
                     checksum=checksum, parsed=parsed, provider=self.provider.name,
                     candidates=candidates, fields=item["fields"])
+                counts[item["insurer"]] = counts.get(item["insurer"], 0) + len(passed)
                 report["passed_fields"] += len(passed)
                 report["review_fields"] += len(FIELD_KEYS) - len(passed)
                 if not document.promotable:
@@ -139,6 +149,17 @@ class CascoCollectionPipeline:
                     reason=reason, parsed=parsed)
                 report["degraded"].append({"insurer": item["insurer"], "reason": reason})
                 print(f"[analysis] {item['insurer']} degraded: {reason}", flush=True)
+        if manifest.get("run_id"):
+            bad = {entry["insurer"] for entry in report["errors"] + report["degraded"]}
+            for slug, item_id in manifest["items"].items():
+                reasons = [entry for entry in report["errors"] + report["degraded"] if entry["insurer"] == slug]
+                self.runs.finish_item(item_id, status="degraded" if slug in bad else "success",
+                    source_count=len(sources_for(slug)),
+                    document_count=sum(i["insurer"] == slug for i in manifest["pending"]),
+                    fields_found=counts.get(slug, 0),
+                    error=json.dumps(reasons, ensure_ascii=False) if reasons else None)
+            self.runs.finish_run(manifest["run_id"], status="degraded" if bad else "success",
+                companies_success=len(manifest["items"]) - len(bad), companies_failed=len(bad))
         (directory / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
 

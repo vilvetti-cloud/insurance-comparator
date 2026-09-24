@@ -40,8 +40,11 @@ class CascoRevisionRepository(BaseRepository):
                     (source["id"], checksum, Jsonb(parsed), provider),
                 )
                 revision = cur.fetchone()
-                cur.execute("SELECT casco_analyzed_checksum FROM sources WHERE id=%s FOR UPDATE", (source["id"],))
-                if cur.fetchone()["casco_analyzed_checksum"] == checksum:
+                cur.execute("SELECT casco_analyzed_checksum,checksum FROM sources WHERE id=%s FOR UPDATE", (source["id"],))
+                source_state = cur.fetchone()
+                if source_state["checksum"] and source_state["checksum"] != checksum:
+                    raise ValueError("Source changed during analysis; stale candidate not published")
+                if source_state["casco_analyzed_checksum"] == checksum:
                     return set()
                 passed = set()
                 for key, fact, verdict in candidates:
