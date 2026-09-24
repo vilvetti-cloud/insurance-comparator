@@ -49,6 +49,7 @@ class GroqExtractor:
         self.retries = max(0, retries)
         self.min_request_interval = max(0.0, min_request_interval)
         self._last_request_at = 0.0
+        self._rate_limited_until = 0.0
 
     def extract(
         self,
@@ -116,6 +117,12 @@ class GroqExtractor:
             "Content-Type": "application/json",
         }
 
+        if time.monotonic() < self._rate_limited_until:
+            raise LLMExtractionError(
+                "Groq rate limit circuit is open for this collection run",
+                status_code=429,
+            )
+
         last_error: Exception | None = None
         for attempt in range(self.retries + 1):
             self._wait_between_requests()
@@ -129,20 +136,21 @@ class GroqExtractor:
                 if response.status_code == 429:
                     retry_after = response.headers.get("retry-after")
                     try:
-                        wait_seconds = (
-                            float(retry_after)
-                            if retry_after
-                            else 15.0 * (attempt + 1)
-                        )
+                        wait_seconds = float(retry_after) if retry_after else 60.0
                     except (TypeError, ValueError):
-                        wait_seconds = 15.0 * (attempt + 1)
-                    if attempt < self.retries:
-                        time.sleep(max(5.0, min(wait_seconds + 1.0, 90.0)))
-                        continue
+                        wait_seconds = 60.0
+                    # Do not sleep inside a matrix collector. A rate limit is
+                    # not a transient parsing error: deterministic extraction,
+                    # snapshots and official search should continue immediately.
+                    # Keep a short circuit open so later LLM batches in this
+                    # same insurer job fail fast too.
+                    self._rate_limited_until = time.monotonic() + max(
+                        30.0, min(wait_seconds, 300.0)
+                    )
                     reset_tokens = response.headers.get("x-ratelimit-reset-tokens")
                     detail = (
                         f"Groq rate limit (429), retry-after={retry_after}, "
-                        f"token-reset={reset_tokens}"
+                        f"token-reset={reset_tokens}; falling back without retry"
                     )
                     raise LLMExtractionError(detail, status_code=429)
                 if response.status_code == 413:

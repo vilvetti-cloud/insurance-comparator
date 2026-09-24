@@ -172,13 +172,73 @@ class RelevanceSelector:
                     if len(best.text) <= per_field:
                         output[key] = [best]
                         continue
-                    start = max(0, (len(best.text) - per_field) // 2)
-                    trimmed = best.text[start : start + per_field]
+                    trimmed = self._trim_chunk_to_budget(
+                        best.text,
+                        per_field,
+                    )
                     output[key] = [
                         TextChunk(trimmed, best.page_number, best.score)
                     ]
 
         return output
+
+    @staticmethod
+    def _trim_chunk_to_budget(text: str, limit: int) -> str:
+        """Trim around the middle without creating mid-word PDF fragments.
+
+        Relevance windows are built from lines around the matching line, so the
+        center is the most valuable part. Keep complete neighboring lines while
+        they fit. Only if one physical line alone exceeds the budget do we take
+        a whitespace-bounded slice.
+        """
+        if len(text) <= limit:
+            return text
+
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return text[:limit].rsplit(" ", 1)[0].strip()
+
+        middle = len(lines) // 2
+        chosen = [middle]
+        used = len(lines[middle])
+        left = middle - 1
+        right = middle + 1
+
+        while True:
+            options: list[tuple[int, int]] = []
+            if left >= 0:
+                options.append((left, len(lines[left]) + 1))
+            if right < len(lines):
+                options.append((right, len(lines[right]) + 1))
+            fitting = [item for item in options if used + item[1] <= limit]
+            if not fitting:
+                break
+
+            # Alternate naturally around the center; when only one side fits,
+            # take it rather than truncating a line.
+            index, extra = min(fitting, key=lambda item: abs(item[0] - middle))
+            chosen.append(index)
+            used += extra
+            if index == left:
+                left -= 1
+            elif index == right:
+                right += 1
+
+        if len(chosen) == 1 and len(lines[middle]) > limit:
+            line = lines[middle]
+            start = max(0, (len(line) - limit) // 2)
+            end = min(len(line), start + limit)
+            if start > 0:
+                next_space = line.find(" ", start)
+                if next_space != -1 and next_space < end:
+                    start = next_space + 1
+            if end < len(line):
+                prev_space = line.rfind(" ", start, end)
+                if prev_space > start:
+                    end = prev_space
+            return line[start:end].strip()
+
+        return "\n".join(lines[index] for index in sorted(chosen))
 
     @staticmethod
     def _dedupe(chunks: list[TextChunk]) -> list[TextChunk]:

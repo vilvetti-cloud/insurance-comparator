@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import unittest
 
+from unittest.mock import Mock, patch
+
 from collector.deterministic import DeterministicCascoExtractor
-from collector.relevance import TextChunk
+from collector.llm import GroqExtractor, LLMExtractionError
+from collector.relevance import RelevanceSelector, TextChunk
 
 
 class DeterministicCascoExtractorTests(unittest.TestCase):
@@ -105,6 +108,65 @@ class DeterministicCascoExtractorTests(unittest.TestCase):
             ]
         })
         self.assertNotIn("tow_truck", result)
+
+    def test_relevance_budget_trim_keeps_complete_lines(self) -> None:
+        selector = RelevanceSelector()
+        grouped = {
+            "repair_type": [
+                TextChunk(
+                    "Первая длинная строка про общие условия страхования.\n"
+                    "Форма страхового возмещения осуществляется путем направления ТС на ремонт на СТОА страховщика.\n"
+                    "Последняя длинная строка про дополнительные положения договора.",
+                    page_number=8,
+                    score=20,
+                )
+            ]
+        }
+        trimmed = selector._fit_budget(grouped, max_total_chars=110)["repair_type"][0].text
+        self.assertFalse(trimmed.startswith("ния "))
+        self.assertIn("СТОА", trimmed)
+        self.assertNotIn("\n", trimmed)
+
+    @patch("collector.llm.requests.post")
+    def test_groq_429_fails_fast_and_opens_circuit(self, post: Mock) -> None:
+        response = Mock()
+        response.status_code = 429
+        response.headers = {"retry-after": "325", "x-ratelimit-reset-tokens": "1ms"}
+        post.return_value = response
+
+        extractor = GroqExtractor(
+            api_key="test",
+            retries=2,
+            min_request_interval=0,
+        )
+        chunks = {
+            "gap": [
+                TextChunk(
+                    "GAP покрывает разницу стоимости автомобиля при полной гибели.",
+                    page_number=1,
+                )
+            ]
+        }
+
+        with self.assertRaises(LLMExtractionError):
+            extractor.extract_fields(
+                company_name="Тест",
+                source_url="https://example.test/rules.pdf",
+                source_level=1,
+                grouped_chunks=chunks,
+                field_keys=["gap"],
+            )
+        self.assertEqual(post.call_count, 1)
+
+        with self.assertRaises(LLMExtractionError):
+            extractor.extract_fields(
+                company_name="Тест",
+                source_url="https://example.test/rules.pdf",
+                source_level=1,
+                grouped_chunks=chunks,
+                field_keys=["gap"],
+            )
+        self.assertEqual(post.call_count, 1)
 
 
 if __name__ == "__main__":
