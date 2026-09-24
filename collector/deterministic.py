@@ -277,10 +277,14 @@ class DeterministicCascoExtractor:
         # Typical starts produced by broken PDF line extraction.
         if re.match(
             r"^(?:вышает\b|расценок\b|издели\w*\b|ка\)\b|"
+            r"ния\b|ние\b|ний\b|"
             r"транспортировка\s+для\s+целей\s+эвакуации\b|"
             r"ремонта\s+в\s+конкретн\w*\s+стоа\b)",
             lowered,
         ):
+            return True
+
+        if re.search(r"\b[а-яё]{4,}\s+(?:ся|сь)\b", lowered):
             return True
 
         # A comparison fact should not terminate as an obviously unfinished
