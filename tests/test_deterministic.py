@@ -175,6 +175,45 @@ class DeterministicCascoExtractorTests(unittest.TestCase):
             )
         self.assertEqual(post.call_count, 1)
 
+    def test_context_fallback_reassembles_franchise_lines(self) -> None:
+        result = self.extractor.extract({
+            "franchise": [
+                TextChunk(
+                    "Условно-безусловная франшиза предусматривает уменьшение размера\n"
+                    "страховой выплаты на установленную договором сумму франшизы.",
+                    page_number=9,
+                )
+            ]
+        })
+        self.assertIn("franchise", result)
+        self.assertIn("страховой выплаты", result["franchise"]["quote"])
+
+    def test_context_fallback_reassembles_tow_service(self) -> None:
+        result = self.extractor.extract({
+            "tow_truck": [
+                TextChunk(
+                    "Страховщик возмещает расходы на транспортировку\n"
+                    "(эвакуацию) ТС с места страхового случая до СТОА.",
+                    page_number=14,
+                )
+            ]
+        })
+        self.assertIn("tow_truck", result)
+        self.assertIn("возмещает расходы", result["tow_truck"]["quote"])
+
+    def test_context_fallback_reassembles_self_ignition_risk(self) -> None:
+        result = self.extractor.extract({
+            "self_ignition": [
+                TextChunk(
+                    "По риску «Ущерб» страховым случаем признается пожар вследствие\n"
+                    "самовозгорания ТС или замыкания электропроводки.",
+                    page_number=5,
+                )
+            ]
+        })
+        self.assertIn("self_ignition", result)
+        self.assertIn("страховым случаем", result["self_ignition"]["quote"])
+
 
 if __name__ == "__main__":
     unittest.main()

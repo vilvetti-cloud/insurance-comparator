@@ -88,6 +88,10 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         return has_franchise and has_terms and not looks_clipped
     if field_key == "without_certificates":
         quote_n = " ".join(str(quote or "").lower().split())
+        # A catalog/list that merely names an add-on such as "Выплата без
+        # справок" does not establish what damage can be settled or the limit.
+        if len(re.findall(r"№\s*\d+", quote_n)) >= 3:
+            return False
         has_without = bool(
             re.search(
                 r"без\s+(?:(?:предоставлен|предъявлен)\w*\s+)?(?:справ|документ)|упрощ",
@@ -121,6 +125,10 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         return has_risk and has_meaning
     if field_key == "terrorism":
         quote_n = " ".join(str(quote or "").lower().split())
+        # Dot leaders are characteristic of a table of contents / heading and
+        # do not prove whether the risk is covered or excluded.
+        if re.search(r"(?:\.{4,}|…{3,})", quote_n):
+            return False
         has_terror = "террор" in quote_n
         has_meaning = bool(
             re.search(
@@ -172,12 +180,22 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
             quote_n,
         ):
             return False
-        has_repair = bool(re.search(r"ремонт|стоа|дилер|станци\w*\s+тех|денежн\w*\s+(?:форм|выплат|компенсац)", quote_n))
+        has_repair = bool(
+            re.search(
+                r"ремонт|стоа|дилер|станци\w*\s+тех|"
+                r"денежн\w*\s+(?:форм|выплат|компенсац)|"
+                r"калькуляц|по\s+факту\s+ремонт",
+                quote_n,
+            )
+        )
         has_form = bool(
             re.search(
                 r"форма\s+возмещ|направлен\w*\s+на\s+ремонт|"
                 r"возмещени\w*\s+(?:осуществ|производ)|"
+                r"страхов\w*\s+возмещ\w*.*(?:форм|калькуляц|факту\s+ремонт)|"
                 r"выплат\w*\s+(?:производ|осуществ)|"
+                r"одн\w*\s+из\s+следующ\w*\s+форм|"
+                r"по\s+калькуляц|по\s+факту\s+ремонт|"
                 r"ремонт\w*\s+(?:на|в)\s+стоа",
                 quote_n,
             )

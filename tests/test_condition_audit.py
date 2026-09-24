@@ -239,6 +239,30 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_repair_by_calculation_or_actual_repair_is_confirmed(self):
+        result = self.audit(
+            "repair_type",
+            "Выплата в форме ремонта по факту или по калькуляции.",
+            "Страховое возмещение выплачивается в одной из следующих форм: «По калькуляции» или «По факту ремонта».",
+        )
+        self.assertEqual(result.status, "confirmed")
+
+    def test_terrorism_table_of_contents_is_review(self):
+        result = self.audit(
+            "terrorism",
+            "Терроризм исключён.",
+            "Оговорка об исключении войны, гражданской войны и терроризма…………………………",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_numbered_without_certificates_catalog_is_review(self):
+        result = self.audit(
+            "without_certificates",
+            "Выплата без справок.",
+            "№1 Аварийный комиссар, №2 Сбор документов, №5 Повреждение колес, №12 Выплата без справок.",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()

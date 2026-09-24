@@ -206,9 +206,99 @@ class DeterministicCascoExtractor:
                 if best is None or score > best[0]:
                     best = (score, sentence)
 
-        if best is None or best[0] < 20:
-            return None
-        return best[1]
+        if best is not None and best[0] >= 20:
+            return best[1]
+        return self._best_context(
+            chunks,
+            required=required,
+            positive=positive,
+            negative=negative,
+        )
+
+    def _best_context(
+        self,
+        chunks: list[TextChunk],
+        *,
+        required: tuple[str, ...],
+        positive: tuple[str, ...] = (),
+        negative: tuple[str, ...] = (),
+    ) -> EvidenceSentence | None:
+        """Recover facts split across adjacent PDF lines.
+
+        This runs only after isolated sentences fail. It joins at most one line
+        on either side of the matching line, repairs common PDF word splits,
+        and still requires the same field-specific positive/negative signals.
+        """
+        best: tuple[int, EvidenceSentence] | None = None
+        for chunk in chunks:
+            raw = chunk.text.replace("\r\n", "\n").replace("\r", "\n")
+            raw = re.sub(
+                r"([А-Яа-яЁё])-\s*\n\s*([А-Яа-яЁё])",
+                r"\1\2",
+                raw,
+            )
+            lines = [
+                self._clean(line)
+                for line in raw.split("\n")
+                if self._clean(line)
+            ]
+            for index, line in enumerate(lines):
+                lowered_line = line.lower()
+                if not any(
+                    re.search(pattern, lowered_line, re.IGNORECASE)
+                    for pattern in required
+                ):
+                    continue
+
+                start = max(0, index - 1)
+                end = min(len(lines), index + 2)
+                candidate = self._clean(" ".join(lines[start:end]))
+                candidate = re.sub(
+                    r"\b([а-яё]{4,})\s+(ся|сь)\b",
+                    r"\1\2",
+                    candidate,
+                    flags=re.IGNORECASE,
+                )
+                if len(candidate) > 520:
+                    match = next(
+                        (
+                            re.search(pattern, candidate, re.IGNORECASE)
+                            for pattern in required
+                            if re.search(pattern, candidate, re.IGNORECASE)
+                        ),
+                        None,
+                    )
+                    if match is None:
+                        continue
+                    candidate = self._quote_around(
+                        candidate,
+                        match.start(),
+                        match.end(),
+                        radius=220,
+                    )
+
+                lowered = candidate.lower()
+                positive_hits = sum(
+                    1
+                    for pattern in positive
+                    if re.search(pattern, lowered, re.IGNORECASE)
+                )
+                if positive and positive_hits == 0:
+                    continue
+                if any(
+                    re.search(pattern, lowered, re.IGNORECASE)
+                    for pattern in negative
+                ):
+                    continue
+                if len(candidate) < 45:
+                    continue
+
+                score = 18 + positive_hits * 4
+                evidence = EvidenceSentence(candidate, chunk.page_number)
+                if best is None or score > best[0]:
+                    best = (score, evidence)
+
+        return best[1] if best is not None else None
 
     def _sentences(self, chunk: TextChunk) -> list[EvidenceSentence]:
         # Preserve structural line breaks. HTML extraction often contains
@@ -296,6 +386,15 @@ class DeterministicCascoExtractor:
 
         # Hyphenated word cut off at the end of a PDF line.
         if re.search(r"[а-яё]{3,}-$", lowered):
+            return True
+
+        # Short clauses without a closing boundary are usually one physical PDF
+        # line from a sentence that continues on the next line. Let the
+        # contextual fallback reassemble them instead of persisting the clip.
+        if len(normalized) < 180 and not re.search(
+            r"[.!?;:%»”\)\]]$",
+            normalized,
+        ):
             return True
 
         # Very short fragments are usually headings/definitions, not conditions.
