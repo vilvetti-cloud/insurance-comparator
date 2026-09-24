@@ -30,9 +30,6 @@ def main() -> int:
     if not os.getenv("DATABASE_URL"):
         print("DATABASE_URL is not configured", file=sys.stderr)
         return 2
-    if not os.getenv("GROQ_API_KEY"):
-        print("GROQ_API_KEY is not configured", file=sys.stderr)
-        return 2
 
     if not init_db():
         print("Database schema initialization failed", file=sys.stderr)
