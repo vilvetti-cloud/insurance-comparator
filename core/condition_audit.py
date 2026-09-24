@@ -104,6 +104,12 @@ def audit_condition(
             "Подтверждающий фрагмент не доказывает именно этот параметр сравнения.",
         )
 
+    if source_type == "official_snapshot":
+        return _result(
+            "review",
+            "Snapshot содержит подготовленный пересказ, а не прямую цитату из первоисточника; требуется подтверждение исходным документом.",
+        )
+
     alignment_issue = semantic_alignment_issue(field_key, value, quote)
     if alignment_issue:
         return _result("review", alignment_issue)
