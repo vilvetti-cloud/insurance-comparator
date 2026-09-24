@@ -73,6 +73,39 @@ class DeterministicCascoExtractorTests(unittest.TestCase):
         })
         self.assertNotIn("terrorism", result)
 
+    def test_clipped_franchise_fragment_is_rejected(self) -> None:
+        result = self.extractor.extract({
+            "franchise": [
+                TextChunk(
+                    "вышает размер франшизы) и безусловной размер страховой выплаты определяется",
+                    page_number=7,
+                )
+            ]
+        })
+        self.assertNotIn("franchise", result)
+
+    def test_clipped_repair_fragment_is_rejected(self) -> None:
+        result = self.extractor.extract({
+            "repair_type": [
+                TextChunk(
+                    "расценок СТОА, с которой у Страховщика заключен договор и на которой будет производиться",
+                    page_number=11,
+                )
+            ]
+        })
+        self.assertNotIn("repair_type", result)
+
+    def test_clipped_tow_fragment_is_rejected(self) -> None:
+        result = self.extractor.extract({
+            "tow_truck": [
+                TextChunk(
+                    "транспортировка для целей эвакуации),",
+                    page_number=4,
+                )
+            ]
+        })
+        self.assertNotIn("tow_truck", result)
+
 
 if __name__ == "__main__":
     unittest.main()
