@@ -81,6 +81,15 @@ def audit_condition(
     if mismatch:
         return _result("review", mismatch)
 
+    # Snapshots are synthesized summaries, not verbatim primary-source
+    # evidence. Keep them visible for diagnostics but never count them as a
+    # reportable fact until the underlying document/page is captured directly.
+    if source_type == "official_snapshot":
+        return _result(
+            "review",
+            "Snapshot содержит подготовленный пересказ без прямой цитаты из первоисточника; требуется подтверждение исходным документом.",
+        )
+
     # Contract/program-specific statements are useful for completeness, but
     # they must never be promoted to a comparative sales advantage.
     if _CONDITIONAL_RE.search(text):
@@ -102,12 +111,6 @@ def audit_condition(
         return _result(
             "review",
             "Подтверждающий фрагмент не доказывает именно этот параметр сравнения.",
-        )
-
-    if source_type == "official_snapshot":
-        return _result(
-            "review",
-            "Snapshot содержит подготовленный пересказ, а не прямую цитату из первоисточника; требуется подтверждение исходным документом.",
         )
 
     alignment_issue = semantic_alignment_issue(field_key, value, quote)
