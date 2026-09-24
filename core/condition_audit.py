@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from core.evidence_quality import is_supported_condition
+from core.evidence_quality import is_supported_condition, semantic_alignment_issue
 
 
 @dataclass(frozen=True)
@@ -103,6 +103,10 @@ def audit_condition(
             "review",
             "Подтверждающий фрагмент не доказывает именно этот параметр сравнения.",
         )
+
+    alignment_issue = semantic_alignment_issue(field_key, value, quote)
+    if alignment_issue:
+        return _result("review", alignment_issue)
 
     # Never silently promote a database candidate that is still explicitly
     # marked for review. This was the main reason questionable collector output
