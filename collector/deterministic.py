@@ -195,6 +195,8 @@ class DeterministicCascoExtractor:
                     continue
                 if len(sentence.text) > 520:
                     continue
+                if self._looks_like_fragment(sentence.text):
+                    continue
 
                 score = 20 + positive_hits * 4
 
@@ -262,6 +264,41 @@ class DeterministicCascoExtractor:
             "page": page,
             "notes": "deterministic_official_extraction",
         }
+
+    @staticmethod
+    def _looks_like_fragment(text: str) -> bool:
+        """Reject clipped PDF/list fragments before they become comparison facts."""
+        normalized = " ".join(text.split())
+        lowered = normalized.lower()
+
+        if not normalized:
+            return True
+
+        # Typical starts produced by broken PDF line extraction.
+        if re.match(
+            r"^(?:вышает\b|расценок\b|издели\w*\b|ка\)\b|"
+            r"транспортировка\s+для\s+целей\s+эвакуации\b|"
+            r"ремонта\s+в\s+конкретн\w*\s+стоа\b)",
+            lowered,
+        ):
+            return True
+
+        # A comparison fact should not terminate as an obviously unfinished
+        # clause. Colons are allowed only when followed by actual list content.
+        if normalized.endswith((",", "(", "-", "—")):
+            return True
+        if normalized.endswith(":") and len(normalized) < 260:
+            return True
+
+        # Hyphenated word cut off at the end of a PDF line.
+        if re.search(r"[а-яё]{3,}-$", lowered):
+            return True
+
+        # Very short fragments are usually headings/definitions, not conditions.
+        if len(normalized) < 32:
+            return True
+
+        return False
 
     @staticmethod
     def _clean(text: str) -> str:
