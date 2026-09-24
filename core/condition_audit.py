@@ -112,7 +112,8 @@ def audit_condition(
     raw_same = normalized_value_original.lower() == normalized_quote.lower()
     looks_broken_start = bool(
         re.match(
-            r"^(?:ния|ние|ний|ка|ки|го|ой|ых|их)\b",
+            r"^(?:ния|ние|ний|ка|ки|го|ой|ых|их|случаю|случая|"
+            r"размеру|стоимости)\b|^\(",
             normalized_value_original.lower(),
         )
     )
@@ -123,6 +124,13 @@ def audit_condition(
         normalized_value_original.count("(") != normalized_value_original.count(")")
         or normalized_value_original.count("[") != normalized_value_original.count("]")
     )
+    looks_unfinished_tail = bool(
+        re.search(
+            r"\b(?:размер|по\s+риску|в\s+случае|при\s+условии|"
+            r"страхование\s+по\s+риску|на\s+которой\s+будет\s+производиться)\s*$",
+            normalized_value_original.lower(),
+        )
+    )
     if raw_same and (
         (
             len(normalized_value_original) < 180
@@ -131,6 +139,7 @@ def audit_condition(
         or looks_broken_start
         or looks_broken_suffix
         or has_unbalanced_brackets
+        or looks_unfinished_tail
     ):
         return _result(
             "review",
@@ -169,11 +178,22 @@ def _field_mismatch(
     quote: str | None = None,
 ) -> str | None:
     if field_key == "without_certificates":
-        if re.search(r"угон\w*.*без (?:документ|ключ)|без документов и ключ", text):
-            if not re.search(r"без справ|урегулир|поврежден|стекл|кузовн", text):
+        if re.search(
+            r"угон\w*\s+(?:тс\s+)?без\s+документ\w*\s+и\s+ключ|"
+            r"без\s+документ\w*\s+и\s+ключ\w*",
+            text,
+        ):
+            has_claims_without_certificates = bool(
+                re.search(
+                    r"без\s+справ|без\s+предоставлен\w*\s+документ\w*\s+"
+                    r"(?:компетент|гибдд|полици)|урегулир\w*\s+без\s+справ",
+                    text,
+                )
+            )
+            if not has_claims_without_certificates:
                 return (
-                    "Фрагмент говорит об угоне без документов/ключей, а не об "
-                    "урегулировании повреждений без справок."
+                    "Фрагмент относится к риску «угон ТС без документов/ключей», "
+                    "а не к урегулированию повреждений без справок."
                 )
 
     if field_key == "total_loss":
@@ -264,6 +284,26 @@ def _field_mismatch(
             return (
                 "Упоминание терроризма относится к 115-ФЗ/AML/KYC или идентификации клиента, "
                 "а не к страховому покрытию террористического риска."
+            )
+
+        anti_terror_operation_context = bool(
+            re.search(
+                r"антитеррористическ\w*\s+операц|контртеррористическ\w*\s+операц|"
+                r"территори\w*.*(?:военн|специальн|антитеррористическ|контртеррористическ)\w*\s+операц",
+                quote_text,
+            )
+        )
+        explicit_terror_event = bool(
+            re.search(
+                r"террористическ\w*\s+(?:акт|действ|риск)|"
+                r"ущерб\w*.*террорист|вследствие\s+террорист",
+                quote_text,
+            )
+        )
+        if anti_terror_operation_context and not explicit_terror_event:
+            return (
+                "Фрагмент описывает территориальные ограничения для антитеррористических/"
+                "контртеррористических операций, а не покрытие террористического акта."
             )
 
     if field_key in {"terrorism", "drone", "self_ignition", "tow_truck"}:
