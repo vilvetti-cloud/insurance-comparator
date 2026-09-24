@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# audit revision: snapshot-quarantine-v3
+# audit revision: context-guards-v4
 
 import sys
 from pathlib import Path
