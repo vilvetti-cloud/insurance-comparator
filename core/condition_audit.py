@@ -119,6 +119,10 @@ def audit_condition(
     looks_broken_suffix = bool(
         re.search(r"\b[а-яё]{4,}\s+(?:ся|сь)\b", normalized_value_original.lower())
     )
+    has_unbalanced_brackets = (
+        normalized_value_original.count("(") != normalized_value_original.count(")")
+        or normalized_value_original.count("[") != normalized_value_original.count("]")
+    )
     if raw_same and (
         (
             len(normalized_value_original) < 180
@@ -126,6 +130,7 @@ def audit_condition(
         )
         or looks_broken_start
         or looks_broken_suffix
+        or has_unbalanced_brackets
     ):
         return _result(
             "review",
@@ -238,17 +243,27 @@ def _field_mismatch(
 
     if field_key == "terrorism":
         quote_text = " ".join(str(quote or "").lower().split())
-        if re.search(
-            r"115-фз|115\s*[-–—]?\s*фз|легализац\w*\s*\(отмыван|"
-            r"финансировани\w*\s+терроризм",
-            quote_text,
-        ) and not re.search(
-            r"страхов\w*\s+(?:случ|риск)|покрыв|исключ|ущерб\s+(?:вследствие|от)",
-            quote_text,
-        ):
+        aml_context = bool(
+            re.search(
+                r"115-фз|115\s*[-–—]?\s*фз|легализац\w*\s*\(отмыван|"
+                r"финансировани\w*\s+терроризм|идентификац\w*\s+(?:клиент|страховат)|"
+                r"представля\w*\s+(?:страховщик\w*\s+)?(?:оригинал|копи)\w*\s+документ",
+                quote_text,
+            )
+        )
+        direct_terror_coverage = bool(
+            re.search(
+                r"(?:страхов\w*\s+случ|покрыв|возмещ|исключ|"
+                r"ущерб\s+(?:вследствие|от)|риск\w*\s+террорист)",
+                quote_text,
+            )
+        )
+        # "Оценка страхового риска" in AML/KYC clauses is not evidence that
+        # terrorism itself is an insured risk.
+        if aml_context and not direct_terror_coverage:
             return (
-                "Упоминание терроризма относится к требованиям 115-ФЗ/идентификации клиента, "
-                "а не к страховому покрытию."
+                "Упоминание терроризма относится к 115-ФЗ/AML/KYC или идентификации клиента, "
+                "а не к страховому покрытию террористического риска."
             )
 
     if field_key in {"terrorism", "drone", "self_ignition", "tow_truck"}:
