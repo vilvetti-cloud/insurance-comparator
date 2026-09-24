@@ -54,9 +54,19 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
     )
 
     if field_key == "franchise":
-        has_franchise = "франшиз" in evidence
-        has_terms = bool(re.search(r"безуслов|условн|размер|сумм|руб|%|примен|устанавл", evidence))
-        return has_franchise and has_terms
+        quote_n = " ".join(str(quote or "").lower().split())
+        has_franchise = "франшиз" in quote_n
+        has_terms = bool(re.search(r"безуслов|условн|размер|сумм|руб|%|примен|устанавл|вычет", quote_n))
+        # A clipped fragment like "вышает размер франшизы)" is not a usable
+        # comparison fact even if it contains the keyword.
+        looks_clipped = bool(
+            quote_n
+            and (
+                re.match(r"^(?:вышает|расценок|тс»|страховщиком\b)", quote_n)
+                or quote_n.endswith(("(", ":", ","))
+            )
+        )
+        return has_franchise and has_terms and not looks_clipped
     if field_key == "without_certificates":
         return bool(re.search(r"без\s+(?:справ|документ)|упрощ", evidence))
     if field_key == "gap":
@@ -66,41 +76,74 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         has_threshold = bool(re.search(r"\d+\s*%|процент|превыш|составля|равн", evidence))
         return has_total and has_threshold
     if field_key == "self_ignition":
-        has_risk = bool(re.search(r"самовозгор|возгоран|пожар", evidence))
-        has_meaning = bool(re.search(r"покрыв|страхов\w*\s+(?:случ|риск)|возмещ|включ|исключ|не\s+явля", evidence))
+        quote_n = " ".join(str(quote or "").lower().split())
+        has_risk = bool(re.search(r"самовозгор|возгоран|пожар", quote_n))
+        has_meaning = bool(
+            re.search(
+                r"покрыв|застрахован|страхов\w*\s+(?:случ|риск)|"
+                r"возмещ|включ|исключ|не\s+явля|не\s+покрыв",
+                quote_n,
+            )
+        )
         return has_risk and has_meaning
     if field_key == "terrorism":
-        has_terror = "террор" in evidence
-        has_meaning = bool(re.search(r"покрыв|страхов\w*\s+(?:случ|риск)|возмещ|включ|исключ|не\s+явля|ущерб", evidence))
+        quote_n = " ".join(str(quote or "").lower().split())
+        has_terror = "террор" in quote_n
+        has_meaning = bool(
+            re.search(
+                r"покрыв|застрахован|страхов\w*\s+(?:случ|риск)|"
+                r"возмещ|включ|исключ|не\s+явля|не\s+покрыв|ущерб\s+от",
+                quote_n,
+            )
+        )
         return has_terror and has_meaning
     if field_key == "drone":
         if navigation_noise:
             return False
-        has_drone = bool(re.search(r"бпла|дрон|беспилот", evidence))
+        quote_n = " ".join(str(quote or "").lower().split())
+        has_drone = bool(re.search(r"бпла|дрон|беспилот", quote_n))
+        # Merely naming "падение беспилотного аппарата" is not enough; the
+        # quote must connect it to insured damage/coverage or exclusion.
         has_coverage = bool(
             re.search(
-                r"ущерб|повреж|атак|паден|покрыв|возмещ|исключ|"
-                r"страхов\w*\s+(?:случ|риск)",
-                evidence,
+                r"ущерб|повреж|гибел|покрыв|возмещ|исключ|"
+                r"страхов\w*\s+(?:случ|риск)|не\s+явля",
+                quote_n,
             )
         )
         return has_drone and has_coverage
     if field_key == "tow_truck":
         if testimonial_noise:
             return False
-        has_tow = bool(re.search(r"эвакуатор|эвакуац", evidence))
+        quote_n = " ".join(str(quote or "").lower().split())
+        has_tow = bool(re.search(r"эвакуатор|эвакуац", quote_n))
+        # Definition of evacuation/transportation alone is not a benefit.
         has_service = bool(
             re.search(
-                r"расход|возмещ|оплат|предостав|лимит|услуг|транспортир",
-                evidence,
+                r"расход|возмещ|оплат|компенс|предостав|лимит|"
+                r"услуг|один\s+раз|не\s+более|до\s+\d",
+                quote_n,
             )
         )
         return has_tow and has_service
     if field_key == "repair_type":
-        if re.search(r"уступк|право\s+требован|цесси", evidence):
+        quote_n = " ".join(str(quote or "").lower().split())
+        if re.search(r"уступк|право\s+требован|цесси", quote_n):
             return False
-        has_repair = bool(re.search(r"ремонт|стоа|дилер|станци\w*\s+тех|денежн\w*\s+форм", evidence))
-        has_form = bool(re.search(r"форма|возмещ|направлен|осуществ|выплат|стоа|дилер", evidence))
+        # A definition of an STOA, rates, or documents after repair does not
+        # establish the settlement form.
+        if re.search(r"документ\w*\s+из\s+стоа|расценок\s+стоа|стоа\s+официального\s+дилера\s+[—-]\s+юрид", quote_n):
+            return False
+        has_repair = bool(re.search(r"ремонт|стоа|дилер|станци\w*\s+тех|денежн\w*\s+(?:форм|выплат|компенсац)", quote_n))
+        has_form = bool(
+            re.search(
+                r"форма\s+возмещ|направлен\w*\s+на\s+ремонт|"
+                r"возмещени\w*\s+(?:осуществ|производ)|"
+                r"выплат\w*\s+(?:производ|осуществ)|"
+                r"ремонт\w*\s+(?:на|в)\s+стоа",
+                quote_n,
+            )
+        )
         return has_repair and has_form
     if field_key == "payment_terms":
         if navigation_noise:
