@@ -68,7 +68,16 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         )
         return has_franchise and has_terms and not looks_clipped
     if field_key == "without_certificates":
-        return bool(re.search(r"без\s+(?:справ|документ)|упрощ", evidence))
+        quote_n = " ".join(str(quote or "").lower().split())
+        has_without = bool(re.search(r"без\s+(?:справ|документ)|упрощ", quote_n))
+        has_scope = bool(
+            re.search(
+                r"урегулир|поврежд|стекл|кузов|элемент|выплат|"
+                r"страхов\w*\s+случ|не\s+более|\d+\s*(?:раз|руб|%)",
+                quote_n,
+            )
+        )
+        return has_without and has_scope
     if field_key == "gap":
         return bool(re.search(r"\bgap\b|гэп|сохран\w*\s+стоим", evidence))
     if field_key == "total_loss":
@@ -192,6 +201,19 @@ def semantic_alignment_issue(
             return (
                 "В сохранённом значении есть число, которого нет в подтверждающей "
                 f"цитате: {', '.join(sorted(unsupported))}."
+            )
+
+    if field_key == "franchise":
+        franchise_terms = [
+            "безуслов", "условн", "условно-безуслов", "прогрессив",
+            "динамич", "временн", "льготн",
+        ]
+        claimed = [term for term in franchise_terms if term in value_n]
+        missing_terms = [term for term in claimed if term not in quote_n]
+        if missing_terms:
+            return (
+                "Значение добавляет типы франшизы, которых нет в подтверждающей "
+                "цитате: " + ", ".join(missing_terms) + "."
             )
 
     if field_key == "total_loss":
