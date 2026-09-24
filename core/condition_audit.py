@@ -107,6 +107,18 @@ def audit_condition(
             "Нет сохранённого подтверждающего фрагмента источника.",
         )
 
+    normalized_quote = " ".join(str(quote).strip().split())
+    normalized_value_original = " ".join(str(value).strip().split())
+    if (
+        normalized_value_original.lower() == normalized_quote.lower()
+        and len(normalized_value_original) < 180
+        and not re.search(r"[.!?;:%»”\)\]]$", normalized_value_original)
+    ):
+        return _result(
+            "review",
+            "Сохранён сырой обрывок источника, а не сформулированное условие для сравнения.",
+        )
+
     if not is_supported_condition(field_key, value, quote):
         return _result(
             "review",
@@ -202,11 +214,15 @@ def _field_mismatch(field_key: str, value: str, text: str) -> str | None:
                 )
 
     if field_key == "terrorism":
+        quote_text = " ".join(str(quote or "").lower().split())
         if re.search(
             r"115-фз|115\s*[-–—]?\s*фз|легализац\w*\s*\(отмыван|"
             r"финансировани\w*\s+терроризм",
-            text,
-        ) and not re.search(r"страхов\w*\s+(?:случ|риск)|покрыв|исключ|ущерб\s+от", text):
+            quote_text,
+        ) and not re.search(
+            r"страхов\w*\s+(?:случ|риск)|покрыв|исключ|ущерб\s+(?:вследствие|от)",
+            quote_text,
+        ):
             return (
                 "Упоминание терроризма относится к требованиям 115-ФЗ/идентификации клиента, "
                 "а не к страховому покрытию."
