@@ -1,5 +1,7 @@
 name: Daily CASCO collection
 
+# quality-revision: evidence-boundaries-v2
+
 on:
   push:
     branches:
