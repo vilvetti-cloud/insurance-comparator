@@ -188,7 +188,10 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
             return False
         has_days = bool(
             re.search(
-                r"\d+\s*(?:(?:рабоч|календарн)\w*\s+)?дн|срок\w*.*\d+",
+                r"(?:\d+|одн\w*|дв\w*|тр\w*|четыр\w*|пят\w*|шест\w*|сем\w*|"
+                r"восем\w*|девят\w*|десят\w*|пятнадцат\w*|двадцат\w*|"
+                r"тридцат\w*|сорок\w*|сорока\w*|шестидесят\w*)\s*"
+                r"(?:(?:рабоч|календарн)\w*\s+)?дн|срок\w*.*\d+",
                 evidence,
             )
         )
