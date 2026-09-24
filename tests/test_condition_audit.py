@@ -303,6 +303,22 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_clipped_tow_truck_sentence_is_rejected(self):
+        result = self.audit(
+            "tow_truck",
+            "целях уменьшения ущерба обязан обратиться в диспетчерскую службу для предоставления услуг эвакуатора, а Страховщик",
+            "целях уменьшения ущерба обязан обратиться в диспетчерскую службу для предоставления услуг эвакуатора, а Страховщик",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_gap_value_cannot_add_unsupported_scenarios(self):
+        result = self.audit(
+            "gap",
+            "GAP покрывает утрату и полную гибель автомобиля без амортизации.",
+            "Приложение №4. Страхование риска GAP.",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
