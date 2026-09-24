@@ -215,6 +215,22 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_reso_without_documents_wording_is_supported(self):
+        result = self.audit(
+            "without_certificates",
+            "Можно урегулировать без справок при повреждении остекления кузова и одного наружного элемента.",
+            "обратиться к Страховщику без предоставления документов при повреждении остекления кузова и одного наружного элемента",
+        )
+        self.assertEqual(result.status, "confirmed")
+
+    def test_written_out_thirty_days_is_recognized(self):
+        result = self.audit(
+            "payment_terms",
+            "Срок выплаты не превышает 30 дней.",
+            "Страховая выплата производится в срок, не превышающий тридцати дней.",
+        )
+        self.assertEqual(result.status, "confirmed")
+
 
 if __name__ == "__main__":
     unittest.main()
