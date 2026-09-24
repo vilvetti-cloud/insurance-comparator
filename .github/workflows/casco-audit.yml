@@ -6,6 +6,12 @@ on:
       - main
     paths:
       - "scripts/audit_casco_values.py"
+      - "collector/deterministic.py"
+      - "core/evidence_quality.py"
+      - "core/condition_audit.py"
+      - "core/services/data_quality_report_service.py"
+      - "tests/test_deterministic.py"
+      - "tests/test_condition_audit.py"
       - ".github/workflows/casco-audit.yml"
   workflow_dispatch:
 
