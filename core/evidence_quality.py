@@ -72,7 +72,7 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         has_without = bool(re.search(r"без\s+(?:справ|документ)|упрощ", quote_n))
         has_scope = bool(
             re.search(
-                r"урегулир|поврежд|стекл|кузов|элемент|выплат|"
+                r"урегулир|поврежд|стекл|кузов|элемент|"
                 r"страхов\w*\s+случ|не\s+более|\d+\s*(?:раз|руб|%)",
                 quote_n,
             )
