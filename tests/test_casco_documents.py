@@ -42,6 +42,22 @@ class EvidenceTests(unittest.TestCase):
     def test_changed_percentage(self):
         self.assertFalse(self.validate(dict(FACT, value=FACT["value"].replace("75%", "80%"))).passed)
 
+    def test_reversed_threshold(self):
+        fact = dict(FACT, value=FACT["value"].replace("превышает", "не превышает"))
+        self.assertFalse(self.validate(fact).passed)
+
+    def test_franchise_negative_cannot_match_positive_quote(self):
+        quote = "5.1. Безусловная франшиза применяется в размере 5% страховой суммы."
+        fact = dict(value="Безусловная франшиза не применяется.", exact_quote=quote, page=1, section="5.1.")
+        self.assertFalse(validate_fact("franchise", fact, ParsedDocument({1: quote}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf").passed)
+
+    def test_omitted_optional_agreement(self):
+        quote = "5.1. Эвакуация оплачивается по дополнительному соглашению."
+        fact = dict(value="Эвакуация оплачивается.", exact_quote=quote, page=1, section="5.1.")
+        self.assertFalse(validate_fact("tow_truck", fact, ParsedDocument({1: quote}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf").passed)
+
     def test_wrong_section(self):
         self.assertFalse(self.validate(dict(FACT, section="19.1.")).passed)
 
