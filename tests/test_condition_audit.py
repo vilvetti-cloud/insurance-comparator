@@ -263,6 +263,22 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_aml_terrorism_reference_is_not_coverage(self):
+        result = self.audit(
+            "terrorism",
+            "Финансирование терроризма упоминается в правилах.",
+            "Для оценки страхового риска и идентификации Страхователя в соответствии с 115-ФЗ о противодействии легализации доходов и финансированию терроризма Страхователь представляет копии документов.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_unbalanced_franchise_fragment_is_rejected(self):
+        result = self.audit(
+            "franchise",
+            "Франшиза может быть условной (Страховщик освобождается от возмещения убытка и безусловной (размер",
+            "Франшиза может быть условной (Страховщик освобождается от возмещения убытка и безусловной (размер",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
