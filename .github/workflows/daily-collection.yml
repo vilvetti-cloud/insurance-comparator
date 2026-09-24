@@ -104,5 +104,8 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
 
+      - name: Audit all 110 CASCO facts
+        run: python scripts/qa_casco_facts.py
+
       - name: Validate all directed comparisons
         run: python scripts/qa_comparisons.py --fail-on-errors
