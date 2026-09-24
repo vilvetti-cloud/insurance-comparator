@@ -292,6 +292,10 @@ class DeterministicCascoExtractor:
                     continue
                 if len(candidate) < 45:
                     continue
+                # Never let the fallback re-accept the same clipped/OCR line
+                # that the primary sentence pass deliberately rejected.
+                if self._looks_like_fragment(candidate):
+                    continue
 
                 score = 18 + positive_hits * 4
                 evidence = EvidenceSentence(candidate, chunk.page_number)
