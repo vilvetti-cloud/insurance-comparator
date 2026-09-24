@@ -279,6 +279,30 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_ingos_ugon_without_documents_is_not_without_certificates(self):
+        result = self.audit(
+            "without_certificates",
+            "Угон ТС без документов и ключей",
+            "9.1. Угон ТС без документов и ключей — утрата ТС в результате кражи.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_anti_terror_operation_territory_is_not_terrorism_coverage(self):
+        result = self.audit(
+            "terrorism",
+            "Территория РФ за исключением зон антитеррористических операций.",
+            "Территория страхования — РФ, за исключением зон военных действий и антитеррористических операций.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_fragment_starting_with_case_form_is_rejected(self):
+        result = self.audit(
+            "franchise",
+            "случаю на размер установленной франшизы.",
+            "случаю на размер установленной франшизы.",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
