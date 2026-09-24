@@ -108,6 +108,31 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         return has_without and has_scope
     if field_key == "gap":
         return bool(re.search(r"\bgap\b|гэп|сохран\w*\s+стоим", evidence))
+    if field_key == "gap":
+        # Do not let the summarized value add GAP scenarios that are absent
+        # from the captured evidence. A heading can prove GAP exists, but not
+        # detailed coverage mechanics.
+        claim_terms = {
+            "утрат": r"утрат",
+            "уничтож": r"уничтож",
+            "гибел": r"гибел",
+            "хищен": r"хищен",
+            "ущерб": r"ущерб",
+            "стоим": r"стоим",
+            "амортиз": r"амортиз",
+        }
+        unsupported_terms = [
+            label
+            for label, pattern in claim_terms.items()
+            if re.search(pattern, value_n) and not re.search(pattern, quote_n)
+        ]
+        if unsupported_terms:
+            return (
+                "Значение GAP добавляет детали, которых нет в подтверждающей цитате: "
+                + ", ".join(unsupported_terms)
+                + "."
+            )
+
     if field_key == "total_loss":
         has_total = bool(re.search(r"тотал|полная\s+гибел|конструктив\w*\s+гибел", evidence))
         has_threshold = bool(re.search(r"\d+\s*%|процент|превыш|составля|равн", evidence))
