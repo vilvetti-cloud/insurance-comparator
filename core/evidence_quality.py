@@ -3,6 +3,25 @@ from __future__ import annotations
 import re
 
 
+NUMBER_WORD_VALUES = {
+    "одн": "1",
+    "дв": "2",
+    "тр": "3",
+    "четыр": "4",
+    "пят": "5",
+    "шест": "6",
+    "сем": "7",
+    "восем": "8",
+    "девят": "9",
+    "десят": "10",
+    "пятнадцат": "15",
+    "двадцат": "20",
+    "тридцат": "30",
+    "сорок": "40",
+    "сорока": "40",
+    "шестидесят": "60",
+}
+
 GENERIC_VALUES = {
     "каско",
     "страхование",
@@ -69,7 +88,12 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         return has_franchise and has_terms and not looks_clipped
     if field_key == "without_certificates":
         quote_n = " ".join(str(quote or "").lower().split())
-        has_without = bool(re.search(r"без\s+(?:справ|документ)|упрощ", quote_n))
+        has_without = bool(
+            re.search(
+                r"без\s+(?:(?:предоставлен|предъявлен)\w*\s+)?(?:справ|документ)|упрощ",
+                quote_n,
+            )
+        )
         has_scope = bool(
             re.search(
                 r"урегулир|поврежд|стекл|кузов|элемент|"
@@ -201,6 +225,9 @@ def semantic_alignment_issue(
     if field_key in {"total_loss", "payment_terms", "tow_truck", "franchise"}:
         value_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", value_n))
         quote_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", quote_n))
+        for stem, numeric in NUMBER_WORD_VALUES.items():
+            if re.search(rf"\b{stem}[а-яё]*\b", quote_n):
+                quote_numbers.add(numeric)
         unsupported = value_numbers - quote_numbers
         if unsupported:
             return (
