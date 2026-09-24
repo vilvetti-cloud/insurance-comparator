@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# audit revision: context-guards-v4
+# audit revision: clipped-fragments-v5
 
 import sys
 from pathlib import Path
