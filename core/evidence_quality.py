@@ -141,7 +141,12 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
             return False
         # A definition of an STOA, rates, or documents after repair does not
         # establish the settlement form.
-        if re.search(r"документ\w*\s+из\s+стоа|расценок\s+стоа|стоа\s+официального\s+дилера\s+[—-]\s+юрид", quote_n):
+        if re.search(
+            r"документ\w*\s+из\s+стоа|расценок\s+стоа|"
+            r"стоа\s+официального\s+дилера\s+[—-]\s+юрид|"
+            r"издели\w*\s*\(|детал\w*|узл\w*|агрегат\w*|подлежащ\w*\s+замен",
+            quote_n,
+        ):
             return False
         has_repair = bool(re.search(r"ремонт|стоа|дилер|станци\w*\s+тех|денежн\w*\s+(?:форм|выплат|компенсац)", quote_n))
         has_form = bool(
