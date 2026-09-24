@@ -167,6 +167,38 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_terrorism_aml_context_is_review(self):
+        result = self.audit(
+            "terrorism",
+            "Упоминается терроризм.",
+            "Федеральный закон №115-ФЗ о противодействии легализации доходов и финансированию терроризма.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_fire_documents_do_not_prove_self_ignition(self):
+        result = self.audit(
+            "self_ignition",
+            "Пожар покрывается.",
+            "При наступлении страхового случая по риску «Пожар, взрыв» предоставляется постановление органа.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_policyholder_deadline_not_payment_term(self):
+        result = self.audit(
+            "payment_terms",
+            "Страхователь обязан предоставить объяснения в течение 3 дней.",
+            "Страхователь обязан предоставить объяснения в течение 3 дней.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_repair_parts_fragment_not_repair_type(self):
+        result = self.audit(
+            "repair_type",
+            "детали, подлежащие замене при восстановительном ремонте на СТОА",
+            "изделий (деталей, узлов и агрегатов), подлежащих замене при восстановительном ремонте на СТОА",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
