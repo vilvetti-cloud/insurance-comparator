@@ -113,7 +113,7 @@ def audit_condition(
     looks_broken_start = bool(
         re.match(
             r"^(?:ния|ние|ний|ка|ки|го|ой|ых|их|случаю|случая|"
-            r"размеру|стоимости)\b|^\(",
+            r"размеру|стоимости|целях|быть\s+застрахован)\b|^\(",
             normalized_value_original.lower(),
         )
     )
@@ -127,7 +127,8 @@ def audit_condition(
     looks_unfinished_tail = bool(
         re.search(
             r"\b(?:размер|по\s+риску|в\s+случае|при\s+условии|"
-            r"страхование\s+по\s+риску|на\s+которой\s+будет\s+производиться)\s*$",
+            r"страхование\s+по\s+риску|на\s+которой\s+будет\s+производиться|"
+            r"а\s+страховщик)\s*$",
             normalized_value_original.lower(),
         )
     )
