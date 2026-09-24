@@ -199,6 +199,22 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_aml_quote_stays_review_even_if_value_mentions_insurance_risk(self):
+        result = self.audit(
+            "terrorism",
+            "Страховой риск терроризма подтверждён.",
+            "Федеральный закон №115-ФЗ о противодействии легализации доходов и финансированию терроризма.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_clipped_raw_fragment_is_review(self):
+        result = self.audit(
+            "franchise",
+            "При установлении безусловной франшизы размер страховой выплаты по каждому страховому",
+            "При установлении безусловной франшизы размер страховой выплаты по каждому страховому",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
