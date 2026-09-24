@@ -114,6 +114,30 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_tow_truck_definition_only_is_review(self):
+        result = self.audit(
+            "tow_truck",
+            "транспортировка для целей эвакуации",
+            "транспортировка для целей эвакуации",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_terrorism_heading_only_is_review(self):
+        result = self.audit(
+            "terrorism",
+            "Террористические действия исключены из покрытия",
+            "Террористические действия",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_repair_documents_are_not_repair_type(self):
+        result = self.audit(
+            "repair_type",
+            "документы из СТОА, подтверждающие проведение ремонта",
+            "документы из СТОА, подтверждающие проведение ремонта",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
