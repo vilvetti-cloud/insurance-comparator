@@ -77,7 +77,7 @@ def audit_condition(
         except (TypeError, ValueError):
             return _result("review", "Некорректное значение confidence.")
 
-    mismatch = _field_mismatch(field_key, normalized_value, text)
+    mismatch = _field_mismatch(field_key, normalized_value, text, quote)
     if mismatch:
         return _result("review", mismatch)
 
@@ -144,7 +144,12 @@ def audit_condition(
     )
 
 
-def _field_mismatch(field_key: str, value: str, text: str) -> str | None:
+def _field_mismatch(
+    field_key: str,
+    value: str,
+    text: str,
+    quote: str | None = None,
+) -> str | None:
     if field_key == "without_certificates":
         if re.search(r"угон\w*.*без (?:документ|ключ)|без документов и ключ", text):
             if not re.search(r"без справ|урегулир|поврежден|стекл|кузовн", text):
