@@ -2,9 +2,39 @@
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from .base import BaseRepository
+from core.condition_audit import audit_condition
 
 
 class CascoRevisionRepository(BaseRepository):
+    def quarantine_legacy_snapshots(self, company_id, snapshots):
+        """Retain historical hints outside active cards; preserve real page evidence."""
+        signatures = {(s.field_key, s.value, s.evidence) for s in snapshots}
+        with self.connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """SELECT c.id,c.value,f.field_key,s.source_type,
+                              e.text_fragment,e.document_id,e.page_number
+                       FROM conditions c JOIN comparison_fields f ON f.id=c.field_id
+                       JOIN products p ON p.id=f.product_id
+                       LEFT JOIN sources s ON s.id=c.source_id
+                       LEFT JOIN LATERAL (
+                         SELECT * FROM evidence WHERE condition_id=c.id ORDER BY id DESC LIMIT 1
+                       ) e ON TRUE
+                       WHERE p.company_id=%s AND p.product_type='casco' AND c.status='active'
+                       FOR UPDATE OF c""", (company_id,))
+                for row in cur.fetchall():
+                    if row["document_id"] is not None or row["page_number"] is not None:
+                        continue
+                    known = (row["field_key"], row["value"], row["text_fragment"]) in signatures
+                    if row["source_type"] == "official_snapshot" or known:
+                        cur.execute("UPDATE conditions SET status='diagnostic' WHERE id=%s", (row["id"],))
+                        cur.execute(
+                            """INSERT INTO change_log(entity_type,entity_id,field_name,
+                               old_value,new_value,reason)
+                               VALUES ('condition',%s,'status','active','diagnostic','snapshot_is_not_evidence')""",
+                            (row["id"],))
+
+
     def completed(self, source_id: int, checksum: str) -> bool:
         row = self.fetch_one(
             "SELECT r.status FROM casco_document_revisions r JOIN sources s ON s.id=r.source_id "
@@ -58,8 +88,8 @@ class CascoRevisionRepository(BaseRepository):
                     if not verdict.passed:
                         continue
                     cur.execute(
-                        """SELECT c.*, e.document_id, e.page_number, e.text_fragment
-                           FROM conditions c LEFT JOIN LATERAL
+                        """SELECT c.*, s.source_type, e.document_id, e.page_number, e.text_fragment
+                           FROM conditions c LEFT JOIN sources s ON s.id=c.source_id LEFT JOIN LATERAL
                              (SELECT * FROM evidence WHERE condition_id=c.id ORDER BY id DESC LIMIT 1) e ON TRUE
                            WHERE c.field_id=%s AND c.status='active'
                            ORDER BY c.source_level NULLS LAST,c.id DESC""",
@@ -70,6 +100,10 @@ class CascoRevisionRepository(BaseRepository):
                     # with different values require review rather than last-write-wins.
                     conflict = any(
                         row.get("verification_status") == "verified"
+                        and audit_condition(key, row.get("value"), row.get("text_fragment"),
+                            source_level=row.get("source_level"), source_type=row.get("source_type"),
+                            confidence=float(row["confidence"]) if row.get("confidence") is not None else None,
+                            verification_status=row.get("verification_status")).status in {"confirmed", "conditional"}
                         and row.get("source_id") != source["id"]
                         and (row.get("source_level") or 4) <= source["source_level"]
                         and row.get("value") != fact["value"]

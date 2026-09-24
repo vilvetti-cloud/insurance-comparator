@@ -35,8 +35,10 @@ live in casco_review_candidates, never in the active conditions. Old conditions
 and evidence are archived on a successful replacement. Conflicting equal/stronger
 sources are retained for review instead of overwriting one another. Existing
 legacy snapshots are not promoted; the snapshot module is diagnostic data only
-and is absent from the daily path. This additive migration does not relabel
-existing verified values.
+and is absent from the daily path. Historical snapshot-only conditions are moved idempotently to diagnostic status.
+This also recognizes exact known snapshot value/quote pairs after legacy shared
+source metadata changes. Conditions with real document/page evidence are preserved.
+A change-log entry records each quarantine; no row is deleted.
 
 The sources.casco_analyzed_checksum marker is written only when analysis completes,
 separately from the latest downloaded checksum. Degraded runs cannot poison the
@@ -59,7 +61,7 @@ after fixing extraction/validation.
   Search snippets never become evidence. 403/429/timeouts do not trigger search.
 
 Database setup uses CREATE TABLE / ADD COLUMN IF NOT EXISTS. Migration runs on
-the normal init_db path. Production data is not deleted or bulk reclassified.
+the normal init_db path. Production data is not deleted. Only identifiable synthetic snapshot hints are quarantined.
 Docling remains out of requirements.txt and the web deployment.
 
 ## Validation

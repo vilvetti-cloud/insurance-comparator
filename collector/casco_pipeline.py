@@ -48,6 +48,10 @@ class CascoCollectionPipeline:
             slug="casco", product_type="casco")
         fields = {f["key"]: self.fields.upsert(product_id=product["id"], field_key=f["key"],
             label=f["label"], category=f["category"], sort_order=f["sort_order"]) for f in KASKO_FIELDS}
+        # Idempotent quarantine of historical synthetic hints; not extraction.
+        from collector.official_snapshots import OfficialSnapshotProvider
+        self.revisions.quarantine_legacy_snapshots(company["id"],
+            OfficialSnapshotProvider().get(insurer.slug, FIELD_KEYS))
         return company, fields
 
     def checksum_check(self, *, directory: Path, insurer_slugs=None, track_run=False):

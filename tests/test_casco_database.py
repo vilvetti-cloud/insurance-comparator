@@ -60,6 +60,36 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["value"], "75%")
         self.assertTrue(self.repo.completed(self.source["id"], "a"))
 
+    def test_snapshot_quarantine_is_idempotent_and_preserves_page_evidence(self):
+        from collector.official_snapshots import OfficialSnapshot
+        with self.repo.connection() as conn:
+            with conn.cursor() as c:
+                c.execute("INSERT INTO conditions(field_id,source_id,value,source_level,verification_status) VALUES (%s,%s,'synthetic hint',1,'verified') RETURNING id", (self.field, self.source["id"]))
+                hint_id = c.fetchone()[0]
+                c.execute("INSERT INTO evidence(condition_id,text_fragment) VALUES (%s,'synthetic hint')", (hint_id,))
+        signature = OfficialSnapshot("total_loss", "synthetic hint", "https://reso.ru/test.pdf", "test", evidence="synthetic hint")
+        self.repo.quarantine_legacy_snapshots(self.company, [signature])
+        self.repo.quarantine_legacy_snapshots(self.company, [signature])
+        row = self.repo.fetch_one("SELECT status FROM conditions WHERE id=%s", (hint_id,))
+        self.assertEqual(row["status"], "diagnostic")
+        changes = self.repo.fetch_all("SELECT * FROM change_log WHERE entity_id=%s AND reason='snapshot_is_not_evidence'", (hint_id,))
+        self.assertEqual(len(changes), 1)
+        self.publish("synthetic hint", "a")
+        self.repo.quarantine_legacy_snapshots(self.company, [signature])
+        active = self.repo.fetch_one("SELECT value FROM conditions WHERE field_id=%s AND status='active'", (self.field,))
+        self.assertEqual(active["value"], "synthetic hint")
+
+    def test_verified_snapshot_cannot_block_direct_pass(self):
+        with self.repo.connection() as conn:
+            with conn.cursor() as c:
+                c.execute("INSERT INTO sources(company_id,url,source_type,source_level) VALUES (%s,'https://reso.ru/snapshot','official_snapshot',1) RETURNING id", (self.company,))
+                snapshot = c.fetchone()[0]
+                c.execute("INSERT INTO conditions(field_id,source_id,value,source_level,verification_status) VALUES (%s,%s,'snapshot',1,'verified')", (self.field, snapshot))
+        self.publish("75%", "a")
+        row = self.repo.fetch_one("SELECT value,source_id FROM conditions WHERE field_id=%s AND status='active'", (self.field,))
+        self.assertEqual(row["value"], "75%")
+        self.assertEqual(row["source_id"], self.source["id"])
+
     def test_stale_analysis_does_not_overwrite_newer_source(self):
         self.publish("75%", "a")
         self.repo.execute("UPDATE sources SET checksum='newer' WHERE id=%s", (self.source["id"],))

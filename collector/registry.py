@@ -62,7 +62,7 @@ INSURERS = (
         "Согласие",
         "https://www.soglasie.ru/",
         "https://www.soglasie.ru/individuals/avto/kasko/",
-        "https://api.soglasie.ru/storage/media/originals/61200/c875ad94-8cb7-428b-9ed3-fe7dec1e663d.pdf",
+        "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/Правила%20страхования.pdf",
         official_doc_urls=(
             "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
         ),
