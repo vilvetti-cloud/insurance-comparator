@@ -209,3 +209,31 @@ CREATE INDEX IF NOT EXISTS idx_change_log_entity ON change_log(entity_type, enti
 CREATE INDEX IF NOT EXISTS idx_collection_items_run ON collection_items(run_id);
 CREATE INDEX IF NOT EXISTS idx_collection_items_company ON collection_items(company_id);
 
+
+-- Additive, repeatable CASCO document pipeline migration.
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS casco_analyzed_checksum TEXT;
+ALTER TABLE evidence ADD COLUMN IF NOT EXISTS section TEXT;
+ALTER TABLE evidence ADD COLUMN IF NOT EXISTS document_checksum TEXT;
+
+CREATE TABLE IF NOT EXISTS casco_document_revisions (
+    id BIGSERIAL PRIMARY KEY,
+    source_id BIGINT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    checksum TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    parsed JSONB,
+    provider TEXT,
+    error TEXT,
+    checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    analyzed_at TIMESTAMPTZ,
+    UNIQUE(source_id, checksum)
+);
+CREATE TABLE IF NOT EXISTS casco_review_candidates (
+    id BIGSERIAL PRIMARY KEY,
+    revision_id BIGINT NOT NULL REFERENCES casco_document_revisions(id) ON DELETE CASCADE,
+    field_id BIGINT NOT NULL REFERENCES comparison_fields(id) ON DELETE CASCADE,
+    payload JSONB NOT NULL,
+    validation_status TEXT NOT NULL CHECK (validation_status IN ('PASS', 'FAIL')),
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_casco_review_field ON casco_review_candidates(field_id, created_at DESC);
