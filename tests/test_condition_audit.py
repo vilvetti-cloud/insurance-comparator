@@ -138,6 +138,35 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
 
+    def test_snapshot_never_counts_as_reportable_fact(self):
+        result = audit_condition(
+            "gap",
+            "GAP доступен в отдельных программах.",
+            "GAP доступен в отдельных программах.",
+            source_level=1,
+            source_type="official_snapshot",
+            confidence=0.95,
+            verification_status="verified",
+        )
+        self.assertEqual(result.status, "review")
+        self.assertFalse(result.sales_eligible)
+
+    def test_franchise_types_must_be_supported_by_quote(self):
+        result = self.audit(
+            "franchise",
+            "Франшиза бывает безусловной, условной и прогрессивной.",
+            "Безусловная франшиза уменьшает размер выплаты.",
+        )
+        self.assertEqual(result.status, "review")
+
+    def test_without_certificates_requires_scope_not_just_phrase(self):
+        result = self.audit(
+            "without_certificates",
+            "Страховая выплата без справок.",
+            "Страховая выплата без справок.",
+        )
+        self.assertEqual(result.status, "review")
+
 
 if __name__ == "__main__":
     unittest.main()
