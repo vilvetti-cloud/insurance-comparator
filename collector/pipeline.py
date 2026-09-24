@@ -211,9 +211,10 @@ class CascoCollectionPipeline:
             except LLMExtractionError:
                 pass
 
-        # Prefer curated official snapshots before expensive search. They
-        # originate from insurer-owned rules/KIDs/pages and exist specifically
-        # to cover fields that live parsing cannot resolve reliably.
+        # Persist curated official snapshots as diagnostic hints only. They
+        # must never close a field: a snapshot is a synthesized summary, not
+        # primary-source evidence. Unresolved fields continue into official
+        # rules/search so the collector can replace the hint with direct proof.
         missing = [
             field["key"]
             for field in KASKO_FIELDS
@@ -337,7 +338,9 @@ class CascoCollectionPipeline:
                     text_fragment=item.evidence,
                     verification_status=verification_status,
                 )
-            found.add(item.field_key)
+            # Do not add the snapshot itself to `found`. Keeping the field
+            # unresolved is intentional: the later official search stages must
+            # still try to obtain primary-source evidence for it.
 
         return found, len(source_ids)
 
