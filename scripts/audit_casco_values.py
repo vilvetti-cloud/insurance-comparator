@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# audit revision: weak-evidence-v2
+# audit revision: snapshot-quarantine-v3
 
 import sys
 from pathlib import Path
