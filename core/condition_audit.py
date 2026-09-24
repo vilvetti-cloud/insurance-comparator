@@ -109,14 +109,27 @@ def audit_condition(
 
     normalized_quote = " ".join(str(quote).strip().split())
     normalized_value_original = " ".join(str(value).strip().split())
-    if (
-        normalized_value_original.lower() == normalized_quote.lower()
-        and len(normalized_value_original) < 180
-        and not re.search(r"[.!?;:%»”\)\]]$", normalized_value_original)
+    raw_same = normalized_value_original.lower() == normalized_quote.lower()
+    looks_broken_start = bool(
+        re.match(
+            r"^(?:ния|ние|ний|ка|ки|го|ой|ых|их)\b",
+            normalized_value_original.lower(),
+        )
+    )
+    looks_broken_suffix = bool(
+        re.search(r"\b[а-яё]{4,}\s+(?:ся|сь)\b", normalized_value_original.lower())
+    )
+    if raw_same and (
+        (
+            len(normalized_value_original) < 180
+            and not re.search(r"[.!?;:%»”\)\]]$", normalized_value_original)
+        )
+        or looks_broken_start
+        or looks_broken_suffix
     ):
         return _result(
             "review",
-            "Сохранён сырой обрывок источника, а не сформулированное условие для сравнения.",
+            "Сохранён сырой/OCR-обрывок источника, а не сформулированное условие для сравнения.",
         )
 
     if not is_supported_condition(field_key, value, quote):
