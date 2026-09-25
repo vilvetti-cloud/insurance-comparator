@@ -51,6 +51,20 @@ class DatabaseTests(unittest.TestCase):
         self.publish("90%", "a", passed=False)
         self.assertIsNone(self.repo.fetch_one("SELECT * FROM conditions WHERE field_id=%s", (self.field,)))
 
+    def test_cached_parse_is_scoped_to_hash_and_excludes_fallback(self):
+        parsed = {"parser": "docling", "pages": {"1": "verified text"}}
+        self.repo.save_degraded(source_id=self.source["id"], checksum="a", reason="503", parsed=parsed)
+        self.assertEqual(self.repo.cached_parse(self.source["id"], "a"), parsed)
+        self.assertIsNone(self.repo.cached_parse(self.source["id"], "b"))
+        self.repo.save_degraded(source_id=self.source["id"], checksum="b", reason="parser",
+            parsed={"parser": "pypdf_review_only", "pages": {"1": "text"}})
+        self.assertIsNone(self.repo.cached_parse(self.source["id"], "b"))
+
+    def test_review_summary_contains_current_failures(self):
+        self.repo.execute("UPDATE sources SET checksum='a' WHERE id=%s", (self.source["id"],))
+        self.publish("90%", "a", passed=False)
+        self.assertTrue(any(r["reason"] == "wrong_quote" for r in self.repo.review_summary()))
+
     def test_good_change_archives_and_reversion_is_processed(self):
         self.publish("75%", "a")
         self.publish("80%", "b")

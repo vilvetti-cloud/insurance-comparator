@@ -6,6 +6,28 @@ from core.condition_audit import audit_condition
 
 
 class CascoRevisionRepository(BaseRepository):
+    def review_summary(self):
+        return self.fetch_all(
+            """SELECT co.slug AS insurer, f.field_key AS field, c.reason, COUNT(*) AS count
+               FROM casco_review_candidates c
+               JOIN casco_document_revisions r ON r.id=c.revision_id
+               JOIN sources s ON s.id=r.source_id AND s.checksum=r.checksum
+               JOIN companies co ON co.id=s.company_id
+               JOIN comparison_fields f ON f.id=c.field_id
+               WHERE c.validation_status='FAIL'
+               GROUP BY co.slug,f.field_key,c.reason
+               ORDER BY co.slug,f.field_key,c.reason""")
+
+    def cached_parse(self, source_id, checksum):
+        row = self.fetch_one(
+            "SELECT parsed FROM casco_document_revisions WHERE source_id=%s AND checksum=%s",
+            (source_id, checksum))
+        parsed = row and row["parsed"]
+        if (isinstance(parsed, dict) and parsed.get("parser") == "docling"
+                and not parsed.get("warning") and parsed.get("pages")):
+            return parsed
+        return None
+
     def quarantine_legacy_snapshots(self, company_id, snapshots):
         """Retain historical hints outside active cards; preserve real page evidence."""
         signatures = {(s.field_key, s.value, s.evidence) for s in snapshots}

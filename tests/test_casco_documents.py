@@ -102,6 +102,8 @@ class PipelineTests(unittest.TestCase):
         p = CascoCollectionPipeline(provider=Mock(available=True, name="fake"),
                                    parser=Mock(), fetcher=Mock(), revisions=Mock())
         p.revisions.completed.return_value = False
+        p.revisions.cached_parse.return_value = None
+        p.revisions.review_summary.return_value = []
         p.sources = Mock()
         p.documents = Mock()
         p.sources.upsert.return_value = {"id": 5, "url": sources_for("reso")[0].url, "source_level": 1}
@@ -200,6 +202,28 @@ class PipelineTests(unittest.TestCase):
             GeminiProvider("test").extract(document=ParsedDocument({3: QUOTE}),
                 company="РЕСО", source_url="https://reso.ru/rules.pdf")
         post.assert_called_once()
+
+    @patch("collector.casco_provider.time.sleep")
+    @patch("collector.casco_provider.requests.post")
+    def test_transient_503_is_bounded(self, post, sleep):
+        post.return_value.status_code = 503
+        with self.assertRaisesRegex(ProviderUnavailable, "HTTP 503"):
+            GeminiProvider("test").extract(document=ParsedDocument({3: QUOTE}),
+                company="test", source_url="https://reso.ru/rules.pdf")
+        self.assertEqual(post.call_count, 3)
+        self.assertEqual([c.args[0] for c in sleep.call_args_list], [5, 10])
+
+    def test_same_hash_reuses_parse_after_provider_failure(self):
+        p = self.pipeline()
+        p.revisions.cached_parse.return_value = {
+            "parser": "docling", "pages": {"3": QUOTE}, "structure": {}}
+        p.provider.extract.side_effect = ProviderUnavailable("Gemini HTTP 503")
+        with tempfile.TemporaryDirectory() as d:
+            m = p.checksum_check(directory=Path(d), insurer_slugs=["reso"])
+            p.analyze(directory=Path(d), manifest=m)
+        p.parser.parse.assert_not_called()
+        self.assertEqual(p.provider.extract.call_args.kwargs["document"].pages, {3: QUOTE})
+        p.revisions.publish.assert_not_called()
 
     @patch("collector.casco_provider.requests.post")
     def test_gemini_schema_all_ten(self, post):

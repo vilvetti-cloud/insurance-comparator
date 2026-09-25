@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from collector.casco_sources import sources_for, official_url
-from collector.casco_document import CascoDocumentParser
+from collector.casco_document import CascoDocumentParser, ParsedDocument
 from collector.casco_provider import get_provider, FIELD_KEYS, ProviderUnavailable
 from collector.casco_validation import validate_fact
 from collector.http_client import HttpFetcher, FetchError
@@ -113,7 +113,8 @@ class CascoCollectionPipeline:
     def analyze(self, *, directory: Path, manifest=None):
         manifest = manifest or json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         report = {"passed_fields": 0, "review_fields": 0, "degraded": [],
-                  "errors": manifest["errors"], "unchanged": len(manifest["unchanged"])}
+                  "errors": manifest["errors"], "unchanged": len(manifest["unchanged"]),
+                  "validation_failures": []}
         counts = {}
         for item in manifest["pending"]:
             source, checksum = item["source"], item["checksum"]
@@ -131,12 +132,22 @@ class CascoCollectionPipeline:
                     raise ValueError("Downloaded document checksum mismatch")
                 if not official_url(item["insurer"], item["final_url"]):
                     raise ValueError("Unapproved final URL")
-                document = self.parser.parse(body)
+                cached = self.revisions.cached_parse(source["id"], checksum)
+                if cached:
+                    document = ParsedDocument(
+                        pages={int(n): text for n, text in cached["pages"].items()},
+                        parser=cached["parser"], structure=cached.get("structure", {}))
+                    print(f"[analysis] {item['insurer']} reusing Docling parse for same SHA-256", flush=True)
+                else:
+                    document = self.parser.parse(body)
                 parsed = asdict(document)
                 facts = self.provider.extract(document=document,
                     company=get_insurer(item["insurer"]).name, source_url=source["url"])
                 candidates = [(key, facts.get(key, {}), validate_fact(key, facts.get(key, {}),
                     document, insurer=item["insurer"], source_url=item["final_url"])) for key in FIELD_KEYS]
+                report["validation_failures"].extend(
+                    {"insurer": item["insurer"], "field": key, "reason": verdict.reason}
+                    for key, _, verdict in candidates if not verdict.passed)
                 passed = self.revisions.publish(source=source, document=item["document"],
                     checksum=checksum, parsed=parsed, provider=self.provider.name,
                     candidates=candidates, fields=item["fields"])
@@ -164,6 +175,7 @@ class CascoCollectionPipeline:
                     error=json.dumps(reasons, ensure_ascii=False) if reasons else None)
             self.runs.finish_run(manifest["run_id"], status="degraded" if bad else "success",
                 companies_success=len(manifest["items"]) - len(bad), companies_failed=len(bad))
+        report["current_review_summary"] = self.revisions.review_summary()
         (directory / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
 

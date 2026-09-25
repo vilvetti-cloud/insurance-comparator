@@ -1,6 +1,7 @@
 """One schema-constrained request for all ten fields. No implicit Groq fallback."""
 import json
 import os
+import time
 from typing import Protocol
 import requests
 from core.catalog import KASKO_FIELDS
@@ -68,19 +69,12 @@ class GeminiProvider:
             "<document>\n" + document.text + "\n</document>"
         )
         try:
-            response = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
-                headers={"x-goog-api-key": self.api_key},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "temperature": 0,
-                        "responseMimeType": "application/json",
-                        "responseJsonSchema": RESPONSE_SCHEMA,
-                    },
-                },
-                timeout=(15, 180),
-            )
+            for attempt in range(3):
+                response = self._request(prompt)
+                if response.status_code not in (500, 502, 503, 504) or attempt == 2:
+                    break
+                response.close()
+                time.sleep(5 * (2 ** attempt))
             if response.status_code != 200:
                 raise ProviderUnavailable(f"Gemini HTTP {response.status_code}")
             candidate = response.json()["candidates"][0]
@@ -98,6 +92,21 @@ class GeminiProvider:
         except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
             # Never include HTTP exception URLs or API credentials in logs.
             raise ProviderUnavailable(f"Gemini extraction failed: {type(exc).__name__}") from None
+
+    def _request(self, prompt):
+        return requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+                headers={"x-goog-api-key": self.api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0,
+                        "responseMimeType": "application/json",
+                        "responseJsonSchema": RESPONSE_SCHEMA,
+                    },
+                },
+                timeout=(15, 180),
+            )
 
 
 def get_provider() -> LLMProvider:
