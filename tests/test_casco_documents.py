@@ -42,6 +42,12 @@ class EvidenceTests(unittest.TestCase):
     def test_changed_percentage(self):
         self.assertFalse(self.validate(dict(FACT, value=FACT["value"].replace("75%", "80%"))).passed)
 
+    def test_at_least_is_not_less_than(self):
+        quote = QUOTE.replace("превышает", "составляет не менее")
+        fact = dict(FACT, exact_quote=quote, value=FACT["value"].replace("превышает", "составляет менее"))
+        self.assertFalse(validate_fact("total_loss", fact, ParsedDocument({3: quote}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf").passed)
+
     def test_reversed_threshold(self):
         fact = dict(FACT, value=FACT["value"].replace("превышает", "не превышает"))
         self.assertFalse(self.validate(fact).passed)

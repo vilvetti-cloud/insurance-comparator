@@ -19,7 +19,7 @@ class DatabaseTests(unittest.TestCase):
             with conn.cursor() as c:
                 c.execute("INSERT INTO companies(name) VALUES (%s) RETURNING id", (str(uuid.uuid4()),))
                 self.company = c.fetchone()[0]
-                c.execute("INSERT INTO products(company_id,name) VALUES (%s,'КАСКО') RETURNING id", (self.company,))
+                c.execute("INSERT INTO products(company_id,name,product_type) VALUES (%s,'КАСКО','casco') RETURNING id", (self.company,))
                 product = c.fetchone()[0]
                 c.execute("INSERT INTO comparison_fields(product_id,field_key) VALUES (%s,'total_loss') RETURNING id", (product,))
                 self.field = c.fetchone()[0]
@@ -78,6 +78,20 @@ class DatabaseTests(unittest.TestCase):
         self.repo.quarantine_legacy_snapshots(self.company, [signature])
         active = self.repo.fetch_one("SELECT value FROM conditions WHERE field_id=%s AND status='active'", (self.field,))
         self.assertEqual(active["value"], "synthetic hint")
+
+    def test_snapshot_quarantine_does_not_touch_other_product_types(self):
+        self.repo.execute(
+            "UPDATE products SET product_type='property' WHERE company_id=%s",
+            (self.company,))
+        self.repo.execute(
+            "UPDATE sources SET source_type='official_snapshot' WHERE id=%s",
+            (self.source["id"],))
+        row = self.repo.fetch_one(
+            "INSERT INTO conditions(field_id,source_id,value) VALUES (%s,%s,'hint') RETURNING id",
+            (self.field, self.source["id"]))
+        self.repo.quarantine_legacy_snapshots(self.company, [])
+        current = self.repo.fetch_one("SELECT status FROM conditions WHERE id=%s", (row["id"],))
+        self.assertEqual(current["status"], "active")
 
     def test_verified_snapshot_cannot_block_direct_pass(self):
         with self.repo.connection() as conn:

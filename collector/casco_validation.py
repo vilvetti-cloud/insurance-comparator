@@ -63,6 +63,8 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     # Equal numbers do not justify reversing a threshold.
     if key == "total_loss":
         def direction(text):
+            if re.search(r"не менее", text):
+                return "lower"
             if re.search(r"не более|не превыш|менее|меньше", text):
                 return "upper"
             if re.search(r"более|превыш|свыше|не менее", text):
