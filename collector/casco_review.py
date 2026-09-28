@@ -42,7 +42,8 @@ def review_insurer(insurer, *, apply=False, use_ai=False, repository=None, provi
             verdict = validate_fact(key, fact, document, insurer=insurer, source_url=row['url'])
             candidates.append((key, fact, verdict))
             details.append({'field': key, 'before': old['reason'], 'after': verdict.reason,
-                            'value': fact.get('value') if isinstance(fact, dict) else None})
+                            'value': fact.get('value') if isinstance(fact, dict) else None,
+                            'evidence': fact})
             if not verdict.passed:
                 failed.append(key)
         if use_ai and failed and result['ai_requests'] == 0:

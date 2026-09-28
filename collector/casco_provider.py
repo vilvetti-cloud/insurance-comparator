@@ -91,6 +91,9 @@ class GeminiProvider:
             "Если поле не доказано, верни четыре null. value: краткое русское условие "
             "до 520 символов, сохрани ограничения, исключения и зависимость от договора. "
             "exact_quote: полный дословный пункт с контекстом, без многоточий и пересказа; "
+            "Копируй текст вместе со знаками Markdown из документа. Не склеивай разные "
+            "страницы или несмежные пункты в одну цитату. В value сохраняй запись чисел "
+            "и единиц как в цитате; не добавляй сведения из других пунктов без доказательства. "
             "page: физическая страница из [PAGE N]; section: дословный номер пункта "
             "или заголовок на этой странице перед цитатой. Не выдумывай пункт. "
             "Не делай вывод об отсутствии покрытия из отсутствия упоминания. "
@@ -104,9 +107,10 @@ class GeminiProvider:
             "<document>\n" + document.text + "\n</document>"
         )
         try:
-            for attempt in range(3):
+            attempts = 1 if field_keys is not None else 3
+            for attempt in range(attempts):
                 response = self._request(prompt, schema=schema)
-                if response.status_code not in (500, 502, 503, 504) or attempt == 2:
+                if response.status_code not in (500, 502, 503, 504) or attempt == attempts - 1:
                     break
                 response.close()
                 time.sleep(5 * (2 ** attempt))

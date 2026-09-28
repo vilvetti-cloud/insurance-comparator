@@ -9,6 +9,7 @@ from collector.casco_document import CascoDocumentParser, ParsedDocument
 from collector.casco_provider import get_provider, FIELD_KEYS, ProviderUnavailable
 from collector.casco_validation import validate_fact
 from collector.http_client import HttpFetcher, FetchError
+from collector.casco_transport import CascoFetcher
 from collector.registry import INSURERS, get_insurer
 from core.catalog import KASKO_FIELDS
 from database.repositories.company import CompanyRepository
@@ -32,7 +33,7 @@ class CascoCollectionPipeline:
     def __init__(self, *, provider=None, parser=None, fetcher=None, revisions=None):
         self.provider = provider if provider is not None else get_provider()
         self.parser = parser if parser is not None else CascoDocumentParser()
-        self.fetcher = fetcher if fetcher is not None else HttpFetcher(timeout=35, retries=2)
+        self.fetcher = fetcher if fetcher is not None else CascoFetcher(timeout=35, retries=2)
         self.revisions = revisions if revisions is not None else CascoRevisionRepository()
         self.companies = CompanyRepository()
         self.products = ProductRepository()

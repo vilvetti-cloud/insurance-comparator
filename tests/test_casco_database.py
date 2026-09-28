@@ -7,6 +7,7 @@ from psycopg.types.json import Jsonb
 from db import init_db, _connect
 from collector.casco_validation import Verdict
 from database.repositories.casco_revision import CascoRevisionRepository
+from database.repositories.base import RepositoryError
 
 
 @unittest.skipUnless(os.getenv("CASCO_TEST_DATABASE") == "1", "requires isolated PostgreSQL")
@@ -67,7 +68,7 @@ class DatabaseTests(unittest.TestCase):
     def test_stale_repair_cannot_publish(self):
         self.publish('bad', 'a', passed=False)
         self.repo.execute("UPDATE sources SET checksum='b' WHERE id=%s", (self.source['id'],))
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(RepositoryError, 'Source changed'):
             self.repo.publish(source=self.source, document=self.document, checksum='a',
                 parsed={'parser': 'docling', 'pages': {'1': '75%'}}, provider='review',
                 candidates=[('total_loss', {'value': '75%'}, Verdict(True, 'PASS'))],
