@@ -6,6 +6,24 @@ from core.condition_audit import audit_condition
 
 
 class CascoRevisionRepository(BaseRepository):
+    def review_documents(self, insurer):
+        """Current pinned revisions only; no historical document can repair today's card."""
+        from collector.casco_sources import sources_for
+        urls = [s.url for s in sources_for(insurer)]
+        rows = self.fetch_all('''SELECT r.*,s.url,s.source_level,d.id AS document_id
+            FROM casco_document_revisions r
+            JOIN sources s ON s.id=r.source_id AND s.checksum=r.checksum
+            JOIN companies co ON co.id=s.company_id
+            JOIN documents d ON d.source_id=s.id AND d.checksum=r.checksum
+            WHERE co.slug=%s AND s.url=ANY(%s)
+            ORDER BY s.source_level,r.id DESC''', (insurer, urls))
+        for row in rows:
+            row['candidates'] = self.fetch_all('''SELECT DISTINCT ON (c.field_id)
+                c.*,f.field_key FROM casco_review_candidates c
+                JOIN comparison_fields f ON f.id=c.field_id
+                WHERE c.revision_id=%s ORDER BY c.field_id,c.id DESC''', (row['id'],))
+        return rows
+
     def reuse_identical_content(self, source_id, checksum, parsed):
         from collector.casco_document import content_fingerprint
         if parsed.get('parser') != 'docling' or parsed.get('warning') or not parsed.get('pages'):
@@ -116,7 +134,8 @@ class CascoRevisionRepository(BaseRepository):
             (source_id, checksum, reason, Jsonb(parsed) if parsed else None),
         )
 
-    def publish(self, *, source, document, checksum, parsed, provider, candidates, fields):
+    def publish(self, *, source, document, checksum, parsed, provider, candidates, fields,
+                repair=False):
         """All evidence, candidates, active values and completion marker commit together."""
         with self.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
@@ -136,10 +155,19 @@ class CascoRevisionRepository(BaseRepository):
                 source_state = cur.fetchone()
                 if source_state["checksum"] and source_state["checksum"] != checksum:
                     raise ValueError("Source changed during analysis; stale candidate not published")
-                if source_state["casco_analyzed_checksum"] == checksum:
+                if source_state["casco_analyzed_checksum"] == checksum and not repair:
                     return set()
                 passed = set()
                 for key, fact, verdict in candidates:
+                    if repair:
+                        cur.execute('''SELECT validation_status FROM casco_review_candidates
+                            WHERE revision_id=%s AND field_id=%s ORDER BY id DESC LIMIT 1''',
+                            (revision['id'], fields[key]['id']))
+                        previous = cur.fetchone()
+                        # This explicit mode can repair FAIL candidates only, never
+                        # replace a successful field or create a new extraction.
+                        if not previous or previous['validation_status'] != 'FAIL':
+                            continue
                     cur.execute(
                         """INSERT INTO casco_review_candidates
                              (revision_id,field_id,payload,validation_status,reason)

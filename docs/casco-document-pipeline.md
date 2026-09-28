@@ -104,3 +104,18 @@ Docling smoke test confirms page provenance on a two-page PDF.
 References:
 - https://docling-project.github.io/docling/reference/docling_document/
 - https://ai.google.dev/api/generate-content
+# Explicit review of cached extractions
+
+`Explicit CASCO review` is a manual workflow, separate from daily monitoring.
+Select one insurer. With `apply=false` it reports validation results without AI
+or card writes. `apply=true` can repair failed candidates whose exact quotation
+has one unambiguous page in the stored Docling document. It never changes the
+quotation or value to manufacture evidence. With `ai=true`, at most one document
+is submitted with questions/schema restricted to failed fields. Full document
+context is retained to avoid losing exclusions; token-level excerpt retrieval
+is not implemented. Already-passed fields are excluded and protected again
+inside the publication transaction. A concurrent checksum change rejects repair.
+No Docling installation or PDF download is needed for this cached-review mode.
+
+CLI: `python scripts/casco_review.py --insurer t-insurance` (read-only), then add
+`--apply` for deterministic repairs or `--apply --ai` for one targeted extraction.

@@ -51,6 +51,28 @@ class DatabaseTests(unittest.TestCase):
         self.publish("90%", "a", passed=False)
         self.assertIsNone(self.repo.fetch_one("SELECT * FROM conditions WHERE field_id=%s", (self.field,)))
 
+    def test_explicit_repair_fills_fail_but_never_replaces_pass(self):
+        self.publish('bad', 'a', passed=False)
+        kwargs = dict(source=self.source, document=self.document, checksum='a',
+            parsed={'parser': 'docling', 'pages': {'1': '75%'}}, provider='review',
+            candidates=[('total_loss', {'value': '75%', 'page': 1, 'section': '9.1',
+                'exact_quote': '75%'}, Verdict(True, 'PASS'))],
+            fields={'total_loss': {'id': self.field}}, repair=True)
+        self.assertEqual(self.repo.publish(**kwargs), {'total_loss'})
+        condition = self.repo.fetch_one("SELECT id,value FROM conditions WHERE field_id=%s AND status='active'", (self.field,))
+        kwargs['candidates'][0][1]['value'] = '90%'
+        self.assertEqual(self.repo.publish(**kwargs), set())
+        self.assertEqual(self.repo.fetch_one("SELECT id,value FROM conditions WHERE field_id=%s AND status='active'", (self.field,)), condition)
+
+    def test_stale_repair_cannot_publish(self):
+        self.publish('bad', 'a', passed=False)
+        self.repo.execute("UPDATE sources SET checksum='b' WHERE id=%s", (self.source['id'],))
+        with self.assertRaises(ValueError):
+            self.repo.publish(source=self.source, document=self.document, checksum='a',
+                parsed={'parser': 'docling', 'pages': {'1': '75%'}}, provider='review',
+                candidates=[('total_loss', {'value': '75%'}, Verdict(True, 'PASS'))],
+                fields={'total_loss': {'id': self.field}}, repair=True)
+
     def test_same_text_new_binary_keeps_original_evidence(self):
         self.publish('75%', 'a')
         self.repo.execute("UPDATE sources SET checksum='b' WHERE id=%s", (self.source['id'],))
