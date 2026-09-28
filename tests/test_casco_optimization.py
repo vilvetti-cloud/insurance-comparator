@@ -12,6 +12,13 @@ from collector.casco_document import ParsedDocument
 
 
 class OptimizationTests(unittest.TestCase):
+    def test_neighboring_policy_does_not_become_casco_candidate(self):
+        from collector.casco_page_watch import casco_link
+        self.assertFalse(casco_link({'title': 'Правила страхования имущества',
+            'url': 'https://reso.ru/property.pdf', 'context': 'КАСКО GAP Имущество'}))
+        self.assertTrue(casco_link({'title': 'Правила КАСКО',
+            'url': 'https://reso.ru/new.pdf', 'context': ''}))
+
     def test_error_diagnostics_exclude_message_and_secrets(self):
         from collector.casco_provider import error_summary
         response = Mock(status_code=429)

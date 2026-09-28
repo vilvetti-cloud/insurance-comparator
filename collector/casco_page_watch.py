@@ -35,6 +35,13 @@ def link_fingerprint(links):
     return hashlib.sha256(json.dumps(links, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
+def casco_link(link):
+    # Parent containers may list hundreds of unrelated policies. They provide
+    # edition context, but must never make an unrelated link a CASCO candidate.
+    return bool(re.search(r'каско|kasko|casco|\bgap\b|автотранспорт|транспортных средств',
+                          link['title'] + ' ' + link['url'], re.I))
+
+
 def watch_pages(config, fetcher, repository):
     results = []
     for url in page_urls(config):
@@ -51,8 +58,7 @@ def watch_pages(config, fetcher, repository):
             repository.save_page_state(config.slug, url, checksum, links)
             pinned = {s.url for s in sources_for(config.slug)}
             candidates = [link for link in links if link['url'] not in pinned
-                and re.search(r'каско|kasko|casco|\bgap\b|автотранспорт|транспортных средств',
-                              link['title'] + ' ' + link['context'] + ' ' + link['url'], re.I)]
+                and casco_link(link)]
             results.append({'insurer': config.slug, 'page': url,
                 'status': 'changed' if changed else 'unchanged',
                 'links': links if changed else [],
