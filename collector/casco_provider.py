@@ -2,9 +2,11 @@
 import json
 import os
 import time
+import re
 from typing import Protocol
 import requests
 from core.catalog import KASKO_FIELDS
+from collector.casco_questions import question_prompt
 
 FIELD_KEYS = tuple(f["key"] for f in KASKO_FIELDS)
 FACT_SCHEMA = {
@@ -28,6 +30,31 @@ RESPONSE_SCHEMA = {
 
 class ProviderUnavailable(RuntimeError):
     pass
+
+
+def error_summary(response):
+    """Only allowlisted diagnostic identifiers; never log response text or credentials."""
+    parts = [f'Gemini HTTP {response.status_code}']
+    try:
+        error = response.json().get('error', {})
+        if not isinstance(error, dict):
+            return parts[0]
+        status = error.get('status')
+        if isinstance(status, str) and re.fullmatch(r'[A-Z_]{1,60}', status):
+            parts.append(status)
+        for detail in error.get('details', []):
+            if not isinstance(detail, dict):
+                continue
+            delay = detail.get('retryDelay')
+            if isinstance(delay, str) and re.fullmatch(r'\d{1,6}(?:\.\d+)?s', delay):
+                parts.append('retry_after=' + delay)
+            for violation in detail.get('violations', []):
+                quota = violation.get('quotaId') if isinstance(violation, dict) else None
+                if isinstance(quota, str) and re.fullmatch(r'[A-Za-z0-9_/-]{1,160}', quota):
+                    parts.append('quota=' + quota)
+    except (ValueError, TypeError, AttributeError):
+        pass
+    return '; '.join(parts)[:450]
 
 
 class LLMProvider(Protocol):
@@ -66,6 +93,10 @@ class GeminiProvider:
             "Без справок — урегулирование, не угон без ключей. Терроризм — покрытие, "
             "не AML/115-ФЗ. Срок выплаты — обязанность страховщика.\n"
             f"Страховщик: {company}\nИсточник: {source_url}\n"
+            + "Вопросы по полям:\n" + question_prompt() + "\n"
+            "Проверь связанные исключения и ссылки на другие пункты. "
+            "Если одной цитаты недостаточно для полного ответа, не добавляй недоказанные детали.\n"
+            +
             "<document>\n" + document.text + "\n</document>"
         )
         try:
@@ -76,7 +107,7 @@ class GeminiProvider:
                 response.close()
                 time.sleep(5 * (2 ** attempt))
             if response.status_code != 200:
-                raise ProviderUnavailable(f"Gemini HTTP {response.status_code}")
+                raise ProviderUnavailable(error_summary(response))
             candidate = response.json()["candidates"][0]
             if candidate.get("finishReason") != "STOP":
                 raise ProviderUnavailable("Gemini response incomplete")
