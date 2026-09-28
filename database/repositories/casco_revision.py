@@ -6,6 +6,46 @@ from core.condition_audit import audit_condition
 
 
 class CascoRevisionRepository(BaseRepository):
+    def reuse_identical_content(self, source_id, checksum, parsed):
+        from collector.casco_document import content_fingerprint
+        if parsed.get('parser') != 'docling' or parsed.get('warning') or not parsed.get('pages'):
+            return False
+        with self.connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute('SELECT checksum FROM sources WHERE id=%s FOR UPDATE', (source_id,))
+                current = cur.fetchone()
+                if not current or current['checksum'] != checksum:
+                    raise ValueError('Source changed during content comparison')
+                cur.execute('''SELECT parsed FROM casco_document_revisions
+                    WHERE source_id=%s AND status='complete' AND checksum<>%s
+                    ORDER BY analyzed_at DESC NULLS LAST,id DESC LIMIT 1''', (source_id,checksum))
+                previous = cur.fetchone()
+                old = previous and previous['parsed']
+                if (not old or old.get('parser') != 'docling' or old.get('warning')
+                        or not old.get('pages')
+                        or content_fingerprint(old['pages']) != content_fingerprint(parsed['pages'])):
+                    return False
+                # Evidence remains attached to the original physical document/pages.
+                cur.execute('''INSERT INTO casco_document_revisions(source_id,checksum,status,parsed,provider,analyzed_at)
+                    VALUES (%s,%s,'complete',%s,'content_equal',NOW())
+                    ON CONFLICT(source_id,checksum) DO UPDATE SET status='complete',parsed=EXCLUDED.parsed,
+                    provider='content_equal',error=NULL,analyzed_at=NOW()''', (source_id,checksum,Jsonb(parsed)))
+                cur.execute('UPDATE sources SET casco_analyzed_checksum=%s WHERE id=%s', (checksum,source_id))
+                return True
+
+    def page_state(self, insurer, url):
+        return self.fetch_one('SELECT checksum,links FROM casco_page_watch WHERE insurer=%s AND url=%s',
+                              (insurer, url))
+
+    def save_page_state(self, insurer, url, checksum, links):
+        self.execute('''INSERT INTO casco_page_watch(insurer,url,checksum,links) VALUES (%s,%s,%s,%s)
+            ON CONFLICT(insurer,url) DO UPDATE SET checksum=EXCLUDED.checksum,
+            links=EXCLUDED.links,checked_at=NOW()''', (insurer,url,checksum,Jsonb(links)))
+
+    def attempted(self, source_id, checksum):
+        return bool(self.fetch_one("SELECT id FROM casco_document_revisions WHERE source_id=%s AND checksum=%s AND status<>'complete'",
+                                  (source_id,checksum)))
+
     def review_summary(self):
         return self.fetch_all(
             """SELECT co.slug AS insurer, f.field_key AS field, c.reason, COUNT(*) AS count

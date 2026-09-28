@@ -51,6 +51,28 @@ class DatabaseTests(unittest.TestCase):
         self.publish("90%", "a", passed=False)
         self.assertIsNone(self.repo.fetch_one("SELECT * FROM conditions WHERE field_id=%s", (self.field,)))
 
+    def test_same_text_new_binary_keeps_original_evidence(self):
+        self.publish('75%', 'a')
+        self.repo.execute("UPDATE sources SET checksum='b' WHERE id=%s", (self.source['id'],))
+        self.assertTrue(self.repo.reuse_identical_content(self.source['id'], 'b',
+            {'parser': 'docling', 'pages': {'2': ' 75% '}}))
+        self.assertTrue(self.repo.completed(self.source['id'], 'b'))
+        evidence = self.repo.fetch_one('SELECT document_checksum,page_number FROM evidence WHERE source_id=%s',
+                                      (self.source['id'],))
+        self.assertEqual(evidence['document_checksum'], 'a')
+        self.assertEqual(evidence['page_number'], 1)
+        self.repo.execute("UPDATE sources SET checksum='c' WHERE id=%s", (self.source['id'],))
+        self.assertFalse(self.repo.reuse_identical_content(self.source['id'], 'c',
+            {'parser': 'docling', 'pages': {'2': '80%'}}))
+
+    def test_page_watch_upsert_and_attempt_state(self):
+        self.repo.save_page_state('test', 'https://example.test', 'a', [])
+        self.repo.save_page_state('test', 'https://example.test', 'b', [{'url': 'new.pdf'}])
+        self.assertEqual(self.repo.page_state('test', 'https://example.test')['checksum'], 'b')
+        self.assertFalse(self.repo.attempted(self.source['id'], 'a'))
+        self.repo.save_degraded(source_id=self.source['id'], checksum='a', reason='503')
+        self.assertTrue(self.repo.attempted(self.source['id'], 'a'))
+
     def test_cached_parse_is_scoped_to_hash_and_excludes_fallback(self):
         parsed = {"parser": "docling", "pages": {"1": "verified text"}}
         self.repo.save_degraded(source_id=self.source["id"], checksum="a", reason="503", parsed=parsed)

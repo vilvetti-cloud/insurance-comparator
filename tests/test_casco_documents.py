@@ -102,6 +102,8 @@ class PipelineTests(unittest.TestCase):
         p = CascoCollectionPipeline(provider=Mock(available=True, name="fake"),
                                    parser=Mock(), fetcher=Mock(), revisions=Mock())
         p.revisions.completed.return_value = False
+        p.revisions.attempted.return_value = False
+        p.revisions.reuse_identical_content.return_value = False
         p.revisions.cached_parse.return_value = None
         p.revisions.review_summary.return_value = []
         p.sources = Mock()

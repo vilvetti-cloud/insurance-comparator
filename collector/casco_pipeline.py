@@ -54,11 +54,13 @@ class CascoCollectionPipeline:
             OfficialSnapshotProvider().get(insurer.slug, FIELD_KEYS))
         return company, fields
 
-    def checksum_check(self, *, directory: Path, insurer_slugs=None, track_run=False):
+    def checksum_check(self, *, directory: Path, insurer_slugs=None, track_run=False,
+                       retry_failed=False, watch=False, max_documents=None):
         directory.mkdir(parents=True, exist_ok=True)
         if insurer_slugs and set(insurer_slugs) - {i.slug for i in INSURERS}:
             raise ValueError("Unknown insurer slug")
-        manifest = {"version": 1, "pending": [], "unchanged": [], "errors": []}
+        manifest = {"version": 1, "pending": [], "unchanged": [], "errors": [],
+                    "deferred": [], "pages": []}
         if track_run:
             selected = [i for i in INSURERS if not insurer_slugs or i.slug in insurer_slugs]
             run = self.runs.start_run(triggered_by="document_checksum", companies_total=len(selected))
@@ -68,6 +70,9 @@ class CascoCollectionPipeline:
             if insurer_slugs and insurer.slug not in insurer_slugs:
                 continue
             company, fields = self._prepare(insurer)
+            if watch:
+                from collector.casco_page_watch import watch_pages
+                manifest['pages'].extend(watch_pages(insurer, self.fetcher, self.revisions))
             if track_run:
                 item = self.runs.start_item(run_id=manifest["run_id"], company_id=company["id"])
                 manifest["items"][insurer.slug] = item["id"]
@@ -89,6 +94,14 @@ class CascoCollectionPipeline:
                     if self.revisions.completed(source["id"], checksum):
                         manifest["unchanged"].append({"insurer": insurer.slug, "url": pin.url})
                         print(f"[checksum] {insurer.slug} unchanged: analysis skipped", flush=True)
+                        continue
+                    if not retry_failed and self.revisions.attempted(source['id'], checksum):
+                        manifest['deferred'].append({'insurer': insurer.slug, 'url': pin.url,
+                            'reason': 'previous_attempt_requires_explicit_retry'})
+                        continue
+                    if max_documents is not None and len(manifest['pending']) >= max_documents:
+                        manifest['deferred'].append({'insurer': insurer.slug, 'url': pin.url,
+                            'reason': 'document_budget'})
                         continue
                     filename = f"{source['id']}-{checksum}.pdf"
                     (directory / filename).write_bytes(fetched.body)
@@ -115,13 +128,19 @@ class CascoCollectionPipeline:
         report = {"passed_fields": 0, "review_fields": 0, "degraded": [],
                   "errors": manifest["errors"], "unchanged": len(manifest["unchanged"]),
                   "validation_failures": []}
+        report['deferred'] = manifest.get('deferred', [])
+        report['pages'] = manifest.get('pages', [])
         counts = {}
+        provider_blocked = False
         for item in manifest["pending"]:
             source, checksum = item["source"], item["checksum"]
             if self.revisions.completed(source["id"], checksum):
                 continue
             parsed = None
             try:
+                if provider_blocked:
+                    report['deferred'].append({'insurer': item['insurer'], 'reason': 'provider_rate_limited'})
+                    continue
                 if not self.provider.available:
                     raise ProviderUnavailable("GEMINI_API_KEY missing; analysis deferred; verified data preserved")
                 path = (directory / item["file"]).resolve()
@@ -141,6 +160,10 @@ class CascoCollectionPipeline:
                 else:
                     document = self.parser.parse(body)
                 parsed = asdict(document)
+                if self.revisions.reuse_identical_content(source['id'], checksum, parsed):
+                    report['unchanged'] += 1
+                    print(f"[analysis] {item['insurer']} document text unchanged: no AI call", flush=True)
+                    continue
                 facts = self.provider.extract(document=document,
                     company=get_insurer(item["insurer"]).name, source_url=source["url"])
                 candidates = [(key, facts.get(key, {}), validate_fact(key, facts.get(key, {}),
@@ -160,12 +183,14 @@ class CascoCollectionPipeline:
                 print(f"[analysis] {item['insurer']} PASS={len(passed)} review={10-len(passed)}", flush=True)
             except Exception as exc:
                 reason = str(exc)[:500] if isinstance(exc, (ProviderUnavailable, ValueError)) else type(exc).__name__
+                if isinstance(exc, ProviderUnavailable) and 'HTTP 429' in reason:
+                    provider_blocked = True
                 self.revisions.save_degraded(source_id=source["id"], checksum=checksum,
                     reason=reason, parsed=parsed)
                 report["degraded"].append({"insurer": item["insurer"], "reason": reason})
                 print(f"[analysis] {item['insurer']} degraded: {reason}", flush=True)
         if manifest.get("run_id"):
-            bad = {entry["insurer"] for entry in report["errors"] + report["degraded"]}
+            bad = {entry["insurer"] for entry in report["errors"] + report["degraded"] + report['deferred']}
             for slug, item_id in manifest["items"].items():
                 reasons = [entry for entry in report["errors"] + report["degraded"] if entry["insurer"] == slug]
                 self.runs.finish_item(item_id, status="degraded" if slug in bad else "success",

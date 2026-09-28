@@ -1,14 +1,5 @@
 name: Daily CASCO collection
 on:
-  push:
-    branches: [main]
-    paths:
-      - "collector/**"
-      - "!collector/property_*.py"
-      - "database/**"
-      - "scripts/casco_documents.py"
-      - ".github/workflows/daily-collection.yml"
-      - "requirements-casco.txt"
   schedule:
     # 06:00 Moscow time.
     - cron: "0 3 * * *"
@@ -18,6 +9,14 @@ on:
         description: Optional insurer slug; empty means all 11
         required: false
         type: string
+      retry_failed:
+        description: Retry unchanged documents with a previous failed attempt
+        type: boolean
+        default: false
+      max_documents:
+        description: Maximum documents to analyze (0 = check only)
+        type: string
+        default: "1"
 
 concurrency:
   group: daily-casco-collection
@@ -32,6 +31,8 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
       INSURER: ${{ inputs.insurer }}
+      RETRY_FAILED: ${{ inputs.retry_failed }}
+      MAX_DOCUMENTS: ${{ inputs.max_documents || '1' }}
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
     steps:
       - uses: actions/checkout@v4
@@ -42,13 +43,15 @@ jobs:
       - name: Install lightweight dependencies
         run: pip install -r requirements.txt
       - name: Regression tests
-        run: python -m unittest tests.test_casco_documents
+        run: python -m unittest tests.test_casco_documents tests.test_casco_optimization
       - name: Check pinned document SHA-256
         id: checksum
         shell: bash
         run: |
           args=()
           if [ -n "$INSURER" ]; then args+=(--insurer "$INSURER"); fi
+          if [ "$RETRY_FAILED" = "true" ]; then args+=(--retry-failed); fi
+          args+=(--max-documents "$MAX_DOCUMENTS")
           python scripts/casco_documents.py check "${args[@]}"
       - name: Cache Docling models
         if: steps.checksum.outputs.pending != '0' && env.GEMINI_API_KEY != ''

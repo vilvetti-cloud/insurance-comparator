@@ -2,6 +2,15 @@
 from dataclasses import dataclass, field
 from io import BytesIO
 import logging
+import hashlib
+import unicodedata
+
+
+def content_fingerprint(pages):
+    """Ignore only whitespace/page boundaries; keep numbers, punctuation and order."""
+    text = ' '.join(pages[n] for n in sorted(pages, key=int))
+    text = ' '.join(unicodedata.normalize('NFKC', text).split())
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
 @dataclass

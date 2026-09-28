@@ -20,7 +20,7 @@ value, exact_quote, page and section (all null for missing evidence).
 Set GEMINI_API_KEY as a repository Actions secret. GEMINI_MODEL is an optional
 repository variable; the default is gemini-3.8-flash. No Groq key is needed.
 Missing keys, API limits, invalid output and parser failures explicitly defer
-analysis, preserve verified values and retry on later runs. No silent truncation,
+analysis and preserve verified values. Unchanged failed attempts require an explicit retry. No silent truncation,
 per-field calls, or automatic provider switching occurs.
 
 The gate checks official host, parser status, verbatim normalized quotation on
@@ -48,6 +48,35 @@ repeated every day); operator reprocessing can clear that source's analyzed mark
 after fixing extraction/validation.
 
 ## Operations
+
+### Cost controls and source-page monitoring
+
+Daily runs check the configured product/document pages before pinned PDFs. The
+`casco_page_watch` table retains the last successful list of official PDF links,
+labels and surrounding edition/date notices. A changed URL or label is reported
+without any LLM call. New CASCO/GAP links remain visible as unregistered candidates
+until the registry is updated; they are **not automatically selected as current rules**.
+Archive/product ambiguity needs review. No-links responses are reported as unavailable
+and never overwrite a successful snapshot. Pages rendered only through JavaScript
+need a site-specific adapter; homepage fallbacks do not guarantee edition coverage.
+
+Normal scheduled runs process at most one previously unattempted document. A failed
+unchanged revision is queued for explicit retry instead of consuming tokens each day.
+The first HTTP 429 stops further provider calls in that run. Safe quota identifiers
+and retry delays are recorded, not raw error bodies. HTTP 5xx permits at most three
+attempts per document. Code pushes run CI only; they no longer trigger paid collection.
+
+For initial backfill or retries use workflow_dispatch with `insurer`, `retry_failed`
+and `max_documents` (0–20), or `check --retry-failed --max-documents 5`.
+Use `--max-documents 0` for a zero-AI check. Analyze still writes the check report.
+All ten explicit business questions live in `collector/casco_questions.py`.
+
+If PDF bytes change, Docling text is compared against the latest completed revision.
+Only whitespace/Unicode normalization and page boundaries are ignored. Identical
+text skips AI and preserves the original evidence/page references. Changed wording,
+numbers or punctuation still triggers full-document extraction within the budget.
+Selective per-field extraction and automatic promotion of newly discovered URLs
+are not yet implemented.
 
 - Run all stages: python scripts/run_collection.py
 - Check only: python scripts/casco_documents.py check --insurer reso

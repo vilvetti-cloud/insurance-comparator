@@ -237,3 +237,12 @@ CREATE TABLE IF NOT EXISTS casco_review_candidates (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_casco_review_field ON casco_review_candidates(field_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS casco_page_watch (
+    insurer TEXT NOT NULL,
+    url TEXT NOT NULL,
+    checksum TEXT NOT NULL,
+    links JSONB NOT NULL,
+    checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY(insurer,url)
+);
