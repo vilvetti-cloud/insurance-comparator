@@ -5,6 +5,7 @@ import unicodedata
 from collector.casco_sources import official_url
 from collector.casco_provider import FIELD_KEYS
 from core.condition_audit import audit_condition
+from core.numeric_evidence import numeric_text
 from core.evidence_quality import is_supported_condition, semantic_alignment_issue
 
 
@@ -12,6 +13,8 @@ def normalize(text: str) -> str:
     # Whitespace and Unicode normalization only; never delete punctuation,
     # negations or words to manufacture a matching quotation.
     return " ".join(unicodedata.normalize("NFKC", text).split())
+
+
 
 
 @dataclass(frozen=True)
@@ -64,24 +67,27 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     if key == "total_loss":
         def direction(text):
             if re.search(r"не менее", text):
-                return "lower"
-            if re.search(r"не более|не превыш|менее|меньше", text):
-                return "upper"
-            if re.search(r"более|превыш|свыше|не менее", text):
-                return "lower"
+                return "at_least"
+            if re.search(r"не более|не превыш", text):
+                return "at_most"
+            if re.search(r"менее|меньше", text):
+                return "less_than"
+            if re.search(r"более|превыш|свыше", text):
+                return "greater_than"
             return None
         if direction(value_n) and direction(quote_lower) and direction(value_n) != direction(quote_lower):
             return fail("contradictory_threshold")
     # Every digit and unit in the summary must occur in the quotation, for all fields.
     number = r"\d+(?:[.,]\d+)?"
     numbers = lambda s: {v.replace(",", ".") for v in re.findall(number, s)}
-    if not numbers(value_n).issubset(numbers(quote_lower)):
+    value_numeric, quote_numeric = numeric_text(value_n), numeric_text(quote_lower)
+    if not numbers(value_numeric).issubset(numbers(quote_numeric)):
         return fail("unsupported_number")
     for pattern in (
         rf"({number})\s*%", rf"({number})\s*рабоч\w*\s*д",
         rf"({number})\s*календарн\w*\s*д", rf"({number})\s*руб",
     ):
-        if not set(re.findall(pattern, value_n)).issubset(set(re.findall(pattern, quote_lower))):
+        if not set(re.findall(pattern, value_numeric)).issubset(set(re.findall(pattern, quote_numeric))):
             return fail("unsupported_numeric_unit")
     # Use quote-only relevance too: a summary must not supply the missing topic.
     if not is_supported_condition(key, "Проверка условия первоисточника", quote) or not is_supported_condition(key, value, quote):

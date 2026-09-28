@@ -4,10 +4,29 @@ from unittest.mock import Mock, patch
 from collector.casco_review import locate_quote, review_insurer
 from collector.casco_document import ParsedDocument
 from collector.casco_provider import GeminiProvider
+from collector.casco_validation import validate_fact, numeric_text
 from tests.test_casco_documents import QUOTE, FACT
 
 
 class ReviewTests(unittest.TestCase):
+    def test_spelled_duplicate_does_not_hide_day_unit(self):
+        quote = '11.4. Страховщик производит страховую выплату в течение 30 (тридцати) рабочих дней после получения документов.'
+        fact = {'value': 'Страховая выплата в течение 30 рабочих дней после получения документов.',
+                'exact_quote': quote, 'page': 1, 'section': '11.4.'}
+        def check(f):
+            return validate_fact('payment_terms', f, ParsedDocument({1: quote}),
+                                 insurer='reso', source_url='https://reso.ru/rules.pdf')
+        self.assertTrue(check(fact).passed)
+        self.assertFalse(check(dict(fact, value=fact['value'].replace('рабочих', 'календарных'))).passed)
+        self.assertEqual(numeric_text('10 000 (десять тысяч) рублей'), '10000 рублей')
+        self.assertEqual(numeric_text('30 (сорок) рабочих дней'), '30 (сорок) рабочих дней')
+
+    def test_strict_threshold_cannot_become_inclusive(self):
+        fact = dict(FACT, value=FACT['value'].replace('превышает', 'составляет не менее'))
+        verdict = validate_fact('total_loss', fact, ParsedDocument({3: QUOTE}),
+                                insurer='reso', source_url='https://reso.ru/rules.pdf')
+        self.assertEqual(verdict.reason, 'contradictory_threshold')
+
     def test_exact_unique_quote_page_can_be_recovered(self):
         original = dict(FACT, page=90)
         self.assertEqual(locate_quote(original, ParsedDocument({3: QUOTE}))['page'], 3)

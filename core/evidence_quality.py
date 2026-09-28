@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from core.numeric_evidence import numeric_text
 
 
 NUMBER_WORD_VALUES = {
@@ -55,7 +56,7 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
     if len(normalized_value) > 520:
         return False
 
-    evidence = f"{value or ''} {quote or ''}".lower()
+    evidence = numeric_text(' '.join(f"{value or ''} {quote or ''}".lower().split()))
 
     navigation_noise = bool(
         re.search(
@@ -263,8 +264,8 @@ def semantic_alignment_issue(
     if not value or not quote:
         return "Нет значения или подтверждающей цитаты для смысловой сверки."
 
-    value_n = " ".join(str(value).lower().split())
-    quote_n = " ".join(str(quote).lower().split())
+    value_n = numeric_text(" ".join(str(value).lower().split()))
+    quote_n = numeric_text(" ".join(str(quote).lower().split()))
 
     # Numeric facts must be traceable to the quote. This prevents a model from
     # attaching a correct-looking but unsupported percentage/term to evidence.
