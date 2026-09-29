@@ -42,6 +42,20 @@ def error_summary(response):
         status = error.get('status')
         if isinstance(status, str) and re.fullmatch(r'[A-Z_]{1,60}', status):
             parts.append(status)
+        # Classify Google's message without copying arbitrary text (which may
+        # contain project identifiers, request content, or credentials).
+        message = error.get('message')
+        if isinstance(message, str):
+            message = message.lower()
+            for label, phrases in (
+                ('overloaded', ('overloaded', 'high demand', 'capacity exhausted')),
+                ('region_restricted', ('location is not supported', 'region is not supported')),
+                ('billing_required', ('billing must be enabled', 'enable billing')),
+                ('quota_exceeded', ('quota exceeded', 'exceeded your current quota')),
+                ('invalid_key', ('api key not valid', 'invalid api key')),
+            ):
+                if any(phrase in message for phrase in phrases):
+                    parts.append('message_category=' + label)
         for detail in error.get('details', []):
             if not isinstance(detail, dict):
                 continue

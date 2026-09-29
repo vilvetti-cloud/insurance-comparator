@@ -1,9 +1,30 @@
 import unittest
 from unittest.mock import Mock
 from scripts.gemini_probe import probe
+from collector.casco_provider import error_summary
 
 
 class ProbeTests(unittest.TestCase):
+    def test_error_categories_never_copy_message(self):
+        for message, category in (
+            ('The model is overloaded. secret-project', 'overloaded'),
+            ('User location is not supported secret-key', 'region_restricted'),
+            ('Please enable billing secret-project', 'billing_required'),
+            ('You exceeded your current quota secret-key', 'quota_exceeded'),
+            ('API key not valid secret-key', 'invalid_key'),
+        ):
+            with self.subTest(category=category):
+                response = Mock(status_code=503)
+                response.json.return_value = {'error': {'status': 'UNAVAILABLE', 'message': message}}
+                summary = error_summary(response)
+                self.assertIn('message_category=' + category, summary)
+                self.assertNotIn('secret', summary)
+
+    def test_unknown_message_is_not_diagnosed_or_logged(self):
+        response = Mock(status_code=503)
+        response.json.return_value = {'error': {'status': 'UNAVAILABLE', 'message': 'secret unknown failure'}}
+        self.assertEqual(error_summary(response), 'Gemini HTTP 503; UNAVAILABLE')
+
     def test_missing_key_never_requests(self):
         client = Mock()
         self.assertEqual(probe(None, 'gemini-3.8-flash', client)['requests'], [])
