@@ -48,6 +48,7 @@ def review_insurer(insurer, *, apply=False, use_ai=False, repository=None, provi
                 failed.append(key)
         if use_ai and failed and result['ai_requests'] == 0:
             provider = provider or get_provider()
+            result['model'] = getattr(provider, 'model', provider.name)
             if not provider.available:
                 result['provider_error'] = 'GEMINI_API_KEY missing'
             else:

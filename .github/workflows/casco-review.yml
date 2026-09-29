@@ -15,6 +15,10 @@ on:
         description: One extraction of failed fields from one cached document
         type: boolean
         default: false
+      model:
+        description: Optional Gemini model for this manual run only
+        type: string
+        required: false
 concurrency:
   group: daily-casco-collection
   cancel-in-progress: false
@@ -25,7 +29,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      GEMINI_MODEL: ${{ inputs.model || vars.GEMINI_MODEL }}
       INSURER: ${{ inputs.insurer }}
       APPLY: ${{ inputs.apply }}
       USE_AI: ${{ inputs.ai }}
