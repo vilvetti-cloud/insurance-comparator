@@ -33,22 +33,25 @@ PAGE_TERMS = {
 }
 
 
-def select_pages(document, field, *, max_pages=12):
+def select_pages(document, field, *, max_pages=3, max_chars=14000):
     """Include relevant physical pages and their neighbours; disclose the scope."""
     patterns = PAGE_TERMS.get(field)
     if not patterns:
         raise ValueError('No page selection terms for ' + field)
     ranked = sorted(((sum(1 for term in patterns if re.search(term, text.lower())), page)
                      for page, text in document.pages.items()), reverse=True)
-    seeds = [page for score, page in ranked if score][:4]
+    seeds = [page for score, page in ranked if score][:3]
     if not seeds:
         return None, []
     numbers = set(document.pages)
     selected = []
-    for seed in seeds:
-        for page in (seed - 1, seed, seed + 1):
-            if page in numbers and page not in selected and len(selected) < max_pages:
+    size = 0
+    for page in seeds + [neighbor for seed in seeds for neighbor in (seed - 1, seed + 1)]:
+        if page in numbers and page not in selected and len(selected) < max_pages:
+            length = len(document.pages[page])
+            if size + length <= max_chars:
                 selected.append(page)
+                size += length
     selected.sort()
     return ParsedDocument({page: document.pages[page] for page in selected}), selected
 
@@ -66,7 +69,7 @@ class GroqPilotProvider:
         return requests.post('https://api.groq.com/openai/v1/chat/completions',
             headers={'Authorization': 'Bearer ' + self.api_key},
             json={'model': self.model, 'messages': [{'role': 'user', 'content': prompt}],
-                  'temperature': 0, 'max_completion_tokens': 8192,
+                  'temperature': 0, 'max_completion_tokens': 2048,
                   'response_format': {'type': 'json_schema', 'json_schema': {
                       'name': 'casco_answers', 'strict': True, 'schema': schema}}},
             timeout=(15, 180))

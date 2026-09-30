@@ -24,6 +24,7 @@ def run(repository, provider, field=None):
         report = analyze_pilot(document, provider, field_keys=(field,)) if field else analyze_pilot(document, provider)
         report.update(insurer='t-insurance', source_url=row['url'], checksum=row['checksum'])
         report['selected_pages'] = selected_pages
+        report['selected_text_chars'] = len(document.text)
         report['document_scope'] = 'selected_pages' if field else 'whole_document'
         return report
     return {'status': 'no_cached_document', 'ai_requests': 0, 'fields': {}}
