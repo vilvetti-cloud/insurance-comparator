@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from collector.casco_document import ParsedDocument
 from collector.casco_pilot import analyze_pilot, get_pilot_provider, select_pages, FIELD_KEYS
@@ -30,15 +31,22 @@ def run(repository, provider, field=None):
     return {'status': 'no_cached_document', 'ai_requests': 0, 'fields': {}}
 
 
-def run_all(repository, provider):
+def run_all(repository, provider, start_field=None):
     """Initial one-insurer collection: one bounded question per field."""
+    if start_field is not None and start_field not in FIELD_KEYS:
+        raise ValueError('Unknown start field')
+    fields = FIELD_KEYS[FIELD_KEYS.index(start_field):] if start_field else FIELD_KEYS
     results = {}
-    for field in FIELD_KEYS:
+    for field in fields:
+        if results and getattr(provider, 'name', None) == 'groq' and any(
+                r.get('ai_requests') for r in results.values()):
+            time.sleep(80)
         result = run(repository, provider, field=field)
         results[field] = result
         if result['status'] in ('provider_error', 'provider_unavailable'):
             break  # A quota or service failure cannot be fixed by asking nine more questions.
-    return {'insurer': 't-insurance', 'status': 'complete' if len(results) == len(FIELD_KEYS)
+    return {'insurer': 't-insurance', 'start_field': start_field,
+            'status': 'complete' if len(results) == len(fields)
             and all(r['status'] == 'analyzed' for r in results.values()) else 'incomplete',
             'ai_requests': sum(r.get('ai_requests', 0) for r in results.values()), 'questions': results}
 
@@ -46,7 +54,7 @@ def run_all(repository, provider):
 if __name__ == '__main__':
     repository, provider = CascoRevisionRepository(), get_pilot_provider()
     field = os.getenv('PILOT_FIELD') or None
-    report = run_all(repository, provider) if field == 'all' else run(repository, provider, field)
+    report = run_all(repository, provider, start_field=os.getenv('PILOT_START_FIELD') or None) if field == 'all' else run(repository, provider, field)
     text = json.dumps(report, ensure_ascii=False, indent=2)
     Path('casco-pilot-report.json').write_text(text, encoding='utf-8')
     print(text)
