@@ -36,7 +36,7 @@ class PilotTests(unittest.TestCase):
         fields = self.answers()
         fields['gap'].update(answer=None, status='not_found', explanation='', missing_information='GAP')
         report = analyze_pilot(ParsedDocument({1: 'text'}), self.provider(fields))
-        self.assertEqual(report['status'], 'provider_error')
+        self.assertEqual(report['status'], 'response_invalid')
         self.assertIn('explanation', report['error'])
 
     def test_partial_without_answer_keeps_reason_for_followup(self):

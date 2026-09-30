@@ -27,6 +27,10 @@ ANSWER_SCHEMA = {
 }
 PILOT_SCHEMA = {'type': 'object', 'properties': {k: ANSWER_SCHEMA for k in FIELD_KEYS},
                 'required': list(FIELD_KEYS), 'additionalProperties': False}
+
+
+class ModelOutputInvalid(ProviderUnavailable):
+    pass
 PAGE_TERMS = {
     'franchise': (r'франшиз',),
     'without_certificates': (r'без\s+справ', r'без\s+документ', r'компетентн\w*\s+орган', r'упрощенн\w*\s+урегулиров'),
@@ -142,35 +146,37 @@ def analyze_pilot(document, provider, field_keys=FIELD_KEYS):
             candidate = response.json()['choices'][0]
             if candidate.get('finish_reason') != 'stop':
                 reason = candidate.get('finish_reason')
-                raise ProviderUnavailable('Model response incomplete: ' +
+                raise ModelOutputInvalid('Model response incomplete: ' +
                     (reason if reason in ('length', 'content_filter', 'tool_calls') else 'unknown'))
             fields = json.loads(candidate['message']['content'])
         else:
             candidate = response.json()['candidates'][0]
             if candidate.get('finishReason') != 'STOP':
-                raise ProviderUnavailable('Model response incomplete')
+                raise ModelOutputInvalid('Model response incomplete')
             fields = json.loads(''.join(p.get('text', '') for p in candidate['content']['parts']))
         if not isinstance(fields, dict) or set(fields) != set(field_keys):
-            raise ProviderUnavailable('Missing fields in model response')
+            raise ModelOutputInvalid('Missing fields in model response')
         for fact in fields.values():
             if not isinstance(fact, dict) or set(fact) != set(ANSWER_SCHEMA['required']):
-                raise ProviderUnavailable('Invalid answer format')
+                raise ModelOutputInvalid('Invalid answer format')
             if fact['status'] not in ANSWER_SCHEMA['properties']['status']['enum']:
-                raise ProviderUnavailable('Invalid answer status')
+                raise ModelOutputInvalid('Invalid answer status')
             if not isinstance(fact['explanation'], str) or not fact['explanation'].strip():
-                raise ProviderUnavailable('Model omitted explanation')
+                raise ModelOutputInvalid('Model omitted explanation')
             if fact['status'] == 'answered' and (not isinstance(fact['answer'], str) or not fact['answer'].strip()):
-                raise ProviderUnavailable('Model marked empty answer as answered')
+                raise ModelOutputInvalid('Model marked empty answer as answered')
             if not isinstance(fact['missing_information'], str) or not isinstance(fact['references'], list):
-                raise ProviderUnavailable('Invalid answer diagnostics')
+                raise ModelOutputInvalid('Invalid answer diagnostics')
             if fact['status'] in ('not_found', 'partial', 'conflicting') and not fact['missing_information'].strip():
-                raise ProviderUnavailable('Model omitted missing-information explanation')
+                raise ModelOutputInvalid('Model omitted missing-information explanation')
             if fact['status'] in ('partial', 'conflicting') and not fact['answer']:
                 fact['diagnostic_warning'] = 'model_returned_no_answer'
             fact['next_step'] = ('done' if fact['status'] == 'answered' else 'search_official_site')
         return {'status': 'analyzed', 'ai_requests': 1, 'fields': fields,
                 'publication': 'pilot_only', 'model': getattr(provider, 'model', None),
                 'provider': getattr(provider, 'name', 'gemini')}
+    except ModelOutputInvalid as exc:
+        return {'status': 'response_invalid', 'ai_requests': 1, 'fields': {}, 'error': str(exc)}
     except ProviderUnavailable as exc:
         return {'status': 'provider_error', 'ai_requests': 1, 'fields': {}, 'error': str(exc)}
     except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
