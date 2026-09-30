@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import Mock, patch
 from collector.casco_document import ParsedDocument
 from collector.casco_pilot import analyze_pilot, FIELD_KEYS, GroqPilotProvider, get_pilot_provider, select_pages
-from scripts.casco_pilot import run
+from scripts.casco_pilot import run, run_all
 
 
 class PilotTests(unittest.TestCase):
@@ -91,3 +91,16 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(result['selected_pages'], pages)
         self.assertEqual(result['document_scope'], 'selected_pages')
         self.assertEqual(provider._request.call_args.kwargs['schema']['required'], ['total_loss'])
+
+    def test_initial_collection_stops_after_provider_failure(self):
+        repository = Mock()
+        repository.review_documents.return_value = [{'url': 'https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf',
+            'checksum': 'hash', 'parsed': {'parser': 'docling', 'pages': {'1': 'Франшиза применяется.'}}}]
+        provider = self.provider({})
+        provider._request.return_value.status_code = 429
+        provider._request.return_value.json.return_value = {'error': {'status': 'RESOURCE_EXHAUSTED'}}
+        result = run_all(repository, provider)
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['ai_requests'], 1)
+        self.assertEqual(list(result['questions']), ['franchise'])
+        provider._request.assert_called_once()
