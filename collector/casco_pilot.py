@@ -49,7 +49,7 @@ def select_pages(document, field, *, max_pages=3, max_chars=14000):
         raise ValueError('No page selection terms for ' + field)
     ranked = sorted(((sum(1 for term in patterns if re.search(term, text.lower())), page)
                      for page, text in document.pages.items()), reverse=True)
-    seeds = [page for score, page in ranked if score][:3]
+    seeds = [page for score, page in ranked if score][:1 if field == 'without_certificates' else 3]
     if not seeds:
         return None, []
     numbers = set(document.pages)
@@ -105,6 +105,7 @@ def pilot_prompt(document, field_keys=FIELD_KEYS):
         'нецелесообразность ремонта. Укажи порог и его базу, различия программ и '
         'оговорку об ином условии договора, если они есть в документе. '
         'Не добавляй типичные рыночные проценты или сведения из памяти. '
+        'Не включай в ответ соседние страховые риски, которые не относятся к заданному полю. '
         'answered: ответ найден; partial: часть ответа найдена, сохрани её; '
         'not_found: подходящих сведений в этом документе не найдено; conflicting: '
         'найдены противоречащие условия, которые не удалось разделить по программам. '
