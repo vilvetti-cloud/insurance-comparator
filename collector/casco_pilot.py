@@ -1,5 +1,6 @@
 """One-document answer-first pilot. No publication and no evidence rejection."""
 import json
+import os
 import requests
 from collector.casco_provider import FIELD_KEYS, ProviderUnavailable, error_summary
 from collector.casco_questions import QUESTIONS
@@ -24,6 +25,33 @@ ANSWER_SCHEMA = {
 }
 PILOT_SCHEMA = {'type': 'object', 'properties': {k: ANSWER_SCHEMA for k in FIELD_KEYS},
                 'required': list(FIELD_KEYS), 'additionalProperties': False}
+
+
+class GroqPilotProvider:
+    """Existing Groq credential, used only for the explicit one-document pilot."""
+    name = 'groq'
+
+    def __init__(self, api_key, model='openai/gpt-oss-120b'):
+        self.api_key = api_key
+        self.available = bool(api_key)
+        self.model = model
+
+    def _request(self, prompt, *, schema):
+        return requests.post('https://api.groq.com/openai/v1/chat/completions',
+            headers={'Authorization': 'Bearer ' + self.api_key},
+            json={'model': self.model, 'messages': [{'role': 'user', 'content': prompt}],
+                  'temperature': 0, 'max_completion_tokens': 8192,
+                  'response_format': {'type': 'json_schema', 'json_schema': {
+                      'name': 'casco_answers', 'strict': True, 'schema': schema}}},
+            timeout=(15, 180))
+
+
+def get_pilot_provider():
+    key = os.getenv('GROQ_API_KEY')
+    if key:
+        return GroqPilotProvider(key)
+    from collector.casco_provider import get_provider
+    return get_provider()
 
 
 def pilot_prompt(document):
@@ -64,11 +92,19 @@ def analyze_pilot(document, provider):
     try:
         response = provider._request(pilot_prompt(document), schema=PILOT_SCHEMA)
         if response.status_code != 200:
+            if getattr(provider, 'name', None) == 'groq':
+                raise ProviderUnavailable('Groq HTTP ' + str(response.status_code))
             raise ProviderUnavailable(error_summary(response))
-        candidate = response.json()['candidates'][0]
-        if candidate.get('finishReason') != 'STOP':
-            raise ProviderUnavailable('Model response incomplete')
-        fields = json.loads(''.join(p.get('text', '') for p in candidate['content']['parts']))
+        if getattr(provider, 'name', None) == 'groq':
+            candidate = response.json()['choices'][0]
+            if candidate.get('finish_reason') != 'stop':
+                raise ProviderUnavailable('Model response incomplete')
+            fields = json.loads(candidate['message']['content'])
+        else:
+            candidate = response.json()['candidates'][0]
+            if candidate.get('finishReason') != 'STOP':
+                raise ProviderUnavailable('Model response incomplete')
+            fields = json.loads(''.join(p.get('text', '') for p in candidate['content']['parts']))
         if not isinstance(fields, dict) or set(fields) != set(FIELD_KEYS):
             raise ProviderUnavailable('Missing fields in model response')
         for fact in fields.values():
@@ -86,7 +122,8 @@ def analyze_pilot(document, provider):
                 raise ProviderUnavailable('Model omitted missing-information explanation')
             fact['next_step'] = ('done' if fact['status'] == 'answered' else 'search_official_site')
         return {'status': 'analyzed', 'ai_requests': 1, 'fields': fields,
-                'publication': 'pilot_only', 'model': getattr(provider, 'model', None)}
+                'publication': 'pilot_only', 'model': getattr(provider, 'model', None),
+                'provider': getattr(provider, 'name', 'gemini')}
     except ProviderUnavailable as exc:
         return {'status': 'provider_error', 'ai_requests': 1, 'fields': {}, 'error': str(exc)}
     except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:

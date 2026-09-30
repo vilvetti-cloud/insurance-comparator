@@ -1,8 +1,8 @@
 import json
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from collector.casco_document import ParsedDocument
-from collector.casco_pilot import analyze_pilot, FIELD_KEYS
+from collector.casco_pilot import analyze_pilot, FIELD_KEYS, GroqPilotProvider, get_pilot_provider
 from scripts.casco_pilot import run
 
 
@@ -58,3 +58,18 @@ class PilotTests(unittest.TestCase):
         repository.review_documents.assert_called_once_with('t-insurance')
         self.assertEqual(len(repository.mock_calls), 1)
         provider._request.assert_called_once()
+
+    def test_groq_structured_response_and_existing_key_selection(self):
+        with patch.dict('os.environ', {'GROQ_API_KEY': 'test-key'}):
+            provider = get_pilot_provider()
+        self.assertIsInstance(provider, GroqPilotProvider)
+        response = Mock(status_code=200)
+        response.json.return_value = {'choices': [{'finish_reason': 'stop',
+            'message': {'content': json.dumps(self.answers())}}]}
+        with patch('collector.casco_pilot.requests.post', return_value=response) as post:
+            report = analyze_pilot(ParsedDocument({1: 'text'}), provider)
+        self.assertEqual(report['status'], 'analyzed')
+        self.assertEqual(report['provider'], 'groq')
+        post.assert_called_once()
+        self.assertEqual(post.call_args.kwargs['json']['response_format']['json_schema']['strict'], True)
+        self.assertEqual(post.call_args.kwargs['json']['model'], 'openai/gpt-oss-120b')

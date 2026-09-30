@@ -1,5 +1,8 @@
 name: T-insurance answer pilot
 on:
+  push:
+    paths:
+      - .github/casco-groq-trigger.txt
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,6 +13,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
     steps:
       - uses: actions/checkout@v4

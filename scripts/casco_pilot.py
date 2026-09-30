@@ -5,8 +5,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from collector.casco_document import ParsedDocument
-from collector.casco_pilot import analyze_pilot
-from collector.casco_provider import get_provider
+from collector.casco_pilot import analyze_pilot, get_pilot_provider
 from database.repositories.casco_revision import CascoRevisionRepository
 
 
@@ -23,7 +22,7 @@ def run(repository, provider):
 
 
 if __name__ == '__main__':
-    report = run(CascoRevisionRepository(), get_provider())
+    report = run(CascoRevisionRepository(), get_pilot_provider())
     text = json.dumps(report, ensure_ascii=False, indent=2)
     Path('casco-pilot-report.json').write_text(text, encoding='utf-8')
     print(text)
