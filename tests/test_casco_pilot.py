@@ -71,7 +71,7 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(report['status'], 'analyzed')
         self.assertEqual(report['provider'], 'groq')
         post.assert_called_once()
-        self.assertEqual(post.call_args.kwargs['json']['response_format']['json_schema']['strict'], True)
+        self.assertEqual(post.call_args.kwargs['json']['response_format']['json_schema']['strict'], False)
         self.assertEqual(post.call_args.kwargs['json']['model'], 'openai/gpt-oss-120b')
 
     def test_total_loss_reads_matching_pages_and_neighbours(self):

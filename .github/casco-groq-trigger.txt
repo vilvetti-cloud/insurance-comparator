@@ -1,1 +1,1 @@
-One-time ten-field page-scoped pilot run.
+One-time best-effort without-certificates pilot run.
