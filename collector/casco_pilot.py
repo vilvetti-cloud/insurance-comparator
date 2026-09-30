@@ -78,7 +78,7 @@ class GroqPilotProvider:
         return requests.post('https://api.groq.com/openai/v1/chat/completions',
             headers={'Authorization': 'Bearer ' + self.api_key},
             json={'model': self.model, 'messages': [{'role': 'user', 'content': prompt}],
-                  'temperature': 0, 'max_completion_tokens': 2048,
+                  'temperature': 0, 'reasoning_effort': 'low', 'max_completion_tokens': 4096,
                   'response_format': {'type': 'json_schema', 'json_schema': {
                       'name': 'casco_answers', 'strict': False, 'schema': schema}}},
             timeout=(15, 180))
@@ -140,7 +140,9 @@ def analyze_pilot(document, provider, field_keys=FIELD_KEYS):
         if getattr(provider, 'name', None) == 'groq':
             candidate = response.json()['choices'][0]
             if candidate.get('finish_reason') != 'stop':
-                raise ProviderUnavailable('Model response incomplete')
+                reason = candidate.get('finish_reason')
+                raise ProviderUnavailable('Model response incomplete: ' +
+                    (reason if reason in ('length', 'content_filter', 'tool_calls') else 'unknown'))
             fields = json.loads(candidate['message']['content'])
         else:
             candidate = response.json()['candidates'][0]
