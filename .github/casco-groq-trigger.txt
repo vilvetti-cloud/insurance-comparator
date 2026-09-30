@@ -1,1 +1,1 @@
-One-time pilot for repair and payment terms.
+One-time strict repair type pilot run.

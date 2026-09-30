@@ -76,8 +76,9 @@ class PilotTests(unittest.TestCase):
         response = Mock(status_code=200)
         response.json.return_value = {'choices': [{'finish_reason': 'stop',
             'message': {'content': json.dumps(self.answers())}}]}
-        with patch('collector.casco_pilot.requests.post', return_value=response) as post:
-            report = analyze_pilot(ParsedDocument({1: 'text'}), provider)
+        with patch.dict('os.environ', {'GROQ_STRICT': 'false'}):
+            with patch('collector.casco_pilot.requests.post', return_value=response) as post:
+                report = analyze_pilot(ParsedDocument({1: 'text'}), provider)
         self.assertEqual(report['status'], 'analyzed')
         self.assertEqual(report['provider'], 'groq')
         post.assert_called_once()

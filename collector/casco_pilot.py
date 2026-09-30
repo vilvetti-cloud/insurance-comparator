@@ -84,7 +84,8 @@ class GroqPilotProvider:
             json={'model': self.model, 'messages': [{'role': 'user', 'content': prompt}],
                   'temperature': 0, 'reasoning_effort': 'low', 'max_completion_tokens': 4096,
                   'response_format': {'type': 'json_schema', 'json_schema': {
-                      'name': 'casco_answers', 'strict': False, 'schema': schema}}},
+                      'name': 'casco_answers', 'strict': os.getenv('GROQ_STRICT', '').lower() == 'true',
+                      'schema': schema}}},
             timeout=(15, 180))
 
 
