@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 from collector.casco_document import ParsedDocument
-from collector.casco_pilot import analyze_pilot, FIELD_KEYS, GroqPilotProvider, get_pilot_provider
+from collector.casco_pilot import analyze_pilot, FIELD_KEYS, GroqPilotProvider, get_pilot_provider, select_pages
 from scripts.casco_pilot import run
 
 
@@ -73,3 +73,21 @@ class PilotTests(unittest.TestCase):
         post.assert_called_once()
         self.assertEqual(post.call_args.kwargs['json']['response_format']['json_schema']['strict'], True)
         self.assertEqual(post.call_args.kwargs['json']['model'], 'openai/gpt-oss-120b')
+
+    def test_total_loss_reads_matching_pages_and_neighbours(self):
+        document = ParsedDocument({1: 'Общие сведения', 2: 'Полная гибель ТС при превышении 75%.',
+                                   3: 'Иной порог может быть установлен договором.',
+                                   4: 'Несвязанный раздел'})
+        scoped, pages = select_pages(document, 'total_loss')
+        self.assertEqual(pages, [1, 2, 3])
+        self.assertIn('Иной порог', scoped.text)
+        repository = Mock()
+        repository.review_documents.return_value = [{'url': 'https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf',
+            'checksum': 'hash', 'parsed': {'parser': 'docling',
+            'pages': {str(k): v for k, v in document.pages.items()}}}]
+        provider = self.provider({'total_loss': self.answers()['total_loss']})
+        result = run(repository, provider, field='total_loss')
+        self.assertEqual(result['status'], 'analyzed')
+        self.assertEqual(result['selected_pages'], pages)
+        self.assertEqual(result['document_scope'], 'selected_pages')
+        self.assertEqual(provider._request.call_args.kwargs['schema']['required'], ['total_loss'])

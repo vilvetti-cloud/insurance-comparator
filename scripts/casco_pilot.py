@@ -5,24 +5,32 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from collector.casco_document import ParsedDocument
-from collector.casco_pilot import analyze_pilot, get_pilot_provider
+from collector.casco_pilot import analyze_pilot, get_pilot_provider, select_pages
 from database.repositories.casco_revision import CascoRevisionRepository
 
 
-def run(repository, provider):
+def run(repository, provider, field=None):
     for row in repository.review_documents('t-insurance'):
         parsed = row.get('parsed') or {}
         if parsed.get('parser') != 'docling' or parsed.get('warning') or not parsed.get('pages'):
             continue
         document = ParsedDocument({int(n): t for n, t in parsed['pages'].items()})
-        report = analyze_pilot(document, provider)
+        selected_pages = list(document.pages)
+        if field:
+            document, selected_pages = select_pages(document, field)
+            if document is None:
+                return {'status': 'no_relevant_pages', 'ai_requests': 0, 'fields': {},
+                        'field': field, 'next_step': 'search_official_site'}
+        report = analyze_pilot(document, provider, field_keys=(field,)) if field else analyze_pilot(document, provider)
         report.update(insurer='t-insurance', source_url=row['url'], checksum=row['checksum'])
+        report['selected_pages'] = selected_pages
+        report['document_scope'] = 'selected_pages' if field else 'whole_document'
         return report
     return {'status': 'no_cached_document', 'ai_requests': 0, 'fields': {}}
 
 
 if __name__ == '__main__':
-    report = run(CascoRevisionRepository(), get_pilot_provider())
+    report = run(CascoRevisionRepository(), get_pilot_provider(), os.getenv('PILOT_FIELD') or None)
     text = json.dumps(report, ensure_ascii=False, indent=2)
     Path('casco-pilot-report.json').write_text(text, encoding='utf-8')
     print(text)

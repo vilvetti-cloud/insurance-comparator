@@ -14,6 +14,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      PILOT_FIELD: total_loss
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
     steps:
       - uses: actions/checkout@v4
