@@ -1,5 +1,8 @@
 name: T-insurance answer pilot
 on:
+  push:
+    paths:
+      - .github/casco-pilot-trigger.txt
   workflow_dispatch:
 permissions:
   contents: read
