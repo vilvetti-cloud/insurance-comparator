@@ -159,12 +159,14 @@ def analyze_pilot(document, provider, field_keys=FIELD_KEYS):
                 raise ProviderUnavailable('Invalid answer status')
             if not isinstance(fact['explanation'], str) or not fact['explanation'].strip():
                 raise ProviderUnavailable('Model omitted explanation')
-            if fact['status'] != 'not_found' and (not isinstance(fact['answer'], str) or not fact['answer'].strip()):
-                raise ProviderUnavailable('Model omitted answer without not_found status')
+            if fact['status'] == 'answered' and (not isinstance(fact['answer'], str) or not fact['answer'].strip()):
+                raise ProviderUnavailable('Model marked empty answer as answered')
             if not isinstance(fact['missing_information'], str) or not isinstance(fact['references'], list):
                 raise ProviderUnavailable('Invalid answer diagnostics')
             if fact['status'] in ('not_found', 'partial', 'conflicting') and not fact['missing_information'].strip():
                 raise ProviderUnavailable('Model omitted missing-information explanation')
+            if fact['status'] in ('partial', 'conflicting') and not fact['answer']:
+                fact['diagnostic_warning'] = 'model_returned_no_answer'
             fact['next_step'] = ('done' if fact['status'] == 'answered' else 'search_official_site')
         return {'status': 'analyzed', 'ai_requests': 1, 'fields': fields,
                 'publication': 'pilot_only', 'model': getattr(provider, 'model', None),

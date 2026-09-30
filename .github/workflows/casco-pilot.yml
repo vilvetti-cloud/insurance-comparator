@@ -15,7 +15,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       PILOT_FIELD: all
-      PILOT_START_FIELD: gap
+      PILOT_START_FIELD: self_ignition
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
     steps:
       - uses: actions/checkout@v4

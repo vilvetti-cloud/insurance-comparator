@@ -39,6 +39,16 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(report['status'], 'provider_error')
         self.assertIn('explanation', report['error'])
 
+    def test_partial_without_answer_keeps_reason_for_followup(self):
+        fields = self.answers()
+        fields['self_ignition'].update(answer=None, status='partial',
+            explanation='Найден пожар, но нет условий о самовозгорании.',
+            missing_information='Нужно проверить сайт и остальные документы.')
+        report = analyze_pilot(ParsedDocument({1: 'Пожар'}), self.provider(fields))
+        self.assertEqual(report['status'], 'analyzed')
+        self.assertEqual(report['fields']['self_ignition']['diagnostic_warning'], 'model_returned_no_answer')
+        self.assertEqual(report['fields']['self_ignition']['next_step'], 'search_official_site')
+
     def test_api_error_is_not_ten_not_found_answers_and_never_retries(self):
         provider = self.provider({})
         provider._request.return_value.status_code = 503
