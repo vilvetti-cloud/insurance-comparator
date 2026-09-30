@@ -1,9 +1,15 @@
 name: T-insurance answer pilot
 on:
-  push:
-    paths:
-      - .github/casco-groq-trigger.txt
   workflow_dispatch:
+    inputs:
+      field:
+        description: One CASCO field key or all fields
+        type: string
+        default: all
+      start_field:
+        description: Resume all-fields pilot from this field
+        type: string
+        required: false
 permissions:
   contents: read
 jobs:
@@ -14,8 +20,9 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      PILOT_FIELD: repair_type
-      GROQ_STRICT: 'true'
+      PILOT_FIELD: ${{ inputs.field || 'all' }}
+      PILOT_START_FIELD: ${{ inputs.start_field }}
+      GROQ_STRICT: 'false'
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
     steps:
       - uses: actions/checkout@v4
