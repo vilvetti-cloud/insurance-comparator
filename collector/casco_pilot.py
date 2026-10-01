@@ -60,6 +60,13 @@ CONTEXT_PAGE_TERMS = {
               r'военн\w*\s+действ|не\s+покрываются\s+страхован'),
 }
 
+GENERAL_CONTEXT_TERMS = (
+    r'страхов\w*\s+риск\w*|страхов\w*\s+случа\w*',
+    r'порядок\s+определен\w*\s+размер\w*\s+страхов\w*\s+выплат',
+    r'основан\w*\s+для\s+отказ\w*\s+в\s+страхов\w*\s+выплат',
+    r'услови\w*\s+договор\w*\s+страхован',
+)
+
 
 def select_pages(document, field, *, max_pages=3, max_chars=14000):
     """Include relevant physical pages and their neighbours; disclose the scope."""
@@ -71,7 +78,14 @@ def select_pages(document, field, *, max_pages=3, max_chars=14000):
                      for page, text in document.pages.items()), reverse=True)
     seeds = [page for score, page in ranked if score][:1 if field == 'without_certificates' else max_pages]
     if not seeds:
-        return None, []
+        # A missing keyword must not cancel the question: inspect the common
+        # risk, settlement and exclusion clauses before recording not_found.
+        ranked = sorted(((sum(1 for term in GENERAL_CONTEXT_TERMS if re.search(term, text.lower())), page)
+                         for page, text in document.pages.items()
+                         if re.search(r'(?m)^\s*(?:[-*]\s*)?\d+\.\d+', text)), reverse=True)
+        seeds = [page for score, page in ranked if score][:max_pages]
+        if not seeds:
+            return None, []
     numbers = set(document.pages)
     selected = []
     size = 0

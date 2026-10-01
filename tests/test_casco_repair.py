@@ -110,6 +110,13 @@ class RepairTests(unittest.TestCase):
         self.assertIn("Как происходит выплата", prompt)
         self.assertIn("4.2.2.", prompt)
 
+    def test_all_fields_can_fall_back_to_general_contract_context(self):
+        from collector.casco_pilot import select_pages
+        page = "4.2.2. Страховые риски и страховые случаи определяются договором страхования."
+        selected, numbers = select_pages(ParsedDocument({9: page}), "franchise")
+        self.assertEqual(numbers, [9])
+        self.assertIn(page, selected.text)
+
     def test_empty_previous_candidate_still_gets_contextual_question(self):
         row = self.row()
         row["parsed"]["pages"] = {"9": "4.2.2. Механическое повреждение — падение предмета."}

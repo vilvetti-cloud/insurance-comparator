@@ -54,6 +54,10 @@
             <span>зависит от договора</span>
           </div>
           <div class="report-summary__metric">
+            <strong>{{ report.total_contextual_answers }}</strong>
+            <span>контекстных ответов ИИ на проверке</span>
+          </div>
+          <div class="report-summary__metric">
             <strong>{{ report.total_review }}</strong>
             <span>изолировано на проверку</span>
           </div>
@@ -117,6 +121,9 @@
                 {% if company.review_count %}
                   <span class="source-mix__item source-mix__item--quality-review">Перепроверить {{ company.review_count }}</span>
                 {% endif %}
+                {% if company.contextual_answer_count %}
+                  <span class="source-mix__item source-mix__item--quality-review">Ответы ИИ {{ company.contextual_answer_count }}</span>
+                {% endif %}
               </div>
 
               {% if company.latest_run %}
@@ -169,6 +176,16 @@
                         {% endif %}
                       {% else %}
                         <span class="report-missing">Не найдено</span>
+                      {% endif %}
+                      {% if field.analysis_status %}
+                        <details class="evidence-details">
+                          <summary>Ответ ИИ по контексту — требует проверки</summary>
+                          {% if field.analysis_answer %}<p>{{ field.analysis_answer }}</p>{% endif %}
+                          {% if field.analysis_explanation %}<p>{{ field.analysis_explanation }}</p>{% endif %}
+                          {% if field.analysis_missing %}<p>Остаётся уточнить: {{ field.analysis_missing }}</p>{% endif %}
+                          <p>Причина непубликации: {{ field.analysis_validation }}</p>
+                          {% if field.analysis_source_url %}<a href="{{ field.analysis_source_url }}" target="_blank" rel="noopener">Открыть документ ↗</a>{% endif %}
+                        </details>
                       {% endif %}
                     </td>
                     <td>

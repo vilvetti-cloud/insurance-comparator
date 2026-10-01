@@ -7,6 +7,7 @@ from typing import Any
 from psycopg.rows import dict_row
 
 from collector.registry import INSURERS
+from collector.casco_sources import official_url
 from core.catalog import KASKO_FIELDS
 from core.condition_audit import ConditionAudit, audit_condition
 from db import _connect
@@ -59,6 +60,12 @@ class DataQualityReportService:
                         "quality_label": "Не найдено",
                         "quality_reason": "Значение отсутствует.",
                         "sales_eligible": False,
+                        "analysis_answer": None,
+                        "analysis_explanation": None,
+                        "analysis_missing": None,
+                        "analysis_status": None,
+                        "analysis_validation": None,
+                        "analysis_source_url": None,
                     }
                     for field in KASKO_FIELDS
                 ],
@@ -164,6 +171,23 @@ class DataQualityReportService:
                     """
                 )
                 latest_runs = list(cur.fetchall())
+
+                # Latest answer for the current checksum only. A contextual
+                # answer remains diagnostic and never replaces a verified card.
+                cur.execute(
+                    """SELECT DISTINCT ON (co.id, f.field_key)
+                           co.name AS company_name, co.slug AS insurer,
+                           f.field_key, c.payload, c.reason, s.url AS source_url
+                       FROM casco_review_candidates c
+                       JOIN casco_document_revisions r ON r.id=c.revision_id
+                       JOIN sources s ON s.id=r.source_id AND s.checksum=r.checksum
+                       JOIN comparison_fields f ON f.id=c.field_id
+                       JOIN products p ON p.id=f.product_id AND p.product_type='casco'
+                       JOIN companies co ON co.id=p.company_id
+                       WHERE c.validation_status='FAIL'
+                       ORDER BY co.id, f.field_key, c.id DESC"""
+                )
+                contextual_rows = list(cur.fetchall())
         except Exception as exc:
             logger.exception("Failed to load data quality report: %s", exc)
             return self._finalize(companies)
@@ -265,7 +289,34 @@ class DataQualityReportService:
                 "finished_at": self._format_dt(row["finished_at"]),
             }
 
+        self._attach_contextual_answers(companies, contextual_rows, field_positions)
+
         return self._finalize(companies)
+
+    @staticmethod
+    def _attach_contextual_answers(companies, rows, field_positions):
+        for row in rows:
+            company = companies.get(row["company_name"])
+            key = row["field_key"]
+            payload = row.get("payload") or {}
+            if (company is None or key not in field_positions
+                    or not isinstance(payload, dict)
+                    or not isinstance(row["source_url"], str)
+                    or not official_url(row["insurer"], row["source_url"])):
+                continue
+            status = payload.get("answer_status")
+            if status not in {"partial", "not_found", "conflicting", "answered"}:
+                continue
+            item = company["fields"][field_positions[key]]
+            if item["found"]:
+                continue
+            answer = payload.get("value")
+            item["analysis_answer"] = str(answer)[:2000] if answer else None
+            item["analysis_explanation"] = str(payload.get("explanation") or "")[:1000]
+            item["analysis_missing"] = str(payload.get("missing_information") or "")[:1000]
+            item["analysis_status"] = status
+            item["analysis_validation"] = row["reason"]
+            item["analysis_source_url"] = row["source_url"]
 
     def _finalize(self, companies: dict[str, dict[str, Any]]) -> dict[str, Any]:
         total_found = 0
@@ -301,6 +352,11 @@ class DataQualityReportService:
             company["review_count"] = sum(
                 1 for field in raw_fields if field["quality_status"] == "review"
             )
+            company["contextual_answer_count"] = sum(
+                1 for field in company["fields"]
+                if field["analysis_answer"] and not field["found"]
+            )
+            company["answered_count"] = company["found_count"] + company["contextual_answer_count"]
             total_found += len(found_fields)
 
             checked_values = [
@@ -326,6 +382,8 @@ class DataQualityReportService:
             "total_conditional": sum(item["conditional_count"] for item in company_list),
             "total_review": sum(item["review_count"] for item in company_list),
             "total_quarantined": sum(item["quarantined_count"] for item in company_list),
+            "total_contextual_answers": sum(item["contextual_answer_count"] for item in company_list),
+            "total_answered": sum(item["answered_count"] for item in company_list),
         }
 
     @staticmethod
