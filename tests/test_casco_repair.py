@@ -93,6 +93,23 @@ class RepairTests(unittest.TestCase):
         self.assertEqual(provider.diagnostics["total_loss"]["selected_pages"], [3])
         self.assertIn("total_loss", post.call_args.kwargs["json"]["messages"][0]["content"])
 
+    def test_groq_evidence_id_maps_to_literal_document_quote(self):
+        provider = GroqFieldProvider("test-key")
+        response = Mock(status_code=200)
+        response.json.return_value = {"choices": [{"finish_reason": "stop",
+            "message": {"content": json.dumps({
+                "value": "Полная гибель при превышении 75% страховой стоимости.",
+                "evidence_id": "E1", "status": "answered",
+                "explanation": "Указан порог.", "missing_information": "",
+            })}}]}
+        with patch("collector.casco_provider.requests.post", return_value=response) as post:
+            result = provider.extract(document=ParsedDocument({3: QUOTE}),
+                company="Т-Страхование", source_url=URL, field_keys=("total_loss",))
+        self.assertEqual(result["total_loss"]["exact_quote"], QUOTE)
+        self.assertEqual(result["total_loss"]["page"], 3)
+        self.assertEqual(result["total_loss"]["section"], "9.1.")
+        self.assertIn("evidence_id", post.call_args.kwargs["json"]["response_format"]["json_schema"]["schema"]["required"])
+
     def test_no_matching_pages_costs_no_api_request(self):
         provider = GroqFieldProvider("test-key")
         with patch("collector.casco_provider.requests.post") as post:

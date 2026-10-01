@@ -74,15 +74,25 @@ def select_pages(document, field, *, max_pages=3, max_chars=14000):
     if not patterns:
         raise ValueError('No page selection terms for ' + field)
     search_terms = CONTEXT_PAGE_TERMS.get(field, patterns)
-    ranked = sorted(((sum(1 for term in search_terms if re.search(term, text.lower())), page)
-                     for page, text in document.pages.items()), reverse=True)
+    def relevance(text, terms):
+        text = text.lower()
+        matches = [list(re.finditer(term, text)) for term in terms]
+        # Unique concepts matter most; repeated occurrences break ties. A
+        # late appendix must not win merely because its page number is high.
+        return 10 * sum(bool(found) for found in matches) + min(
+            9, sum(len(found) for found in matches))
+
+    ranked = sorted(((relevance(text, search_terms), page)
+                     for page, text in document.pages.items()),
+                    key=lambda item: (-item[0], item[1]))
     seeds = [page for score, page in ranked if score][:1 if field == 'without_certificates' else max_pages]
     if not seeds:
         # A missing keyword must not cancel the question: inspect the common
         # risk, settlement and exclusion clauses before recording not_found.
-        ranked = sorted(((sum(1 for term in GENERAL_CONTEXT_TERMS if re.search(term, text.lower())), page)
+        ranked = sorted(((relevance(text, GENERAL_CONTEXT_TERMS), page)
                          for page, text in document.pages.items()
-                         if re.search(r'(?m)^\s*(?:[-*]\s*)?\d+\.\d+', text)), reverse=True)
+                         if re.search(r'(?m)^\s*(?:[-*]\s*)?\d+\.\d+', text)),
+                        key=lambda item: (-item[0], item[1]))
         seeds = [page for score, page in ranked if score][:max_pages]
         if not seeds:
             return None, []

@@ -103,6 +103,14 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(result['document_scope'], 'selected_pages')
         self.assertEqual(provider._request.call_args.kwargs['schema']['required'], ['total_loss'])
 
+    def test_page_selection_does_not_prefer_late_appendix_on_equal_relevance(self):
+        document = ParsedDocument({2: 'Франшиза применяется по договору.',
+                                   99: 'Франшиза указана в таблице.',
+                                   100: 'Безусловная франшиза.'})
+        scoped, pages = select_pages(document, 'franchise', max_pages=1)
+        self.assertEqual(pages, [2])
+        self.assertIn('по договору', scoped.text)
+
     def test_initial_collection_stops_after_provider_failure(self):
         repository = Mock()
         repository.review_documents.return_value = [{'url': 'https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf',

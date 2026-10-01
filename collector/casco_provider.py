@@ -198,14 +198,34 @@ class GeminiProvider:
 GROQ_FIELD_SCHEMA = {
     "type": "object",
     "properties": {
-        **FACT_SCHEMA["properties"],
+        "value": {"type": ["string", "null"]},
+        "evidence_id": {"type": ["string", "null"]},
         "status": {"type": "string", "enum": ANSWER_STATUSES},
         "explanation": {"type": "string"},
         "missing_information": {"type": "string"},
     },
-    "required": [*FACT_SCHEMA["required"], "status", "explanation", "missing_information"],
+    "required": ["value", "evidence_id", "status", "explanation", "missing_information"],
     "additionalProperties": False,
 }
+
+
+def evidence_passages(document):
+    """Number literal Docling lines so the model selects evidence instead of copying it."""
+    passages = {}
+    for page, page_text in sorted(document.pages.items()):
+        for line in re.finditer(r"[^\n]+", page_text):
+            quote = line.group().strip()
+            if not 25 <= len(quote) <= 1500:
+                continue
+            prefix = page_text[:line.end()]
+            headings = list(re.finditer(
+                r"(?m)^\s*(?:#{1,6}\s*|[-*]\s*)?(\d+(?:\.\d+){1,5}\.?)(?=\s|$)", prefix))
+            section = headings[-1].group(1) if headings else None
+            evidence_id = f"E{len(passages) + 1}"
+            passages[evidence_id] = {
+                "page": page, "section": section, "exact_quote": quote,
+            }
+    return passages
 
 
 class GroqFieldProvider:
@@ -239,6 +259,14 @@ class GroqFieldProvider:
                     "missing_information": "Проверить другие официальные документы и сайт страховщика.",
                     "next_step": "search_official_site"}
                 continue
+            passages = evidence_passages(scoped)
+            if not passages:
+                facts[key] = {part: None for part in FACT_SCHEMA["required"]}
+                self.diagnostics[key] = {"status": "not_found", "selected_pages": pages,
+                    "explanation": "На выбранных страницах нет пригодных текстовых фрагментов.",
+                    "missing_information": "Проверить разбор PDF и остальные официальные материалы.",
+                    "next_step": "search_official_site"}
+                continue
             if requests_made:
                 time.sleep(80)  # Existing Groq free-tier requests otherwise return 429.
             prompt = (
@@ -253,13 +281,13 @@ class GroqFieldProvider:
                 "общий порядок и прямо укажи, что остаётся неясным. "
                 "value: короткий содержательный ответ до 520 символов; не оставляй его "
                 "пустым, если из контекста можно дать хотя бы ограниченный ответ. "
-                "exact_quote: дословный непрерывный фрагмент одной физической страницы от 25 символов; "
-                "не склеивай разные пункты, не ставь многоточия вместо пропущенного текста "
-                "и не исправляй исходный текст. Если можешь дать контекстный ответ, но не можешь "
-                "скопировать непрерывную цитату, оставь exact_quote/page/section null, "
-                "сохрани value и status=partial. "
-                "page: физический номер [PAGE N]. section: дословный заголовок или номер пункта "
-                "перед цитатой на той же странице. Не выдумывай раздел. "
+                "Выбери один evidence_id из пронумерованных дословных фрагментов ниже. "
+                "Не пиши цитату сам: система подставит исходный текст, страницу и раздел "
+                "по выбранному ID. value должен следовать только из этого фрагмента. "
+                "Если для полного ответа нужны несколько пунктов, дай лишь доказанную "
+                "выбранным фрагментом часть, поставь status=partial и объясни ограничение. "
+                "Если есть контекстный ответ, но ни один фрагмент его не доказывает, "
+                "оставь evidence_id=null, сохрани value и status=partial. "
                 "Если для полного ответа нужны несколько разрозненных пунктов, верни "
                 "доказанную часть и status=partial; объясни, что ещё нужно проверить. "
                 "Поджог или подрыв не доказывает, что террористический акт автоматически покрыт. "
@@ -269,7 +297,9 @@ class GroqFieldProvider:
                 "покрытия из отсутствия упоминания на выбранных страницах. Сохраняй числа, единицы, "
                 "полярность и зависимость от договора как в цитате. explanation: почему выбран статус. "
                 "missing_information: что нужно найти далее или пустая строка для полного ответа. "
-                "Верни только JSON по заданной схеме.\n<document>\n" + scoped.text + "\n</document>"
+                "Верни только JSON по заданной схеме.\n<passages>\n" +
+                "\n".join(f"[{eid} PAGE {p['page']} SECTION {p['section'] or '?'}] "
+                          f"{p['exact_quote']}" for eid, p in passages.items()) + "\n</passages>"
             )
             response = None
             try:
@@ -287,7 +317,8 @@ class GroqFieldProvider:
                 if choice.get("finish_reason") != "stop":
                     raise ProviderUnavailable("Groq response incomplete")
                 fact = json.loads(choice["message"]["content"])
-                if not isinstance(fact, dict) or set(fact) != set(GROQ_FIELD_SCHEMA["required"]):
+                legacy = set(fact) == {*FACT_SCHEMA["required"], "status", "explanation", "missing_information"} if isinstance(fact, dict) else False
+                if not isinstance(fact, dict) or not (legacy or set(fact) == set(GROQ_FIELD_SCHEMA["required"])):
                     raise ProviderUnavailable("Groq schema mismatch")
                 if fact["status"] not in GROQ_FIELD_SCHEMA["properties"]["status"]["enum"]:
                     raise ProviderUnavailable("Groq answer status invalid")
@@ -295,8 +326,12 @@ class GroqFieldProvider:
                     raise ProviderUnavailable("Groq omitted explanation")
                 if fact["status"] == "not_found" or not fact["value"]:
                     facts[key] = {part: None for part in FACT_SCHEMA["required"]}
-                else:
+                elif legacy:
                     facts[key] = {part: fact[part] for part in FACT_SCHEMA["required"]}
+                else:
+                    selected = passages.get(fact["evidence_id"])
+                    facts[key] = {"value": fact["value"],
+                                  **(selected or {"exact_quote": None, "page": None, "section": None})}
                 facts[key]["answer_status"] = fact["status"]
                 facts[key]["explanation"] = fact["explanation"]
                 facts[key]["missing_information"] = fact["missing_information"]
