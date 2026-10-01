@@ -1,6 +1,7 @@
 """Repair failed T-insurance fields from the cached official Docling document."""
 import json
 import os
+from difflib import SequenceMatcher
 from pathlib import Path
 import sys
 
@@ -10,6 +11,33 @@ from collector.casco_provider import get_provider, ProviderUnavailable
 from collector.casco_validation import validate_fact
 from database.repositories.casco_revision import CascoRevisionRepository
 from db import init_db
+
+
+def inspect(repository, *, insurer="t-insurance"):
+    """Read-only, bounded evidence diagnostics; never calls a model or writes cards."""
+    result = {"insurer": insurer, "documents": []}
+    for row in repository.review_documents(insurer):
+        parsed = row.get("parsed") or {}
+        pages = {int(n): text for n, text in parsed.get("pages", {}).items()}
+        entry = {"source_url": row["url"], "fields": {}}
+        for candidate in row["candidates"]:
+            if candidate["validation_status"] != "FAIL":
+                continue
+            fact = candidate.get("payload") or {}
+            page, quote, section = (fact.get(key) for key in ("page", "exact_quote", "section"))
+            page_text = pages.get(page, "") if type(page) is int else ""
+            blocks = [part.strip() for part in page_text.split("\n") if len(part.strip()) > 30]
+            best = max(blocks, key=lambda part: SequenceMatcher(None, (quote or "")[:300], part[:300]).ratio(),
+                       default="")
+            entry["fields"][candidate["field_key"]] = {
+                "reason": candidate["reason"], "value": fact.get("value"),
+                "quote": quote, "page": page, "section": section,
+                "quote_on_page": bool(quote and quote in page_text),
+                "section_on_page": bool(section and section in page_text),
+                "closest_page_line": best[:600],
+            }
+        result["documents"].append(entry)
+    return result
 
 
 def repair(repository, provider, *, insurer="t-insurance"):
@@ -65,7 +93,8 @@ def repair(repository, provider, *, insurer="t-insurance"):
 if __name__ == "__main__":
     if not os.getenv("DATABASE_URL") or not init_db():
         raise SystemExit("Database unavailable")
-    result = repair(CascoRevisionRepository(), get_provider())
+    result = (inspect(CascoRevisionRepository()) if os.getenv("CASCO_INSPECT_ONLY") == "true"
+              else repair(CascoRevisionRepository(), get_provider()))
     text = json.dumps(result, ensure_ascii=False, indent=2)
     Path("casco-repair-report.json").write_text(text, encoding="utf-8")
     print(text)

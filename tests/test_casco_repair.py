@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 from collector.casco_document import ParsedDocument
 from collector.casco_provider import GroqFieldProvider, ProviderUnavailable, get_provider
 from collector.casco_validation import validate_fact
-from scripts.casco_repair import repair
+from scripts.casco_repair import inspect, repair
 
 
 QUOTE = "9.1. Полная гибель ТС наступает, если стоимость ремонта превышает 75% страховой стоимости."
@@ -48,6 +48,19 @@ class RepairTests(unittest.TestCase):
         provider.extract.side_effect = ProviderUnavailable("Groq HTTP 429")
         report = repair(repo, provider)
         self.assertEqual(report["errors"], ["Groq HTTP 429"])
+        repo.publish.assert_not_called()
+
+    def test_inspect_reads_candidate_and_closest_page_line_without_writes(self):
+        row = self.row()
+        row["candidates"][0].update(payload={"value": "Полная гибель при 75%.",
+            "exact_quote": QUOTE.replace("75%", "75 %"), "page": 3, "section": "9.1."},
+            reason="quote_not_on_claimed_page")
+        repo = Mock()
+        repo.review_documents.return_value = [row]
+        result = inspect(repo)
+        item = result["documents"][0]["fields"]["total_loss"]
+        self.assertFalse(item["quote_on_page"])
+        self.assertIn("75%", item["closest_page_line"])
         repo.publish.assert_not_called()
 
     def test_groq_asks_one_question_on_selected_pages(self):
