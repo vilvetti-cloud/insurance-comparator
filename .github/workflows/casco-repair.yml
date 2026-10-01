@@ -1,5 +1,8 @@
 name: T-insurance verified card repair
 on:
+  push:
+    paths:
+      - .github/casco-context-trigger.txt
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,8 +13,8 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      CASCO_SOURCE_PROBE: 'true'
-      CASCO_DETERMINISTIC_ONLY: 'true'
+      CASCO_SOURCE_PROBE: 'false'
+      CASCO_DETERMINISTIC_ONLY: 'false'
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
     steps:
