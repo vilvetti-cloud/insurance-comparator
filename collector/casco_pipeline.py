@@ -128,7 +128,7 @@ class CascoCollectionPipeline:
         manifest = manifest or json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         report = {"passed_fields": 0, "review_fields": 0, "degraded": [],
                   "errors": manifest["errors"], "unchanged": len(manifest["unchanged"]),
-                  "validation_failures": []}
+                  "validation_failures": [], "field_diagnostics": {}}
         report['deferred'] = manifest.get('deferred', [])
         report['pages'] = manifest.get('pages', [])
         counts = {}
@@ -167,6 +167,9 @@ class CascoCollectionPipeline:
                     continue
                 facts = self.provider.extract(document=document,
                     company=get_insurer(item["insurer"]).name, source_url=source["url"])
+                diagnostics = getattr(self.provider, 'diagnostics', None)
+                if isinstance(diagnostics, dict) and diagnostics:
+                    report['field_diagnostics'][item['insurer']] = diagnostics
                 candidates = [(key, facts.get(key, {}), validate_fact(key, facts.get(key, {}),
                     document, insurer=item["insurer"], source_url=item["final_url"])) for key in FIELD_KEYS]
                 report["validation_failures"].extend(
