@@ -138,6 +138,21 @@ class RepairTests(unittest.TestCase):
         provider.extract.assert_not_called()
         self.assertTrue(repo.publish.call_args.kwargs["candidates"][0][2].passed)
 
+    def test_document_gap_triggers_official_site_followup_without_model(self):
+        row = self.row()
+        row["candidates"] = [{"field_key": "drone", "field_id": 7,
+            "validation_status": "FAIL", "payload": {"value": None}}]
+        repo = Mock()
+        repo.review_documents.return_value = [row]
+        provider = Mock(available=True, name="groq")
+        with patch("collector.casco_site_fallback.probe", return_value={"publication": "review_only"}) as site:
+            result = repair(repo, provider, deterministic_only=True, probe_sources=True)
+        self.assertEqual(result["source_followup"]["publication"], "review_only")
+        self.assertEqual(site.call_args.args[0], "t-insurance")
+        self.assertEqual(site.call_args.args[1], {"drone"})
+        provider.extract.assert_not_called()
+        repo.publish.assert_not_called()
+
     def test_calibrated_towing_preserves_agreement_condition(self):
         page = ("- б) Расходы по оплате услуг специализированных организаций по эвакуации "
                 "поврежденного ТС, не имеющего возможности передвигаться самостоятельно, "

@@ -41,7 +41,8 @@ def inspect(repository, *, insurer="t-insurance"):
     return result
 
 
-def repair(repository, provider, *, insurer="t-insurance", deterministic_only=False):
+def repair(repository, provider, *, insurer="t-insurance", deterministic_only=False,
+           probe_sources=False):
     report = {"insurer": insurer, "provider": provider.name, "documents": [],
               "passed_fields": 0, "review_fields": 0, "errors": []}
     for row in repository.review_documents(insurer):
@@ -101,6 +102,12 @@ def repair(repository, provider, *, insurer="t-insurance", deterministic_only=Fa
         report["passed_fields"] += len(passed)
         report["review_fields"] += len(failed) - len(passed)
         report["documents"].append(entry)
+    if probe_sources:
+        remaining = {key for entry in report["documents"] for key, field in entry["fields"].items()
+                     if not field.get("published") and field.get("next_step") == "search_official_site"}
+        if remaining:
+            from collector.casco_site_fallback import probe
+            report["source_followup"] = probe(insurer, remaining)
     return report
 
 
@@ -109,7 +116,8 @@ if __name__ == "__main__":
         raise SystemExit("Database unavailable")
     result = (inspect(CascoRevisionRepository()) if os.getenv("CASCO_INSPECT_ONLY") == "true"
               else repair(CascoRevisionRepository(), get_provider(),
-                          deterministic_only=os.getenv("CASCO_DETERMINISTIC_ONLY") == "true"))
+                          deterministic_only=os.getenv("CASCO_DETERMINISTIC_ONLY") == "true",
+                          probe_sources=os.getenv("CASCO_SOURCE_PROBE") == "true"))
     text = json.dumps(result, ensure_ascii=False, indent=2)
     Path("casco-repair-report.json").write_text(text, encoding="utf-8")
     print(text)
