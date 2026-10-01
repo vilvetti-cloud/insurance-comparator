@@ -19,6 +19,12 @@ data_quality_report_service = DataQualityReportService()
 COMPANIES = [insurer.name for insurer in INSURERS]
 FIELD_KEYS = [field["key"] for field in KASKO_FIELDS]
 FIELD_LABELS = {field["key"]: field["label"] for field in KASKO_FIELDS}
+REVIEW_REASONS = {
+    "quote_not_on_claimed_page": "Цитата модели не совпала с текстом указанной страницы PDF.",
+    "section_not_on_claimed_page": "Раздел модели не совпал с текстом указанной страницы PDF.",
+    "incomplete_answer": "Ответ из документа неполный.",
+    "missing_value_quote_section": "Не хватает точной цитаты или раздела документа.",
+}
 
 
 def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None = None) -> dict:
@@ -49,14 +55,12 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             prepared[f"{field}_sales_eligible"] = bool(
                 field_data.get("sales_eligible", False)
             )
-            prepared[f"{field}_contextual_answer"] = (
-                contextual.get(field, {}).get("analysis_answer")
-                or field_data.get("diagnostic_value")
+            diagnostic = contextual.get(field, {})
+            failure = diagnostic.get("analysis_validation")
+            prepared[f"{field}_review_note"] = (
+                REVIEW_REASONS.get(failure, "Ответ модели требует проверки по документу.")
+                if diagnostic.get("analysis_answer") else field_data.get("quality_reason")
             ) if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
-            prepared[f"{field}_contextual_reason"] = (
-                contextual.get(field, {}).get("analysis_explanation")
-                or field_data.get("quality_reason")
-            )
         else:
             prepared[field] = "Не найдено"
             prepared[f"{field}_source"] = "none"
@@ -68,8 +72,12 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             prepared[f"{field}_quality_label"] = "Не найдено"
             prepared[f"{field}_quality_reason"] = "Значение отсутствует."
             prepared[f"{field}_sales_eligible"] = False
-            prepared[f"{field}_contextual_answer"] = contextual.get(field, {}).get("analysis_answer")
-            prepared[f"{field}_contextual_reason"] = contextual.get(field, {}).get("analysis_explanation")
+            diagnostic = contextual.get(field, {})
+            failure = diagnostic.get("analysis_validation")
+            prepared[f"{field}_review_note"] = (
+                REVIEW_REASONS.get(failure, "Ответ модели требует проверки по документу.")
+                if diagnostic.get("analysis_answer") else None
+            )
 
     return prepared
 

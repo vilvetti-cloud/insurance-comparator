@@ -5,7 +5,7 @@ from web_app import app, COMPANIES, FIELD_LABELS
 
 
 class ComparisonPageTests(unittest.TestCase):
-    def test_review_answer_is_visible_but_not_counted_or_sold(self):
+    def test_rejected_answer_is_hidden_and_not_counted_or_sold(self):
         first, second = COMPANIES[:2]
         snapshot = {
             first: {"drone": {
@@ -22,6 +22,7 @@ class ComparisonPageTests(unittest.TestCase):
                 "key": "drone",
                 "analysis_answer": "Общий порядок выплаты установлен, специальный риск БПЛА не назван.",
                 "analysis_explanation": "Необходимо проверить исключения.",
+                "analysis_validation": "quote_not_on_claimed_page",
             }]},
         ]}
         with patch("web_app.comparison_service.load_snapshot", return_value=snapshot), \
@@ -33,9 +34,10 @@ class ComparisonPageTests(unittest.TestCase):
 
         page = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Повреждение от БПЛА зависит от договора.", page)
-        self.assertIn("Общий порядок выплаты установлен", page)
-        self.assertIn("Предварительный ответ", page)
+        self.assertNotIn("Повреждение от БПЛА зависит от договора.", page)
+        self.assertNotIn("Общий порядок выплаты установлен", page)
+        self.assertIn("Цитата модели не совпала", page)
+        self.assertIn("Требует проверки", page)
         self.assertIn("0/10", page)
         self.assertIn("Все 10 параметров", page)
         for label in FIELD_LABELS.values():
