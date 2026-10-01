@@ -33,9 +33,10 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
         return fail("parser_degraded")
     if not isinstance(fact, dict):
         return fail("invalid_fact")
-    if fact.get("answer_status") not in (None, "answered"):
-        return fail("incomplete_answer")
     value, quote, page, section = (fact.get(k) for k in ("value", "exact_quote", "page", "section"))
+    if fact.get("answer_status") not in (None, "answered") and not all(
+            isinstance(t, str) and t.strip() for t in (value, quote, section)):
+        return fail("incomplete_answer")
     if not all(isinstance(t, str) and t.strip() for t in (value, quote, section)):
         return fail("missing_value_quote_section")
     if type(page) is not int or page not in document.pages:
@@ -48,6 +49,8 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     prefix = page_text[:start + len(quote_n)]
     if not re.search(r"(?<!\w)" + re.escape(section_n) + r"(?!\w)", prefix):
         return fail("section_not_on_claimed_page")
+    if fact.get("answer_status") not in (None, "answered"):
+        return fail("incomplete_answer")
     # An excerpt cannot omit a nearby exclusion or a condition and reverse it.
     context = page_text[max(0, start - 350):start + len(quote_n)]
     value_n = normalize(value).lower()

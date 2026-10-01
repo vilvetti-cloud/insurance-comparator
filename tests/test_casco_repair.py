@@ -137,6 +137,14 @@ class RepairTests(unittest.TestCase):
             insurer="t-insurance", source_url=URL)
         self.assertEqual(verdict.reason, "incomplete_answer")
 
+    def test_partial_answer_with_stitched_quote_reports_actual_quote_problem(self):
+        fact = {"value": "Общий пункт о полной гибели указывает порог 75%.",
+                "exact_quote": "9.1. Полная гибель ТС ... 75% страховой стоимости.",
+                "page": 3, "section": "9.1.", "answer_status": "partial"}
+        verdict = validate_fact("total_loss", fact, ParsedDocument({3: QUOTE}),
+            insurer="t-insurance", source_url=URL)
+        self.assertEqual(verdict.reason, "quote_not_on_claimed_page")
+
     def test_existing_groq_key_takes_priority_over_unavailable_gemini(self):
         with patch.dict("os.environ", {"GROQ_API_KEY": "groq", "GEMINI_API_KEY": "gemini"}):
             self.assertIsInstance(get_provider(), GroqFieldProvider)
