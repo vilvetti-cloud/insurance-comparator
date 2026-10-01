@@ -120,8 +120,11 @@ class ComparisonService:
             if field_key in company_data and original_key == "fire":
                 continue
 
+            reportable = audit.status in {"confirmed", "conditional"}
             company_data[field_key] = {
-                "value": row["value"] if row["value"] not in (None, "") else "Не найдено",
+                "value": (row["value"] if row["value"] not in (None, "") else "Не найдено")
+                         if reportable else "Не подтверждено",
+                "diagnostic_value": row["value"] if not reportable else None,
                 "source": _ui_source(row["source_level"], row["source_type"]),
                 "url": row["source_url"],
                 "source_level": row["source_level"],
