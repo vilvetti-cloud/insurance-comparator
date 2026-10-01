@@ -1,1 +1,0 @@
-Apply verified contract qualifiers to remaining T-insurance facts.

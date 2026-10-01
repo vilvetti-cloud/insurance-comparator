@@ -80,6 +80,16 @@ class ConditionAuditTests(unittest.TestCase):
         self.assertEqual(result.status, "review")
         self.assertFalse(result.sales_eligible)
 
+    def test_needs_review_contract_claim_cannot_become_conditional(self):
+        result = self.audit(
+            "drone",
+            "Покрытие БПЛА определяется договором.",
+            "Состав покрытия БПЛА определяется договором страхования.",
+            verification_status="needs_review",
+        )
+        self.assertEqual(result.status, "review")
+        self.assertFalse(result.sales_eligible)
+
     def test_rejected_candidate_stays_review(self):
         result = self.audit(
             "franchise",

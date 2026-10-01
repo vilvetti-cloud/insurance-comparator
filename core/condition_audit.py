@@ -90,21 +90,26 @@ def audit_condition(
             "Snapshot содержит подготовленный пересказ без прямой цитаты из первоисточника; требуется подтверждение исходным документом.",
         )
 
+    # A quote and verified status are mandatory for both confirmed and
+    # conditional facts. Older needs_review rows must never become reportable
+    # merely because their value says "depends on the contract".
+    if not quote or not str(quote).strip():
+        return _result(
+            "review",
+            "Нет сохранённого подтверждающего фрагмента источника.",
+        )
+    if verification_status != "verified":
+        return _result(
+            "review",
+            "Кандидат ещё не имеет статуса verified и изолирован от итогового отчёта.",
+        )
+
     # Contract/program-specific statements are useful for completeness, but
     # they must never be promoted to a comparative sales advantage.
     if _CONDITIONAL_RE.search(text):
         return _result(
             "conditional",
             "Официальный источник показывает, что условие зависит от программы, договора или дополнительной опции.",
-        )
-
-    # A quote is mandatory for a fully confirmed fact. Snapshots also persist a
-    # checked evidence fragment, so absence of evidence is suspicious for all
-    # current source types.
-    if not quote or not str(quote).strip():
-        return _result(
-            "review",
-            "Нет сохранённого подтверждающего фрагмента источника.",
         )
 
     normalized_quote = " ".join(str(quote).strip().split())
@@ -156,15 +161,6 @@ def audit_condition(
     alignment_issue = semantic_alignment_issue(field_key, value, quote)
     if alignment_issue:
         return _result("review", alignment_issue)
-
-    # Never silently promote a database candidate that is still explicitly
-    # marked for review. This was the main reason questionable collector output
-    # could appear as "confirmed" in the report.
-    if verification_status != "verified":
-        return _result(
-            "review",
-            "Кандидат ещё не имеет статуса verified и изолирован от итогового отчёта.",
-        )
 
     return _result(
         "confirmed",
