@@ -8,6 +8,7 @@ from db import init_db, _connect
 from collector.casco_validation import Verdict
 from database.repositories.casco_revision import CascoRevisionRepository
 from database.repositories.base import RepositoryError
+from core.services.data_quality_report_service import DataQualityReportService
 
 
 @unittest.skipUnless(os.getenv("CASCO_TEST_DATABASE") == "1", "requires isolated PostgreSQL")
@@ -35,6 +36,13 @@ class DatabaseTests(unittest.TestCase):
             candidates=[("total_loss", {"value": value, "page": 1, "section": "9.1",
                 "exact_quote": value}, Verdict(passed, "PASS" if passed else "wrong_quote"))],
             fields={"total_loss": {"id": self.field}})
+
+    def test_quality_report_reads_review_candidates_without_promoting_them(self):
+        self.publish("90%", "report-review", passed=False)
+        with patch("core.services.data_quality_report_service.logger.exception") as logged_error:
+            report = DataQualityReportService().load()
+        logged_error.assert_not_called()
+        self.assertIn("total_contextual_answers", report)
 
     def test_bad_new_value_keeps_verified_value_and_evidence(self):
         self.publish("75%", "a")
@@ -186,3 +194,4 @@ class DatabaseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
