@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       insurer:
-        description: Insurer slug to inspect or repair
+        description: Insurer slug, or all for deterministic review without AI
         type: string
         required: true
         default: t-insurance
@@ -47,3 +47,9 @@ jobs:
           if [ "$APPLY" = true ]; then args+=(--apply); fi
           if [ "$USE_AI" = true ]; then args+=(--ai); fi
           python scripts/casco_review.py "${args[@]}"
+      - name: Upload full review report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casco-review-report
+          path: casco-review-report.json
