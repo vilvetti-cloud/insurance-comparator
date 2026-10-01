@@ -41,6 +41,17 @@ class SiteFallbackTests(unittest.TestCase):
         self.assertFalse(result["official_findings"]["terrorism"])
         self.assertTrue(result["pages_unavailable"])
 
+    def test_general_web_query_runs_only_after_official_query_is_empty(self):
+        fetcher = Mock()
+        fetcher.fetch_official.side_effect = lambda url, **kwargs: FetchResult(
+            url, 200, "text/html", b"<p>No matching topic</p>", "")
+        search = Mock()
+        search.search.side_effect = [[], [SearchHit("Review lead", "https://example.org/kasko", "BPLA")]]
+        result = probe("t-insurance", ["drone"], fetcher=fetcher, search=search)
+        self.assertEqual(search.search.call_count, 2)
+        self.assertEqual(result["search_status"]["drone"], "leads_found")
+        self.assertFalse(result["web_leads"]["drone"][0]["official"])
+
 
 if __name__ == "__main__":
     unittest.main()

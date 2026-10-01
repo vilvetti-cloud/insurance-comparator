@@ -108,6 +108,23 @@ def repair(repository, provider, *, insurer="t-insurance", deterministic_only=Fa
         if remaining:
             from collector.casco_site_fallback import probe
             report["source_followup"] = probe(insurer, remaining)
+            followup = report["source_followup"]
+            for entry in report["documents"]:
+                for key, field in entry["fields"].items():
+                    if key not in remaining:
+                        continue
+                    if any(f.get("kind") == "exact_term" for f in
+                           followup["official_findings"].get(key, [])):
+                        field["next_step"] = "review_official_page"
+                    elif any(lead.get("url") for lead in followup["web_leads"].get(key, [])):
+                        field["next_step"] = "review_web_leads"
+                    elif not followup["pages_checked"]:
+                        field["next_step"] = "official_site_unavailable"
+                    else:
+                        field["next_step"] = "manual_source_review"
+            if not followup["pages_checked"] and not any(
+                    lead.get("url") for leads in followup["web_leads"].values() for lead in leads):
+                report["errors"].append("Official site unavailable and web search returned no leads")
     return report
 
 

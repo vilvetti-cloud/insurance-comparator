@@ -145,9 +145,14 @@ class RepairTests(unittest.TestCase):
         repo = Mock()
         repo.review_documents.return_value = [row]
         provider = Mock(available=True, name="groq")
-        with patch("collector.casco_site_fallback.probe", return_value={"publication": "review_only"}) as site:
+        followup = {"publication": "review_only", "pages_checked": [],
+                    "official_findings": {"drone": []}, "web_leads": {"drone": []}}
+        with patch("collector.casco_site_fallback.probe", return_value=followup) as site:
             result = repair(repo, provider, deterministic_only=True, probe_sources=True)
         self.assertEqual(result["source_followup"]["publication"], "review_only")
+        self.assertEqual(result["documents"][0]["fields"]["drone"]["next_step"],
+                         "official_site_unavailable")
+        self.assertIn("Official site unavailable", result["errors"][0])
         self.assertEqual(site.call_args.args[0], "t-insurance")
         self.assertEqual(site.call_args.args[1], {"drone"})
         provider.extract.assert_not_called()

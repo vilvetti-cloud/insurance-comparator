@@ -34,7 +34,8 @@ def probe(insurer, fields, *, fetcher=None, search=None):
     config = get_insurer(insurer)
     fetcher = fetcher or CascoFetcher(timeout=20, retries=1)
     result = {"insurer": insurer, "pages_checked": [], "pages_unavailable": [],
-              "official_findings": {}, "web_leads": {}, "publication": "review_only"}
+              "official_findings": {}, "web_leads": {}, "search_status": {},
+              "publication": "review_only"}
     page_texts = []
     for url in page_urls(config):
         if not official_url(insurer, url):
@@ -46,7 +47,8 @@ def probe(insurer, fields, *, fetcher=None, search=None):
             page_texts.append((url, _page_text(fetched.body)))
             result["pages_checked"].append(url)
         except Exception as exc:
-            result["pages_unavailable"].append({"url": url, "reason": type(exc).__name__})
+            result["pages_unavailable"].append({"url": url, "reason": type(exc).__name__,
+                                                 "detail": str(exc)[:250]})
     for field in fields:
         if field not in TERMS:
             continue
@@ -59,14 +61,20 @@ def probe(insurer, fields, *, fetcher=None, search=None):
         result["official_findings"][field] = findings[:6]
         if findings and any(item["kind"] == "exact_term" for item in findings):
             result["web_leads"][field] = []
+            result["search_status"][field] = "skipped_official_match"
             continue
         if search is None:
             search = DuckDuckGoSearch(timeout=12)
         try:
-            query = DuckDuckGoSearch.build_field_queries(config.name, config.official_url, field)[0]
-            hits = search.search(query, limit=3)
+            hits = []
+            for query in DuckDuckGoSearch.build_field_queries(config.name, config.official_url, field):
+                hits = search.search(query, limit=3)
+                if hits:
+                    break
             result["web_leads"][field] = [{"url": hit.url, "title": hit.title,
                 "snippet": hit.snippet[:350], "official": official_url(insurer, hit.url)} for hit in hits]
+            result["search_status"][field] = "leads_found" if hits else "no_results"
         except Exception as exc:
             result["web_leads"][field] = [{"error": type(exc).__name__}]
+            result["search_status"][field] = "error"
     return result
