@@ -4,10 +4,28 @@ import json
 import os
 from pathlib import Path
 import sys
+from collections import Counter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from collector.casco_pipeline import CascoCollectionPipeline
 from db import init_db
+
+
+def action_summary(result):
+    """Keep the Actions summary bounded; the full diagnostics live in report.json."""
+    failures = Counter(row["reason"] for row in result.get("validation_failures", []))
+    return {
+        "passed_fields": result.get("passed_fields", 0),
+        "review_fields": result.get("review_fields", 0),
+        "unchanged_documents": result.get("unchanged", 0),
+        "deferred_documents": len(result.get("deferred", [])),
+        "validation_failures": dict(failures.most_common(20)),
+        "source_errors": [{"insurer": row.get("insurer"), "reason": str(row.get("reason", ""))[:250]}
+                          for row in result.get("errors", [])[:30]],
+        "degraded": [{"insurer": row.get("insurer"), "reason": str(row.get("reason", ""))[:250]}
+                     for row in result.get("degraded", [])[:30]],
+        "full_report": "work/casco/report.json",
+    }
 
 
 def main():
@@ -36,14 +54,16 @@ def main():
         # Still analyze reachable documents when a different source is unavailable.
         return 0
     result = pipeline.analyze(directory=args.directory)
-    summary = json.dumps(result, ensure_ascii=False, indent=2)
+    summary = json.dumps(action_summary(result), ensure_ascii=False, indent=2)
     print(summary)
     if os.getenv("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
             handle.write("## CASCO document collection\n\n```json\n" + summary + "\n```\n")
-    if result["degraded"]:
-        print("::warning::CASCO analysis degraded; previous verified values preserved")
-    return 1 if result["errors"] else 0
+    if result["degraded"] or result["errors"]:
+        print("::warning::Some CASCO sources or analyses need review; verified values preserved. See report.json")
+    # A source outage or provider quota must not abort the daily check for the
+    # remaining insurers. Infrastructure and database failures still raise.
+    return 0
 
 
 if __name__ == "__main__":
