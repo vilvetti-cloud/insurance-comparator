@@ -75,7 +75,9 @@ class ReviewTests(unittest.TestCase):
     def test_subset_schema_and_questions(self):
         response = Mock(status_code=200)
         response.json.return_value = {'candidates': [{'finishReason': 'STOP',
-            'content': {'parts': [{'text': json.dumps({'total_loss': FACT})}]}}]}
+            'content': {'parts': [{'text': json.dumps({'total_loss': dict(FACT,
+                status='answered', explanation='Условие прямо указано.',
+                missing_information='')})}]}}]}
         provider = GeminiProvider('not-a-real-key')
         with patch.object(provider, '_request', return_value=response) as request:
             provider.extract(document=ParsedDocument({3: QUOTE}), company='test',

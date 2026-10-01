@@ -229,13 +229,19 @@ class PipelineTests(unittest.TestCase):
 
     @patch("collector.casco_provider.requests.post")
     def test_gemini_schema_all_ten(self, post):
-        facts = {k: dict(value=None, exact_quote=None, page=None, section=None) for k in FIELD_KEYS}
+        facts = {k: dict(value=None, exact_quote=None, page=None, section=None,
+                         status="not_found", explanation="В документе нет ответа.",
+                         missing_information="Проверить официальный сайт.") for k in FIELD_KEYS}
         post.return_value.status_code = 200
         post.return_value.json.return_value = {"candidates": [{"finishReason": "STOP",
             "content": {"parts": [{"text": json.dumps(facts)}]}}]}
-        result = GeminiProvider("test").extract(document=ParsedDocument({3: QUOTE}),
+        provider = GeminiProvider("test")
+        result = provider.extract(document=ParsedDocument({3: QUOTE}),
             company="РЕСО", source_url="https://reso.ru/rules.pdf")
         self.assertEqual(set(result), set(FIELD_KEYS))
+        self.assertEqual(result["drone"]["answer_status"], "not_found")
+        self.assertEqual(provider.diagnostics["drone"]["missing_information"],
+                         "Проверить официальный сайт.")
         self.assertEqual(set(post.call_args.kwargs["json"]["generationConfig"]["responseJsonSchema"]["required"]),
                          set(FIELD_KEYS))
 
