@@ -44,10 +44,11 @@ def _span(page_text, start_marker, end_marker):
     return page_text[start.start():end.start()].strip()
 
 
-def calibrated_fact(key, document, *, insurer="t-insurance", source_url):
+def calibration(key, document, *, insurer="t-insurance", source_url):
     if insurer != "t-insurance" or key not in RULES or not document.promotable:
-        return None
+        return None, "no_calibrated_rule"
     start, end, value = RULES[key]
+    reason = "section_span_not_found"
     for page, page_text in document.pages.items():
         quote = _span(page_text, start, end)
         if quote is None:
@@ -57,5 +58,10 @@ def calibrated_fact(key, document, *, insurer="t-insurance", source_url):
         fact = {"value": value, "exact_quote": quote, "page": page, "section": start}
         verdict = validate_fact(key, fact, document, insurer=insurer, source_url=source_url)
         if verdict.passed:
-            return fact
-    return None
+            return fact, "PASS"
+        reason = verdict.reason
+    return None, reason
+
+
+def calibrated_fact(key, document, *, insurer="t-insurance", source_url):
+    return calibration(key, document, insurer=insurer, source_url=source_url)[0]

@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from collector.casco_document import ParsedDocument
 from collector.casco_provider import get_provider, ProviderUnavailable
 from collector.casco_validation import validate_fact
-from collector.casco_t_rules import calibrated_fact
+from collector.casco_t_rules import calibration
 from database.repositories.casco_revision import CascoRevisionRepository
 from db import init_db
 
@@ -58,10 +58,11 @@ def repair(repository, provider, *, insurer="t-insurance", deterministic_only=Fa
         candidates = []
         pending_model = []
         for key, old in failed.items():
-            fact = calibrated_fact(key, document, insurer=insurer, source_url=row["url"])
+            fact, calibration_reason = calibration(key, document, insurer=insurer,
+                                                   source_url=row["url"])
             if fact is None:
                 if deterministic_only or not (old.get("payload") or {}).get("value"):
-                    entry["fields"][key] = {"validation": "no_exact_clause_in_cached_pdf",
+                    entry["fields"][key] = {"validation": calibration_reason,
                         "next_step": "search_official_site", "published": False}
                 else:
                     pending_model.append(key)
