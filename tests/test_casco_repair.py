@@ -138,6 +138,20 @@ class RepairTests(unittest.TestCase):
         provider.extract.assert_not_called()
         self.assertTrue(repo.publish.call_args.kwargs["candidates"][0][2].passed)
 
+    def test_calibrated_towing_preserves_agreement_condition(self):
+        page = ("- б) Расходы по оплате услуг специализированных организаций по эвакуации "
+                "поврежденного ТС, не имеющего возможности передвигаться самостоятельно, "
+                "с места страхового случая до места стоянки и/или места ремонта, не более "
+                "двух раз по одному страховому случаю, в размере, суммарно не превышающем "
+                "10 000 (Десять тысяч) рублей за две эвакуации.\n"
+                "Услуга предоставляется организациями Страховщика либо по согласованию "
+                "со Страховщиком организациями по выбору Страхователя.\n"
+                "По соглашению Страховщика и Страхователя стоимость и количество эвакуаций может быть увеличено.\n"
+                "- в) Расходы по оплате услуг аварийного комиссара.")
+        fact = calibrated_fact("tow_truck", ParsedDocument({34: page}), source_url=URL)
+        self.assertIsNotNone(fact)
+        self.assertIn("По соглашению", fact["value"])
+
 
 if __name__ == "__main__":
     unittest.main()
