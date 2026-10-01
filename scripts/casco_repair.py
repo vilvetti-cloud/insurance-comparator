@@ -1,4 +1,4 @@
-"""Repair failed T-insurance fields from the cached official Docling document."""
+"""Repair failed CASCO fields from cached official Docling documents."""
 import json
 import os
 from difflib import SequenceMatcher
@@ -10,6 +10,7 @@ from collector.casco_document import ParsedDocument
 from collector.casco_provider import get_provider, ProviderUnavailable
 from collector.casco_validation import validate_fact
 from collector.casco_t_rules import calibration
+from collector.registry import INSURERS, get_insurer
 from database.repositories.casco_revision import CascoRevisionRepository
 from db import init_db
 
@@ -77,7 +78,7 @@ def repair(repository, provider, *, insurer="t-insurance", deterministic_only=Fa
                 report["errors"].append("AI provider unavailable; verified cards preserved")
             else:
                 try:
-                    facts = provider.extract(document=document, company="Т-Страхование",
+                    facts = provider.extract(document=document, company=get_insurer(insurer).name,
                         source_url=row["url"], field_keys=tuple(pending_model))
                     for key in pending_model:
                         fact = facts[key]
@@ -135,14 +136,23 @@ def repair(repository, provider, *, insurer="t-insurance", deterministic_only=Fa
 if __name__ == "__main__":
     if not os.getenv("DATABASE_URL") or not init_db():
         raise SystemExit("Database unavailable")
-    result = (inspect(CascoRevisionRepository()) if os.getenv("CASCO_INSPECT_ONLY") == "true"
-              else repair(CascoRevisionRepository(), get_provider(),
-                          deterministic_only=os.getenv("CASCO_DETERMINISTIC_ONLY") == "true",
-                          probe_sources=os.getenv("CASCO_SOURCE_PROBE") == "true"))
+    selected = os.getenv("CASCO_INSURER", "t-insurance")
+    insurers = [item.slug for item in INSURERS] if selected == "all" else [get_insurer(selected).slug]
+    repository = CascoRevisionRepository()
+    provider = get_provider()
+    reports = [(inspect(repository, insurer=insurer) if os.getenv("CASCO_INSPECT_ONLY") == "true"
+                else repair(repository, provider, insurer=insurer,
+                            deterministic_only=os.getenv("CASCO_DETERMINISTIC_ONLY") == "true",
+                            probe_sources=os.getenv("CASCO_SOURCE_PROBE") == "true"))
+               for insurer in insurers]
+    result = reports[0] if len(reports) == 1 else {"insurers": reports,
+        "passed_fields": sum(item.get("passed_fields", 0) for item in reports),
+        "review_fields": sum(item.get("review_fields", 0) for item in reports),
+        "errors": [error for item in reports for error in item.get("errors", [])]}
     text = json.dumps(result, ensure_ascii=False, indent=2)
     Path("casco-repair-report.json").write_text(text, encoding="utf-8")
     print(text)
     if os.getenv("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
-            handle.write("## T-insurance verified card repair\n\n```json\n" + text + "\n```\n")
+            handle.write("## CASCO verified card repair\n\n```json\n" + text + "\n```\n")
     raise SystemExit(1 if result.get("errors") else 0)

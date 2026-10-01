@@ -1,19 +1,30 @@
-name: T-insurance verified card repair
+name: CASCO verified card repair
 on:
   workflow_dispatch:
+    inputs:
+      insurer:
+        description: Insurer slug from registry, or all for a one-time sweep
+        required: true
+        type: string
+        default: t-insurance
+      use_ai:
+        description: Ask AI again only for fields still in review
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 180
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       CASCO_SOURCE_PROBE: 'true'
-      CASCO_DETERMINISTIC_ONLY: 'true'
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      CASCO_INSURER: ${{ inputs.insurer }}
+      CASCO_DETERMINISTIC_ONLY: ${{ inputs.use_ai && 'false' || 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,15 +34,14 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Validate targeted extraction and preservation
         run: python -m unittest tests.test_casco_repair
-      - name: Repair failed fields from cached official PDF
+      - name: Repair failed fields from cached official PDFs
         run: python scripts/casco_repair.py
       - name: Upload answer and validation report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: t-insurance-repair-report
+          name: casco-repair-report
           path: casco-repair-report.json
       - name: Audit active cards
         if: always()
         run: python scripts/qa_casco_facts.py
-

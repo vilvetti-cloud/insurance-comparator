@@ -7,16 +7,21 @@ import re
 from bs4 import BeautifulSoup
 
 from collector.casco_page_watch import page_urls
+from collector.casco_pilot import PAGE_TERMS
 from collector.casco_sources import official_url
 from collector.casco_transport import CascoFetcher
 from collector.registry import get_insurer
 from collector.web_search import DuckDuckGoSearch
 
 
-TERMS = {
-    "self_ignition": (r"самовозгора\w*|самовоспламен\w*", r"пожар\w*|возгоран\w*"),
-    "terrorism": (r"террорист\w*|терроризм\w*",),
+DIRECT_OVERRIDES = {
+    "self_ignition": (r"самовозгора\w*|самовоспламен\w*",),
     "drone": (r"бпла|беспилот\w*|дрон\w*",),
+}
+RELATED_TERMS = {
+    "self_ignition": (r"пожар\w*|возгоран\w*",),
+    "terrorism": (r"поджог|подрыв|противоправн\w*\s+действ",),
+    "drone": (r"падени\w*\s+предмет|поврежден\w*\s+предмет",),
 }
 
 
@@ -50,13 +55,14 @@ def probe(insurer, fields, *, fetcher=None, search=None):
             result["pages_unavailable"].append({"url": url, "reason": type(exc).__name__,
                                                  "detail": str(exc)[:250]})
     for field in fields:
-        if field not in TERMS:
-            continue
+        if field not in PAGE_TERMS:
+            raise ValueError("Unknown CASCO field: " + field)
         findings = []
         for url, text in page_texts:
-            for rank, pattern in enumerate(TERMS[field]):
+            direct = DIRECT_OVERRIDES.get(field, PAGE_TERMS[field])
+            for pattern in direct + RELATED_TERMS.get(field, ()):
                 for match in list(re.finditer(pattern, text, re.I))[:3]:
-                    findings.append({"url": url, "kind": "exact_term" if rank == 0 else "related_term",
+                    findings.append({"url": url, "kind": "exact_term" if pattern in direct else "related_term",
                                      "excerpt": text[max(0, match.start()-150):match.end()+220]})
         result["official_findings"][field] = findings[:6]
         if findings and any(item["kind"] == "exact_term" for item in findings):

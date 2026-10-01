@@ -6,6 +6,7 @@ from collector.casco_document import ParsedDocument
 from collector.casco_provider import GroqFieldProvider, ProviderUnavailable, get_provider
 from collector.casco_validation import validate_fact
 from collector.casco_t_rules import calibrated_fact
+from collector.registry import get_insurer
 from scripts.casco_repair import inspect, repair
 
 
@@ -50,6 +51,18 @@ class RepairTests(unittest.TestCase):
         report = repair(repo, provider)
         self.assertEqual(report["errors"], ["Groq HTTP 429"])
         repo.publish.assert_not_called()
+
+    def test_repair_uses_selected_insurer_name_in_shared_question(self):
+        repo = Mock()
+        repo.review_documents.return_value = [self.row()]
+        repo.publish.return_value = set()
+        provider = Mock(available=True, name="groq", diagnostics={})
+        provider.extract.return_value = {"total_loss": {
+            "value": None, "exact_quote": None, "page": None, "section": None}}
+        with patch("scripts.casco_repair.calibration", return_value=(None, "no_rule")):
+            repair(repo, provider, insurer="reso")
+        self.assertEqual(provider.extract.call_args.kwargs["company"], get_insurer("reso").name)
+        repo.review_documents.assert_called_once_with("reso")
 
     def test_inspect_reads_candidate_and_closest_page_line_without_writes(self):
         row = self.row()

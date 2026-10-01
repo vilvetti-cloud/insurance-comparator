@@ -2,11 +2,22 @@ import unittest
 from unittest.mock import Mock
 
 from collector.casco_site_fallback import probe
+from collector.casco_provider import FIELD_KEYS
 from collector.http_client import FetchResult
 from collector.web_search import SearchHit
 
 
 class SiteFallbackTests(unittest.TestCase):
+    def test_all_ten_fields_are_probed_on_official_pages(self):
+        fetcher = Mock()
+        fetcher.fetch_official.side_effect = lambda url, **kwargs: FetchResult(
+            url, 200, "text/html", b"<p>No matching topic</p>", "")
+        search = Mock()
+        search.search.return_value = []
+        result = probe("t-insurance", FIELD_KEYS, fetcher=fetcher, search=search)
+        self.assertEqual(set(result["official_findings"]), set(FIELD_KEYS))
+        self.assertEqual(set(result["search_status"]), set(FIELD_KEYS))
+
     def test_official_page_term_is_review_only_and_skips_web_search(self):
         fetcher = Mock()
         def fetched(url, **kwargs):
