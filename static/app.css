@@ -709,6 +709,26 @@ select:focus {
   font-weight: 600;
 }
 
+.value-block__contextual {
+  padding: 10px;
+  border-radius: 8px;
+  background: #fff8ea;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.value-block__contextual p {
+  margin: 7px 0 0;
+}
+
+.value-block__contextual small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-tertiary);
+}
+
 .value-meta {
   display: flex;
   flex-wrap: wrap;

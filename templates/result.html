@@ -124,8 +124,8 @@
         <span class="section-kicker">Сравнение пока не готово</span>
         <h2>Недостаточно данных по {{ company2 }}</h2>
         <p>
-          У компаний пока нет ни одного параметра, который можно корректно сопоставить.
-          Поэтому сайт не строит выгоды и не генерирует клиентский скрипт — сначала нужно заполнить данные конкурента.
+          У компаний пока нет ни одного подтверждённого параметра, который можно корректно сопоставить.
+          Все 10 полей и предварительные ответы доступны в таблице ниже.
         </p>
       </section>
       {% endif %}
@@ -134,7 +134,7 @@
         <summary class="details-panel__summary">
           <div>
             <strong>Подробное сравнение условий</strong>
-            <span>{{ comparable_count }} сопоставимых параметров · только строки без пустых ячеек</span>
+            <span>Все 10 параметров · {{ comparable_count }} подтверждённых сопоставимых</span>
           </div>
           <span class="details-panel__chevron" aria-hidden="true">⌄</span>
         </summary>
@@ -171,6 +171,15 @@
                         <div class="value-block__text {% if value1 == 'Не найдено' %}value-block__text--empty{% endif %}">
                           {{ value1 }}
                         </div>
+                        {% if data1.get(key + '_contextual_answer') %}
+                          <div class="value-block__contextual">
+                            <span class="quality-badge quality-badge--review">Предварительный ответ</span>
+                            <p>{{ data1.get(key + '_contextual_answer') }}</p>
+                            {% if data1.get(key + '_contextual_reason') %}
+                              <small>{{ data1.get(key + '_contextual_reason') }}</small>
+                            {% endif %}
+                          </div>
+                        {% endif %}
                         {% if value1 != 'Не найдено' %}
                           <div class="value-meta">
                             {% if data1.get(key + '_source_level') == 1 %}
@@ -198,6 +207,15 @@
                         <div class="value-block__text {% if value2 == 'Не найдено' %}value-block__text--empty{% endif %}">
                           {{ value2 }}
                         </div>
+                        {% if data2.get(key + '_contextual_answer') %}
+                          <div class="value-block__contextual">
+                            <span class="quality-badge quality-badge--review">Предварительный ответ</span>
+                            <p>{{ data2.get(key + '_contextual_answer') }}</p>
+                            {% if data2.get(key + '_contextual_reason') %}
+                              <small>{{ data2.get(key + '_contextual_reason') }}</small>
+                            {% endif %}
+                          </div>
+                        {% endif %}
                         {% if value2 != 'Не найдено' %}
                           <div class="value-meta">
                             {% if data2.get(key + '_source_level') == 1 %}

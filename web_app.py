@@ -21,8 +21,9 @@ FIELD_KEYS = [field["key"] for field in KASKO_FIELDS]
 FIELD_LABELS = {field["key"]: field["label"] for field in KASKO_FIELDS}
 
 
-def _prepare_company_data(snapshot: dict, company: str) -> dict:
+def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None = None) -> dict:
     raw = snapshot.get(company, {})
+    contextual = contextual or {}
     prepared: dict = {}
 
     for field in FIELD_KEYS:
@@ -48,6 +49,14 @@ def _prepare_company_data(snapshot: dict, company: str) -> dict:
             prepared[f"{field}_sales_eligible"] = bool(
                 field_data.get("sales_eligible", False)
             )
+            prepared[f"{field}_contextual_answer"] = (
+                contextual.get(field, {}).get("analysis_answer")
+                or field_data.get("diagnostic_value")
+            ) if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
+            prepared[f"{field}_contextual_reason"] = (
+                contextual.get(field, {}).get("analysis_explanation")
+                or field_data.get("quality_reason")
+            )
         else:
             prepared[field] = "Не найдено"
             prepared[f"{field}_source"] = "none"
@@ -59,6 +68,8 @@ def _prepare_company_data(snapshot: dict, company: str) -> dict:
             prepared[f"{field}_quality_label"] = "Не найдено"
             prepared[f"{field}_quality_reason"] = "Значение отсутствует."
             prepared[f"{field}_sales_eligible"] = False
+            prepared[f"{field}_contextual_answer"] = contextual.get(field, {}).get("analysis_answer")
+            prepared[f"{field}_contextual_reason"] = contextual.get(field, {}).get("analysis_explanation")
 
     return prepared
 
@@ -88,14 +99,20 @@ def compare():
         return redirect("/")
 
     snapshot = comparison_service.load_snapshot()
-    data1 = _prepare_company_data(snapshot, company1)
-    data2 = _prepare_company_data(snapshot, company2)
-    found1 = sum(1 for field in FIELD_KEYS if data1.get(field) != "Не найдено")
-    found2 = sum(1 for field in FIELD_KEYS if data2.get(field) != "Не найдено")
+    report = data_quality_report_service.load()
+    contextual = {
+        company["name"]: {field["key"]: field for field in company["fields"]}
+        for company in report.get("companies", [])
+    }
+    data1 = _prepare_company_data(snapshot, company1, contextual.get(company1))
+    data2 = _prepare_company_data(snapshot, company2, contextual.get(company2))
+    reportable = {"confirmed", "conditional"}
+    found1 = sum(1 for field in FIELD_KEYS if data1.get(f"{field}_quality_status") in reportable)
+    found2 = sum(1 for field in FIELD_KEYS if data2.get(f"{field}_quality_status") in reportable)
     comparable_fields = [
         field
         for field in FIELD_KEYS
-        if data1.get(field) != "Не найдено" and data2.get(field) != "Не найдено"
+        if data1.get(f"{field}_sales_eligible") and data2.get(f"{field}_sales_eligible")
     ]
     comparison_ready = len(comparable_fields) > 0
 
@@ -126,7 +143,7 @@ def compare():
         company2=company2,
         data1=data1,
         data2=data2,
-        fields=comparable_fields,
+        fields=FIELD_KEYS,
         field_labels=FIELD_LABELS,
         comparable_count=len(comparable_fields),
         comparison_ready=comparison_ready,
