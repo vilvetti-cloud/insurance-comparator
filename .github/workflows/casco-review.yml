@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       ai:
-        description: One extraction of failed fields from one cached document
+        description: Extract failed fields from one cached document
         type: boolean
         default: false
       model:
@@ -25,10 +25,11 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GEMINI_MODEL: ${{ inputs.model || vars.GEMINI_MODEL }}
       INSURER: ${{ inputs.insurer }}
       APPLY: ${{ inputs.apply }}
@@ -53,3 +54,4 @@ jobs:
         with:
           name: casco-review-report
           path: casco-review-report.json
+
