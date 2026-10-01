@@ -1,8 +1,5 @@
 name: T-insurance verified card repair
 on:
-  push:
-    paths:
-      - .github/casco-exact-trigger.txt
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,7 +11,6 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      CASCO_DETERMINISTIC_ONLY: ${{ github.event_name == 'push' && 'true' || 'false' }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
     steps:
       - uses: actions/checkout@v4
