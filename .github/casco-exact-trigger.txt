@@ -1,0 +1,1 @@
+Publish only exact T-insurance clauses after validation.

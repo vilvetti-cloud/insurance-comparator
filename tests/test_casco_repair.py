@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from collector.casco_document import ParsedDocument
 from collector.casco_provider import GroqFieldProvider, ProviderUnavailable, get_provider
 from collector.casco_validation import validate_fact
+from collector.casco_t_rules import calibrated_fact
 from scripts.casco_repair import inspect, repair
 
 
@@ -17,7 +18,7 @@ class RepairTests(unittest.TestCase):
         return {"url": URL, "checksum": "known-hash", "source_id": 5, "source_level": 1,
             "document_id": 6, "parsed": {"parser": "docling", "pages": {"3": QUOTE}},
             "candidates": [{"field_key": "total_loss", "field_id": 7,
-                            "validation_status": "FAIL"},
+                            "validation_status": "FAIL", "payload": {"value": "Earlier failed answer"}},
                            {"field_key": "franchise", "field_id": 8,
                             "validation_status": "PASS"}]}
 
@@ -99,6 +100,43 @@ class RepairTests(unittest.TestCase):
     def test_existing_groq_key_takes_priority_over_unavailable_gemini(self):
         with patch.dict("os.environ", {"GROQ_API_KEY": "groq", "GEMINI_API_KEY": "gemini"}):
             self.assertIsInstance(get_provider(), GroqFieldProvider)
+
+    def test_calibrated_gap_uses_exact_same_page_span(self):
+        page = ("- 13.6. По риску «GAP» страховая выплата производится в размере разницы между "
+                "страховой суммой ТС на момент заключения Договора страхования и размером страховой "
+                "выплаты по реализовавшемуся риску «Хищение» или в случае Полной гибели ТС по "
+                "реализовавшемуся риску «Ущерб» или «Миникаско».\n"
+                "- 13.6.1. Франшиза не возмещается.")
+        fact = calibrated_fact("gap", ParsedDocument({35: page}), source_url=URL)
+        self.assertIsNotNone(fact)
+        self.assertEqual(fact["page"], 35)
+        self.assertIn("13.6.", fact["exact_quote"])
+        self.assertNotIn("13.6.1.", fact["exact_quote"])
+
+    def test_calibrated_clause_missing_after_edition_change_stays_review(self):
+        fact = calibrated_fact("gap", ParsedDocument({35: "Новое положение без прежних номеров"}),
+                               source_url=URL)
+        self.assertIsNone(fact)
+
+    def test_deterministic_repair_publishes_exact_clause_without_model_call(self):
+        page = ("- 13.6. По риску «GAP» страховая выплата производится в размере разницы между "
+                "страховой суммой ТС на момент заключения Договора страхования и размером страховой "
+                "выплаты по реализовавшемуся риску «Хищение» или в случае Полной гибели ТС по "
+                "реализовавшемуся риску «Ущерб» или «Миникаско».\n"
+                "- 13.6.1. Франшиза не возмещается.")
+        row = self.row()
+        row["parsed"]["pages"] = {"35": page}
+        row["candidates"] = [{"field_key": "gap", "field_id": 7,
+            "validation_status": "FAIL", "payload": {"value": "Prior failed answer"}}]
+        repo = Mock()
+        repo.review_documents.return_value = [row]
+        repo.publish.return_value = {"gap"}
+        provider = Mock(available=False, name="disabled")
+        result = repair(repo, provider, deterministic_only=True)
+        self.assertEqual(result["passed_fields"], 1)
+        self.assertEqual(result["review_fields"], 0)
+        provider.extract.assert_not_called()
+        self.assertTrue(repo.publish.call_args.kwargs["candidates"][0][2].passed)
 
 
 if __name__ == "__main__":
