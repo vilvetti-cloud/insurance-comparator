@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from collector.casco_document import ParsedDocument
 from collector.casco_provider import GroqFieldProvider, ProviderUnavailable, get_provider
+from collector.casco_validation import validate_fact
 from scripts.casco_repair import repair
 
 
@@ -73,6 +74,14 @@ class RepairTests(unittest.TestCase):
         self.assertIsNone(result["drone"]["value"])
         self.assertEqual(provider.diagnostics["drone"]["status"], "not_found")
         post.assert_not_called()
+
+    def test_partial_answer_cannot_publish_even_with_valid_quote(self):
+        fact = {"value": "Полная гибель при превышении 75% страховой стоимости.",
+                "exact_quote": QUOTE, "page": 3, "section": "9.1.",
+                "answer_status": "partial"}
+        verdict = validate_fact("total_loss", fact, ParsedDocument({3: QUOTE}),
+            insurer="t-insurance", source_url=URL)
+        self.assertEqual(verdict.reason, "incomplete_answer")
 
     def test_existing_groq_key_takes_priority_over_unavailable_gemini(self):
         with patch.dict("os.environ", {"GROQ_API_KEY": "groq", "GEMINI_API_KEY": "gemini"}):

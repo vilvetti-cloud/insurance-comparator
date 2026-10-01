@@ -33,6 +33,8 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
         return fail("parser_degraded")
     if not isinstance(fact, dict):
         return fail("invalid_fact")
+    if fact.get("answer_status") not in (None, "answered"):
+        return fail("incomplete_answer")
     value, quote, page, section = (fact.get(k) for k in ("value", "exact_quote", "page", "section"))
     if not all(isinstance(t, str) and t.strip() for t in (value, quote, section)):
         return fail("missing_value_quote_section")

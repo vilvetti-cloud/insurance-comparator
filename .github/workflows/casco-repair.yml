@@ -1,8 +1,5 @@
 name: T-insurance verified card repair
 on:
-  push:
-    paths:
-      - .github/casco-repair-trigger.txt
   workflow_dispatch:
 permissions:
   contents: read

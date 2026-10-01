@@ -201,7 +201,8 @@ class GroqFieldProvider:
                 facts[key] = {part: None for part in FACT_SCHEMA["required"]}
                 self.diagnostics[key] = {"status": "not_found", "selected_pages": [],
                     "explanation": "В документе нет страниц с поисковыми признаками этого условия.",
-                    "missing_information": "Проверить другие официальные документы и сайт страховщика."}
+                    "missing_information": "Проверить другие официальные документы и сайт страховщика.",
+                    "next_step": "search_official_site"}
                 continue
             if requests_made:
                 time.sleep(80)  # Existing Groq free-tier requests otherwise return 429.
@@ -249,9 +250,12 @@ class GroqFieldProvider:
                     facts[key] = {part: None for part in FACT_SCHEMA["required"]}
                 else:
                     facts[key] = {part: fact[part] for part in FACT_SCHEMA["required"]}
+                facts[key]["answer_status"] = fact["status"]
                 self.diagnostics[key] = {part: fact[part] for part in
                     ("status", "explanation", "missing_information")}
                 self.diagnostics[key]["selected_pages"] = pages
+                self.diagnostics[key]["next_step"] = (
+                    "done" if fact["status"] == "answered" else "search_official_site")
             except ProviderUnavailable:
                 raise
             except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
