@@ -89,6 +89,46 @@ class RepairTests(unittest.TestCase):
         self.assertEqual(provider.diagnostics["drone"]["status"], "not_found")
         post.assert_not_called()
 
+    def test_drone_question_uses_damage_context_without_drone_keyword(self):
+        provider = GroqFieldProvider("test-key")
+        context = ("4.2.2. Механическое повреждение — случайное падение или "
+                   "попадание на ТС инородного предмета.")
+        response = Mock(status_code=200)
+        response.json.return_value = {"choices": [{"finish_reason": "stop", "message": {
+            "content": json.dumps({"value": "Общий пункт описывает падение предмета; "
+                                    "специальный порядок для БПЛА не установлен.",
+                "exact_quote": context, "page": 9, "section": "4.2.2.",
+                "status": "partial", "explanation": "Найден общий риск, но БПЛА не назван.",
+                "missing_information": "Уточнить применимость к БПЛА по договору."})}}]}
+        with patch("collector.casco_provider.requests.post", return_value=response) as post:
+            facts = provider.extract(document=ParsedDocument({9: context}),
+                company="Т-Страхование", source_url=URL, field_keys=("drone",))
+        self.assertEqual(facts["drone"]["answer_status"], "partial")
+        self.assertIn("падение предмета", provider.diagnostics["drone"]["answer"])
+        self.assertEqual(provider.diagnostics["drone"]["selected_pages"], [9])
+        prompt = post.call_args.kwargs["json"]["messages"][0]["content"]
+        self.assertIn("Как происходит выплата", prompt)
+        self.assertIn("4.2.2.", prompt)
+
+    def test_empty_previous_candidate_still_gets_contextual_question(self):
+        row = self.row()
+        row["parsed"]["pages"] = {"9": "4.2.2. Механическое повреждение — падение предмета."}
+        row["candidates"] = [{"field_key": "drone", "field_id": 7,
+            "validation_status": "FAIL", "payload": {"value": None}}]
+        repo = Mock()
+        repo.review_documents.return_value = [row]
+        repo.publish.return_value = set()
+        provider = Mock(available=True, name="groq", diagnostics={"drone": {
+            "status": "partial", "answer": "Указан общий риск падения предмета.",
+            "next_step": "search_official_site"}})
+        provider.extract.return_value = {"drone": {"value": "Указан общий риск падения предмета.",
+            "exact_quote": None, "page": None, "section": None, "answer_status": "partial"}}
+        report = repair(repo, provider)
+        self.assertEqual(provider.extract.call_args.kwargs["field_keys"], ("drone",))
+        self.assertEqual(report["documents"][0]["fields"]["drone"]["answer"],
+                         "Указан общий риск падения предмета.")
+        self.assertFalse(report["documents"][0]["fields"]["drone"]["published"])
+
     def test_partial_answer_cannot_publish_even_with_valid_quote(self):
         fact = {"value": "Полная гибель при превышении 75% страховой стоимости.",
                 "exact_quote": QUOTE, "page": 3, "section": "9.1.",

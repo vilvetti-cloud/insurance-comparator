@@ -58,11 +58,11 @@ def repair(repository, provider, *, insurer="t-insurance", deterministic_only=Fa
         entry = {"source_url": row["url"], "checksum": row["checksum"], "fields": {}}
         candidates = []
         pending_model = []
-        for key, old in failed.items():
+        for key in failed:
             fact, calibration_reason = calibration(key, document, insurer=insurer,
                                                    source_url=row["url"])
             if fact is None:
-                if deterministic_only or not (old.get("payload") or {}).get("value"):
+                if deterministic_only:
                     entry["fields"][key] = {"validation": calibration_reason,
                         "next_step": "search_official_site", "published": False}
                 else:
@@ -85,7 +85,11 @@ def repair(repository, provider, *, insurer="t-insurance", deterministic_only=Fa
                             insurer=insurer, source_url=row["url"])
                         candidates.append((key, fact, verdict))
                         entry["fields"][key] = {"validation": verdict.reason,
-                            **getattr(provider, "diagnostics", {}).get(key, {})}
+                            **getattr(provider, "diagnostics", {}).get(key, {}),
+                            "evidence": {"quote": (fact.get("exact_quote") or "")[:1600],
+                                         "page": fact.get("page"), "section": fact.get("section")}}
+                        if not verdict.passed and entry["fields"][key].get("next_step") == "done":
+                            entry["fields"][key]["next_step"] = "review_evidence"
                 except ProviderUnavailable as exc:
                     report["errors"].append(str(exc))
         passed = repository.publish(

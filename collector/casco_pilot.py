@@ -45,15 +45,31 @@ PAGE_TERMS = {
     'payment_terms': (r'срок\w*\s+выплат', r'рабоч\w*\s+дн', r'направлен\w*\s+на\s+ремонт', r'выплат\w*\s+страхов'),
 }
 
+# These risks may be described by their cause and the general damage clauses,
+# without the field name appearing anywhere in the rules. Search the risk,
+# exclusion and settlement sections before declaring that there is no answer.
+CONTEXT_PAGE_TERMS = {
+    'self_ignition': (r'пожар|возгоран|самовозгор', r'внешн\w*\s+воздейств',
+                      r'неисправност\w*\s+электропровод|заводск\w*\s+брак',
+                      r'не\s+покрываются\s+страхован'),
+    'terrorism': (r'противоправн\w*\s+действ\w*\s+треть', r'поджог|подрыв',
+                  r'военн\w*\s+действ|диверси|террористическ\w*\s+акт',
+                  r'не\s+покрываются\s+страхован'),
+    'drone': (r'механическ\w*\s+поврежден', r'падени\w*\s+или\s+попадани\w*',
+              r'инородн\w*\s+предмет|беспилот|бпла|дрон',
+              r'военн\w*\s+действ|не\s+покрываются\s+страхован'),
+}
+
 
 def select_pages(document, field, *, max_pages=3, max_chars=14000):
     """Include relevant physical pages and their neighbours; disclose the scope."""
     patterns = PAGE_TERMS.get(field)
     if not patterns:
         raise ValueError('No page selection terms for ' + field)
-    ranked = sorted(((sum(1 for term in patterns if re.search(term, text.lower())), page)
+    search_terms = CONTEXT_PAGE_TERMS.get(field, patterns)
+    ranked = sorted(((sum(1 for term in search_terms if re.search(term, text.lower())), page)
                      for page, text in document.pages.items()), reverse=True)
-    seeds = [page for score, page in ranked if score][:1 if field == 'without_certificates' else 3]
+    seeds = [page for score, page in ranked if score][:1 if field == 'without_certificates' else max_pages]
     if not seeds:
         return None, []
     numbers = set(document.pages)
@@ -65,6 +81,8 @@ def select_pages(document, field, *, max_pages=3, max_chars=14000):
             if size + length <= max_chars:
                 selected.append(page)
                 size += length
+    if not selected:
+        return None, []
     selected.sort()
     return ParsedDocument({page: document.pages[page] for page in selected}), selected
 
