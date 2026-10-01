@@ -21,7 +21,7 @@ INSURERS = (
         "РЕСО",
         "https://reso.ru/",
         "https://reso.ru/individual/auto/kasko/",
-        "https://reso.ru/about/rules/individual/auto/kasco/sredstv-avtotransporta-tarify-03022025.pdf",
+        "https://reso.ru/individual/auto/kasko/sredstv-avtotransporta-03022025.pdf",
     ),
     InsurerConfig(
         "vsk",
@@ -125,3 +125,4 @@ def get_insurer(slug: str) -> InsurerConfig:
         if insurer.slug == slug:
             return insurer
     raise KeyError(f"Unknown insurer: {slug}")
+
