@@ -121,10 +121,11 @@ class ComparisonService:
                 continue
 
             reportable = audit.status in {"confirmed", "conditional"}
+            has_value = row["value"] not in (None, "")
             company_data[field_key] = {
-                "value": (row["value"] if row["value"] not in (None, "") else "Не найдено")
-                         if reportable else "Не подтверждено",
-                "diagnostic_value": row["value"] if not reportable else None,
+                "value": row["value"] if reportable and has_value else (
+                    "Не подтверждено" if has_value else "Не найдено"),
+                "diagnostic_value": row["value"] if has_value and not reportable else None,
                 "source": _ui_source(row["source_level"], row["source_type"]),
                 "url": row["source_url"],
                 "source_level": row["source_level"],

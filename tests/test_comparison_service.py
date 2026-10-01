@@ -18,6 +18,10 @@ class ComparisonServiceTests(unittest.TestCase):
              "source_level": 1, "confidence": 1.0, "verification_status": "needs_review",
              "checked_at": None, "updated_at": None, "source_url": "https://cdn.tinsurance.ru/rules.pdf",
              "source_type": "pdf", "evidence_quote": "БПЛА покрываются по всем программам."},
+            {"company_name": "Т-Страхование", "field_key": "terrorism",
+             "value": None, "source_level": None, "confidence": None,
+             "verification_status": None, "checked_at": None, "updated_at": None,
+             "source_url": None, "source_type": None, "evidence_quote": None},
         ]
         conn = MagicMock()
         conn.cursor.return_value.__enter__.return_value.fetchall.return_value = rows
@@ -30,6 +34,8 @@ class ComparisonServiceTests(unittest.TestCase):
                          "Не подтверждено")
         self.assertEqual(snapshot["Т-Страхование"]["drone"]["diagnostic_value"],
                          "БПЛА покрываются по всем программам.")
+        self.assertEqual(snapshot["Т-Страхование"]["terrorism"]["value"],
+                         "Не найдено")
 
 
 if __name__ == "__main__":
