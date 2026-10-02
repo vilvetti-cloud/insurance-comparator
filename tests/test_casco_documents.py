@@ -10,6 +10,8 @@ from collector.casco_provider import DisabledProvider, GeminiProvider, FIELD_KEY
 from collector.casco_sources import sources_for, official_url
 from collector.casco_validation import validate_fact
 from collector.http_client import FetchResult, FetchError
+from database.repositories.casco_revision import CascoRevisionRepository
+from collector.casco_version import CASCO_EXTRACTOR_VERSION
 
 QUOTE = "9.1. Полная гибель ТС наступает, если стоимость ремонта превышает 75% страховой стоимости."
 FACT = {"value": "Полная гибель: стоимость ремонта превышает 75% страховой стоимости.",
@@ -152,6 +154,17 @@ class EvidenceTests(unittest.TestCase):
         doc = ParsedDocument({3: QUOTE}, parser="pypdf_review_only")
         self.assertFalse(validate_fact("total_loss", FACT, doc,
             insurer="reso", source_url="https://reso.ru/rules.pdf").passed)
+
+
+class RevisionVersionTests(unittest.TestCase):
+    def test_completed_requires_current_extractor_version(self):
+        repo = object.__new__(CascoRevisionRepository)
+        repo.fetch_one = Mock(return_value={"status": "complete"})
+        self.assertTrue(repo.completed(7, "sha"))
+        query, params = repo.fetch_one.call_args.args
+        self.assertIn("casco_analyzed_version", query)
+        self.assertIn("extractor_version", query)
+        self.assertEqual(params, (7, "sha", CASCO_EXTRACTOR_VERSION))
 
 
 class PipelineTests(unittest.TestCase):
