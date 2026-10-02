@@ -16,6 +16,8 @@ from collector.casco_provider import GeminiProvider, get_provider
 from collector.casco_sources import official_url, sources_for
 from collector.registry import get_insurer
 from collector.casco_validation import validate_fact
+from collector.casco_t_rules import calibration
+from collector.casco_version import CASCO_EXTRACTOR_VERSION
 from db import init_db
 
 
@@ -104,15 +106,41 @@ def run(insurer_slug: str, *, apply: bool) -> dict:
     if not parsed.promotable:
         raise RuntimeError("Docling parse is not promotable: " + str(parsed.warning))
 
-    facts = provider.extract(
-        document=parsed,
-        company=insurer.name,
-        source_url=pin.url,
-    )
+    facts = {}
+    deterministic = {}
+    unresolved = []
+    for key in fields:
+        fact, reason = calibration(
+            key,
+            parsed,
+            insurer=insurer_slug,
+            source_url=fetched.url,
+        )
+        if fact is not None:
+            facts[key] = fact
+            deterministic[key] = {
+                "method": "exact_clause",
+                "validation": reason,
+                "page": fact.get("page"),
+                "section": fact.get("section"),
+            }
+        else:
+            unresolved.append(key)
+
+    if unresolved:
+        model_facts = provider.extract(
+            document=parsed,
+            company=insurer.name,
+            source_url=pin.url,
+            field_keys=tuple(unresolved),
+        )
+        for key in unresolved:
+            facts[key] = model_facts.get(key, {})
 
     candidates = []
     field_report = {}
     diagnostics = getattr(provider, "diagnostics", {}) or {}
+    diagnostics = {**diagnostics, **deterministic}
     for key in fields:
         fact = facts.get(key, {})
         verdict = validate_fact(
@@ -141,18 +169,24 @@ def run(insurer_slug: str, *, apply: bool) -> dict:
 
     passed_fields = [key for key, _, verdict in candidates if verdict.passed]
     published_fields = []
+    quarantined_legacy = []
     if apply:
+        provider_label = getattr(provider, "name", "unknown") + "_e2e"
+        if deterministic:
+            provider_label += "+deterministic"
         published_fields = sorted(
             pipeline.revisions.publish(
                 source=source,
                 document=document_row,
                 checksum=checksum,
                 parsed=asdict(parsed),
-                provider=getattr(provider, "name", "unknown") + "_e2e",
+                provider=provider_label,
                 candidates=candidates,
                 fields=fields,
             )
         )
+        quarantined_legacy = pipeline.revisions.quarantine_unverifiable_active_conditions(
+            source_id=source["id"], checksum=checksum, document=parsed)
 
     card = current_card(pipeline, insurer_slug)
     for key, item in field_report.items():
@@ -177,6 +211,9 @@ def run(insurer_slug: str, *, apply: bool) -> dict:
         "pages": len(parsed.pages),
         "provider": getattr(provider, "name", "unknown"),
         "model": getattr(provider, "model", None),
+        "extractor_version": CASCO_EXTRACTOR_VERSION,
+        "deterministic_fields": sorted(deterministic),
+        "quarantined_legacy": quarantined_legacy,
         "already_completed_before_run": already_completed,
         "apply": apply,
         "passed_fields": passed_fields,
@@ -197,6 +234,9 @@ def summary(report: dict) -> dict:
         "pages": report["pages"],
         "provider": report["provider"],
         "model": report["model"],
+        "extractor_version": report["extractor_version"],
+        "deterministic_fields": report["deterministic_fields"],
+        "quarantined_legacy": report["quarantined_legacy"],
         "already_completed_before_run": report["already_completed_before_run"],
         "passed_count": report["passed_count"],
         "published_count": report["published_count"],
