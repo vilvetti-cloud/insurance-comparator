@@ -167,6 +167,41 @@ class RevisionVersionTests(unittest.TestCase):
         self.assertEqual(params, (7, "sha", CASCO_EXTRACTOR_VERSION))
 
 
+class LegacyEvidenceQuarantineTests(unittest.TestCase):
+    def test_missing_checksum_is_quarantined_but_current_literal_quote_is_kept(self):
+        repo = object.__new__(CascoRevisionRepository)
+        quote = "6.8. В Договоре страхования может быть установлена безусловная франшиза."
+        repo.fetch_all = Mock(return_value=[
+            {"condition_id": 1, "field_key": "franchise", "evidence_id": 10,
+             "page_number": 14, "text_fragment": quote, "document_checksum": "current"},
+            {"condition_id": 2, "field_key": "terrorism", "evidence_id": 11,
+             "page_number": 14, "text_fragment": "Подготовленный пересказ.", "document_checksum": None},
+        ])
+
+        cursor = Mock()
+        cursor_cm = Mock()
+        cursor_cm.__enter__ = Mock(return_value=cursor)
+        cursor_cm.__exit__ = Mock(return_value=False)
+        conn = Mock()
+        conn.cursor.return_value = cursor_cm
+        conn_cm = Mock()
+        conn_cm.__enter__ = Mock(return_value=conn)
+        conn_cm.__exit__ = Mock(return_value=False)
+        repo.connection = Mock(return_value=conn_cm)
+
+        result = repo.quarantine_unverifiable_active_conditions(
+            source_id=5,
+            checksum="current",
+            document=ParsedDocument({14: quote}),
+        )
+        self.assertEqual(result, [{
+            "condition_id": 2,
+            "field": "terrorism",
+            "reason": "missing_or_stale_document_checksum",
+        }])
+        self.assertEqual(cursor.execute.call_count, 3)
+
+
 class PipelineTests(unittest.TestCase):
     def pipeline(self):
         p = CascoCollectionPipeline(provider=Mock(available=True, name="fake"),
