@@ -3,6 +3,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from .base import BaseRepository
 from core.condition_audit import audit_condition
+from collector.casco_version import CASCO_EXTRACTOR_VERSION
 
 
 class CascoRevisionRepository(BaseRepository):
@@ -44,11 +45,16 @@ class CascoRevisionRepository(BaseRepository):
                         or content_fingerprint(old['pages']) != content_fingerprint(parsed['pages'])):
                     return False
                 # Evidence remains attached to the original physical document/pages.
-                cur.execute('''INSERT INTO casco_document_revisions(source_id,checksum,status,parsed,provider,analyzed_at)
-                    VALUES (%s,%s,'complete',%s,'content_equal',NOW())
+                cur.execute('''INSERT INTO casco_document_revisions
+                    (source_id,checksum,status,parsed,provider,extractor_version,analyzed_at)
+                    VALUES (%s,%s,'complete',%s,'content_equal',%s,NOW())
                     ON CONFLICT(source_id,checksum) DO UPDATE SET status='complete',parsed=EXCLUDED.parsed,
-                    provider='content_equal',error=NULL,analyzed_at=NOW()''', (source_id,checksum,Jsonb(parsed)))
-                cur.execute('UPDATE sources SET casco_analyzed_checksum=%s WHERE id=%s', (checksum,source_id))
+                    provider='content_equal',extractor_version=EXCLUDED.extractor_version,
+                    error=NULL,analyzed_at=NOW()''',
+                    (source_id,checksum,Jsonb(parsed),CASCO_EXTRACTOR_VERSION))
+                cur.execute('''UPDATE sources SET casco_analyzed_checksum=%s,
+                    casco_analyzed_version=%s WHERE id=%s''',
+                    (checksum,CASCO_EXTRACTOR_VERSION,source_id))
                 return True
 
     def page_state(self, insurer, url):
@@ -60,9 +66,11 @@ class CascoRevisionRepository(BaseRepository):
             ON CONFLICT(insurer,url) DO UPDATE SET checksum=EXCLUDED.checksum,
             links=EXCLUDED.links,checked_at=NOW()''', (insurer,url,checksum,Jsonb(links)))
 
-    def attempted(self, source_id, checksum):
-        return bool(self.fetch_one("SELECT id FROM casco_document_revisions WHERE source_id=%s AND checksum=%s AND status<>'complete'",
-                                  (source_id,checksum)))
+    def attempted(self, source_id, checksum, extractor_version=CASCO_EXTRACTOR_VERSION):
+        return bool(self.fetch_one(
+            "SELECT id FROM casco_document_revisions "
+            "WHERE source_id=%s AND checksum=%s AND extractor_version=%s AND status<>'complete'",
+            (source_id, checksum, extractor_version)))
 
     def review_summary(self):
         return self.fetch_all(
@@ -115,23 +123,93 @@ class CascoRevisionRepository(BaseRepository):
                             (row["id"],))
 
 
-    def completed(self, source_id: int, checksum: str) -> bool:
+    def quarantine_unverifiable_active_conditions(self, *, source_id, checksum, document):
+        """Quarantine legacy active facts that cannot be tied to this exact PDF revision."""
+        from collector.casco_validation import normalize
+
+        rows = self.fetch_all(
+            """SELECT c.id AS condition_id, f.field_key, e.id AS evidence_id,
+                      e.page_number, e.text_fragment, e.document_checksum
+               FROM conditions c
+               JOIN comparison_fields f ON f.id=c.field_id
+               LEFT JOIN LATERAL (
+                   SELECT id,page_number,text_fragment,document_checksum
+                   FROM evidence
+                   WHERE condition_id=c.id
+                   ORDER BY id DESC
+                   LIMIT 1
+               ) e ON TRUE
+               WHERE c.source_id=%s AND c.status='active'""",
+            (source_id,),
+        )
+        invalid = []
+        for row in rows:
+            reason = None
+            page = row.get("page_number")
+            quote = row.get("text_fragment")
+            if not row.get("evidence_id"):
+                reason = "missing_evidence"
+            elif row.get("document_checksum") != checksum:
+                reason = "missing_or_stale_document_checksum"
+            elif type(page) is not int or page not in document.pages:
+                reason = "invalid_evidence_page"
+            elif not isinstance(quote, str) or not quote.strip():
+                reason = "missing_evidence_quote"
+            elif normalize(quote) not in normalize(document.pages[page]):
+                reason = "quote_not_in_current_pdf"
+            if reason:
+                invalid.append((row["condition_id"], row["field_key"], reason))
+
+        if not invalid:
+            return []
+
+        with self.connection() as conn:
+            with conn.cursor() as cur:
+                for condition_id, field_key, reason in invalid:
+                    cur.execute(
+                        """UPDATE conditions SET status='diagnostic',
+                           verification_status='rejected',checked_at=NOW(),updated_at=NOW()
+                           WHERE id=%s AND status='active'""",
+                        (condition_id,),
+                    )
+                    cur.execute(
+                        """UPDATE evidence SET verification_status='rejected'
+                           WHERE condition_id=%s""",
+                        (condition_id,),
+                    )
+                    cur.execute(
+                        """INSERT INTO change_log
+                           (entity_type,entity_id,field_name,old_value,new_value,reason)
+                           VALUES ('condition',%s,'status','active','diagnostic',%s)""",
+                        (condition_id, "legacy_evidence_quarantine:" + reason),
+                    )
+        return [{"condition_id": cid, "field": field, "reason": reason}
+                for cid, field, reason in invalid]
+
+    def completed(self, source_id: int, checksum: str,
+                  extractor_version: str = CASCO_EXTRACTOR_VERSION) -> bool:
         row = self.fetch_one(
             "SELECT r.status FROM casco_document_revisions r JOIN sources s ON s.id=r.source_id "
-            "WHERE r.source_id=%s AND r.checksum=%s AND s.casco_analyzed_checksum=r.checksum",
-            (source_id, checksum),
+            "WHERE r.source_id=%s AND r.checksum=%s AND r.extractor_version=%s "
+            "AND s.casco_analyzed_checksum=r.checksum "
+            "AND s.casco_analyzed_version=r.extractor_version",
+            (source_id, checksum, extractor_version),
         )
         return bool(row and row["status"] == "complete")
 
-    def save_degraded(self, *, source_id, checksum, reason, parsed=None):
+    def save_degraded(self, *, source_id, checksum, reason, parsed=None,
+                      extractor_version=CASCO_EXTRACTOR_VERSION):
         self.execute(
-            """INSERT INTO casco_document_revisions(source_id, checksum, status, error, parsed)
-               VALUES (%s,%s,'degraded',%s,%s)
+            """INSERT INTO casco_document_revisions
+                 (source_id, checksum, status, error, parsed, extractor_version)
+               VALUES (%s,%s,'degraded',%s,%s,%s)
                ON CONFLICT(source_id,checksum) DO UPDATE SET
-                 status=CASE WHEN casco_document_revisions.status='complete' THEN 'complete' ELSE 'degraded' END,
+                 status='degraded',
+                 extractor_version=EXCLUDED.extractor_version,
                  error=EXCLUDED.error, checked_at=NOW(),
                  parsed=COALESCE(EXCLUDED.parsed,casco_document_revisions.parsed)""",
-            (source_id, checksum, reason, Jsonb(parsed) if parsed else None),
+            (source_id, checksum, reason, Jsonb(parsed) if parsed else None,
+             extractor_version),
         )
 
     def publish(self, *, source, document, checksum, parsed, provider, candidates, fields,
@@ -144,18 +222,26 @@ class CascoRevisionRepository(BaseRepository):
                     cur.execute("SELECT id FROM comparison_fields WHERE id=%s FOR UPDATE", (field_id,))
                 cur.execute(
                     """INSERT INTO casco_document_revisions
-                         (source_id,checksum,status,parsed,provider)
-                       VALUES (%s,%s,'processing',%s,%s)
-                       ON CONFLICT(source_id,checksum) DO UPDATE SET checked_at=NOW()
+                         (source_id,checksum,status,parsed,provider,extractor_version)
+                       VALUES (%s,%s,'processing',%s,%s,%s)
+                       ON CONFLICT(source_id,checksum) DO UPDATE SET
+                         status='processing', parsed=EXCLUDED.parsed,
+                         provider=EXCLUDED.provider,
+                         extractor_version=EXCLUDED.extractor_version,
+                         error=NULL, checked_at=NOW()
                        RETURNING id,status""",
-                    (source["id"], checksum, Jsonb(parsed), provider),
+                    (source["id"], checksum, Jsonb(parsed), provider,
+                     CASCO_EXTRACTOR_VERSION),
                 )
                 revision = cur.fetchone()
-                cur.execute("SELECT casco_analyzed_checksum,checksum FROM sources WHERE id=%s FOR UPDATE", (source["id"],))
+                cur.execute("""SELECT casco_analyzed_checksum,casco_analyzed_version,checksum
+                    FROM sources WHERE id=%s FOR UPDATE""", (source["id"],))
                 source_state = cur.fetchone()
                 if source_state["checksum"] and source_state["checksum"] != checksum:
                     raise ValueError("Source changed during analysis; stale candidate not published")
-                if source_state["casco_analyzed_checksum"] == checksum and not repair:
+                if (source_state["casco_analyzed_checksum"] == checksum
+                        and source_state["casco_analyzed_version"] == CASCO_EXTRACTOR_VERSION
+                        and not repair):
                     return set()
                 passed = set()
                 for key, fact, verdict in candidates:
@@ -247,12 +333,13 @@ class CascoRevisionRepository(BaseRepository):
                     passed.add(key)
                 cur.execute(
                     """UPDATE casco_document_revisions SET status='complete',parsed=%s,
-                       provider=%s,error=NULL,analyzed_at=NOW() WHERE id=%s""",
-                    (Jsonb(parsed), provider, revision["id"]),
+                       provider=%s,extractor_version=%s,error=NULL,analyzed_at=NOW() WHERE id=%s""",
+                    (Jsonb(parsed), provider, CASCO_EXTRACTOR_VERSION, revision["id"]),
                 )
                 if parsed.get("parser") == "docling" and not parsed.get("warning"):
-                    cur.execute("UPDATE sources SET casco_analyzed_checksum=%s WHERE id=%s",
-                                (checksum, source["id"]))
+                    cur.execute("""UPDATE sources SET casco_analyzed_checksum=%s,
+                        casco_analyzed_version=%s WHERE id=%s""",
+                        (checksum, CASCO_EXTRACTOR_VERSION, source["id"]))
                 else:
                     cur.execute("UPDATE casco_document_revisions SET status='degraded',error='parser_degraded' WHERE id=%s",
                                 (revision["id"],))
