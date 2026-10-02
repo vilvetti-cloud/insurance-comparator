@@ -8,6 +8,8 @@ from collector.casco_sources import sources_for, official_url
 from collector.casco_document import CascoDocumentParser, ParsedDocument
 from collector.casco_provider import get_provider, FIELD_KEYS, ProviderUnavailable
 from collector.casco_validation import validate_fact
+from collector.casco_t_rules import calibration
+from collector.casco_version import CASCO_EXTRACTOR_VERSION
 from collector.http_client import HttpFetcher, FetchError
 from collector.casco_transport import CascoFetcher
 from collector.registry import INSURERS, get_insurer
@@ -60,7 +62,8 @@ class CascoCollectionPipeline:
         directory.mkdir(parents=True, exist_ok=True)
         if insurer_slugs and set(insurer_slugs) - {i.slug for i in INSURERS}:
             raise ValueError("Unknown insurer slug")
-        manifest = {"version": 1, "pending": [], "unchanged": [], "errors": [],
+        manifest = {"version": 1, "extractor_version": CASCO_EXTRACTOR_VERSION,
+                    "pending": [], "unchanged": [], "errors": [],
                     "deferred": [], "pages": []}
         if track_run:
             selected = [i for i in INSURERS if not insurer_slugs or i.slug in insurer_slugs]
@@ -128,7 +131,9 @@ class CascoCollectionPipeline:
         manifest = manifest or json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         report = {"passed_fields": 0, "review_fields": 0, "degraded": [],
                   "errors": manifest["errors"], "unchanged": len(manifest["unchanged"]),
-                  "validation_failures": [], "field_diagnostics": {}}
+                  "validation_failures": [], "field_diagnostics": {},
+                  "deterministic_fields": {}, "quarantined_legacy": [],
+                  "extractor_version": CASCO_EXTRACTOR_VERSION}
         report['deferred'] = manifest.get('deferred', [])
         report['pages'] = manifest.get('pages', [])
         counts = {}
@@ -165,26 +170,79 @@ class CascoCollectionPipeline:
                     report['unchanged'] += 1
                     print(f"[analysis] {item['insurer']} document text unchanged: no AI call", flush=True)
                     continue
-                facts = self.provider.extract(document=document,
-                    company=get_insurer(item["insurer"]).name, source_url=source["url"])
-                diagnostics = getattr(self.provider, 'diagnostics', None)
-                if isinstance(diagnostics, dict) and diagnostics:
+                # First use deterministic, edition-anchored clauses for fields where
+                # the exact policy section is known. The model only sees unresolved fields.
+                facts = {}
+                deterministic = {}
+                unresolved = []
+                for key in FIELD_KEYS:
+                    fact, reason = calibration(
+                        key,
+                        document,
+                        insurer=item["insurer"],
+                        source_url=item["final_url"],
+                    )
+                    if fact is not None:
+                        facts[key] = fact
+                        deterministic[key] = {
+                            "method": "exact_clause",
+                            "validation": reason,
+                            "page": fact.get("page"),
+                            "section": fact.get("section"),
+                        }
+                    else:
+                        unresolved.append(key)
+
+                if unresolved:
+                    model_facts = self.provider.extract(
+                        document=document,
+                        company=get_insurer(item["insurer"]).name,
+                        source_url=source["url"],
+                        field_keys=tuple(unresolved),
+                    )
+                    for key in unresolved:
+                        facts[key] = model_facts.get(key, {})
+
+                diagnostics = {}
+                provider_diagnostics = getattr(self.provider, 'diagnostics', None)
+                if isinstance(provider_diagnostics, dict):
+                    diagnostics.update(provider_diagnostics)
+                for key, item_diag in deterministic.items():
+                    diagnostics[key] = item_diag
+                if diagnostics:
                     report['field_diagnostics'][item['insurer']] = diagnostics
+                if deterministic:
+                    report['deterministic_fields'][item['insurer']] = sorted(deterministic)
+
                 candidates = [(key, facts.get(key, {}), validate_fact(key, facts.get(key, {}),
                     document, insurer=item["insurer"], source_url=item["final_url"])) for key in FIELD_KEYS]
                 report["validation_failures"].extend(
                     {"insurer": item["insurer"], "field": key, "reason": verdict.reason}
                     for key, _, verdict in candidates if not verdict.passed)
+                provider_label = getattr(self.provider, "name", "unknown")
+                if deterministic:
+                    provider_label += "+deterministic"
                 passed = self.revisions.publish(source=source, document=item["document"],
-                    checksum=checksum, parsed=parsed, provider=self.provider.name,
+                    checksum=checksum, parsed=parsed, provider=provider_label,
                     candidates=candidates, fields=item["fields"])
+
+                # Only after successful extraction/publication, remove active legacy facts
+                # from this same PDF source when they cannot be tied to the current bytes.
+                quarantined = self.revisions.quarantine_unverifiable_active_conditions(
+                    source_id=source["id"], checksum=checksum, document=document)
+                if isinstance(quarantined, list) and quarantined:
+                    report["quarantined_legacy"].extend(
+                        {"insurer": item["insurer"], **entry} for entry in quarantined)
+
                 counts[item["insurer"]] = counts.get(item["insurer"], 0) + len(passed)
                 report["passed_fields"] += len(passed)
                 report["review_fields"] += len(FIELD_KEYS) - len(passed)
                 if not document.promotable:
                     # A fallback parse is not a completed Docling analysis: retry later.
                     report["degraded"].append({"insurer": item["insurer"], "reason": document.warning})
-                print(f"[analysis] {item['insurer']} PASS={len(passed)} review={10-len(passed)}", flush=True)
+                print(f"[analysis] {item['insurer']} PASS={len(passed)} "
+                      f"review={len(FIELD_KEYS)-len(passed)} "
+                      f"version={CASCO_EXTRACTOR_VERSION}", flush=True)
             except Exception as exc:
                 reason = str(exc)[:500] if isinstance(exc, (ProviderUnavailable, ValueError)) else type(exc).__name__
                 if isinstance(exc, ProviderUnavailable) and 'HTTP 429' in reason:
