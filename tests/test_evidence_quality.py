@@ -49,6 +49,12 @@ class EvidenceQualityTests(unittest.TestCase):
             )
         )
 
+    def test_internal_fire_clause_still_supports_self_ignition_exclusion(self) -> None:
+        quote = ("3.6.8. Повреждение застрахованного ТС в результате пожара, "
+                 "произошедшего в силу внутренних по отношению к ТС причин.")
+        self.assertTrue(is_supported_condition("self_ignition",
+            "Самовозгорание по внутренним причинам исключено из покрытия.", quote))
+
     def test_repair_form_by_calculation_or_actual_repair_is_supported(self) -> None:
         quote = (
             "Страховое возмещение выплачивается в одной из следующих форм: "
@@ -59,3 +65,4 @@ class EvidenceQualityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
