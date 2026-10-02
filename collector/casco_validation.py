@@ -73,11 +73,16 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     value_n = normalize(value).lower()
     quote = "\n".join(quotes)
     quote_lower = quote.lower()
+    if key == "terrorism" and not any(
+            re.search(r"террор", item.lower()) and re.search(
+                r"покрыв|включ|возмещ|страхов\w*\s+случ|не\s+(?:покрыв|возмещ|явля)|исключ",
+                item.lower()) for item in quotes):
+        return fail("quote_does_not_prove_terrorism_polarity")
     if key == "total_loss" and re.search(r"за исключением[^.]{0,100}гибел", quote_lower):
         # A compensation clause that excludes constructive loss and happens
         # to mention a percentage does not establish the loss threshold.
         return fail("quote_does_not_define_total_loss")
-    neg = r"не\s+(?:покрыва|возмещ|явля|предусмотр|включ|оплач|призна)|исключ"
+    neg = r"не\s+(?:покрыва|возмещ|явля|включ|оплач|призна)|исключ"
     pos = r"покрыва|возмещ|включ|оплач|предостав|страховым случаем"
     coverage_fields = {"without_certificates", "gap", "self_ignition", "terrorism", "drone", "tow_truck", "repair_type"}
     if (key in coverage_fields and re.search(neg, context.lower())

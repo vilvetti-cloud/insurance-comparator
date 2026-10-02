@@ -1,4 +1,5 @@
 """Explicit, bounded review of cached extractions; daily collection never retries these."""
+import re
 from collector.casco_document import ParsedDocument
 from collector.casco_validation import normalize, validate_fact
 from collector.casco_provider import get_provider, ProviderUnavailable
@@ -7,16 +8,28 @@ from database.repositories.casco_revision import CascoRevisionRepository
 
 
 def locate_quote(fact, document):
-    """Correct only an unambiguous physical-page attribution, never the quotation."""
-    if not isinstance(fact, dict) or not isinstance(fact.get('exact_quote'), str):
+    """Correct exact page/section metadata, never the quotation or answer."""
+    if not isinstance(fact, dict):
         return fact
-    quote = normalize(fact['exact_quote'])
-    if len(quote) < 25:
-        return fact
-    pages = [n for n, text in document.pages.items() if quote in normalize(text)]
-    if len(pages) == 1:
-        return dict(fact, page=pages[0])
-    return fact
+    def correct(item):
+        if not isinstance(item, dict) or not isinstance(item.get('exact_quote'), str):
+            return item
+        quote = normalize(item['exact_quote'])
+        result = dict(item)
+        if len(quote) >= 25:
+            pages = [n for n, text in document.pages.items() if quote in normalize(text)]
+            if len(pages) == 1:
+                result['page'] = pages[0]
+        if not result.get('section'):
+            table_option = re.match(r'\|\s*(ГЭП\d+)\s*\|', item['exact_quote'], re.I)
+            if table_option:
+                result['section'] = table_option.group(1)
+        return result
+    if isinstance(fact.get('evidence'), list) and fact['evidence']:
+        evidence = [correct(item) for item in fact['evidence']]
+        return dict(fact, evidence=evidence,
+                    **{key: evidence[0].get(key) for key in ('exact_quote', 'page', 'section')})
+    return correct(fact)
 
 
 def review_insurer(insurer, *, apply=False, use_ai=False, repository=None, provider=None):

@@ -35,6 +35,16 @@ class ReviewTests(unittest.TestCase):
         invented = dict(original, exact_quote=QUOTE.replace('75%', '80%'))
         self.assertEqual(locate_quote(invented, ParsedDocument({3: QUOTE})), invented)
 
+    def test_table_option_section_recovered_for_each_literal_evidence(self):
+        quote = '| ГЭП1 | Договорная стоимость ТС равна сумме непогашенной задолженности. |'
+        item = {'exact_quote': quote, 'page': 90, 'section': None}
+        fact = {'value': 'ГЭП1 зависит от задолженности.', **item, 'evidence': [item]}
+        corrected = locate_quote(fact, ParsedDocument({114: quote}))
+        self.assertEqual(corrected['page'], 114)
+        self.assertEqual(corrected['section'], 'ГЭП1')
+        self.assertEqual(corrected['evidence'][0]['section'], 'ГЭП1')
+        self.assertEqual(fact['section'], None)
+
     def row(self):
         return {'id': 1, 'source_id': 2, 'source_level': 1, 'document_id': 3,
             'url': 'https://reso.ru/rules.pdf', 'checksum': 'hash',
@@ -84,3 +94,4 @@ class ReviewTests(unittest.TestCase):
                              source_url='https://reso.ru/rules.pdf', field_keys=['total_loss'])
         self.assertEqual(request.call_args.kwargs['schema']['required'], ['total_loss'])
         self.assertNotIn('tow_truck:', request.call_args.args[0])
+
