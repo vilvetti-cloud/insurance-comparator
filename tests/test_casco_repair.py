@@ -230,6 +230,38 @@ class RepairTests(unittest.TestCase):
         with patch.dict("os.environ", {"GROQ_API_KEY": "groq", "GEMINI_API_KEY": "gemini"}):
             self.assertIsInstance(get_provider(), GroqFieldProvider)
 
+    def test_calibrated_total_loss_uses_exact_definition_and_65_percent(self):
+        page = (
+            "1.5.14. Полная гибель ТС - повреждение ТС, при котором стоимость "
+            "восстановительного ремонта равна или превышает 65% Страховой суммы ТС "
+            "на дату наступления Страхового случая. Договором страхования или по "
+            "дополнительному соглашению Страховщика и Страхователя указанный процент "
+            "и иные условия наступления Полной гибели ТС могут быть изменены.\n"
+            "1.5.15. Потерпевшие - третьи лица."
+        )
+        fact = calibrated_fact("total_loss", ParsedDocument({5: page}), source_url=URL)
+        self.assertIsNotNone(fact)
+        self.assertEqual(fact["page"], 5)
+        self.assertIn("65%", fact["value"])
+        self.assertIn("1.5.14.", fact["exact_quote"])
+        self.assertTrue(validate_fact("total_loss", fact, ParsedDocument({5: page}),
+            insurer="t-insurance", source_url=URL).passed)
+
+    def test_calibrated_franchise_keeps_contract_condition(self):
+        page = (
+            "6.8. В Договоре страхования может быть установлена безусловная франшиза. "
+            "При установлении в Договоре страхования безусловной франшизы размер "
+            "страховой выплаты по каждому страховому случаю уменьшается на размер "
+            "установленной франшизы. Договором страхования могут быть предусмотрены "
+            "дополнительные условия применения франшизы или ее иные виды.\n"
+            "6.8.1. Размер франшизы устанавливается по соглашению сторон."
+        )
+        fact = calibrated_fact("franchise", ParsedDocument({14: page}), source_url=URL)
+        self.assertIsNotNone(fact)
+        self.assertIn("может быть установлена", fact["value"])
+        self.assertTrue(validate_fact("franchise", fact, ParsedDocument({14: page}),
+            insurer="t-insurance", source_url=URL).passed)
+
     def test_calibrated_gap_uses_exact_same_page_span(self):
         page = ("- 13.6. По риску «GAP» страховая выплата производится в размере разницы между "
                 "страховой суммой ТС на момент заключения Договора страхования и размером страховой "
