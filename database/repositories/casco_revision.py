@@ -180,7 +180,10 @@ class CascoRevisionRepository(BaseRepository):
                     cur.execute(
                         """SELECT c.*, s.source_type, e.document_id, e.page_number, e.text_fragment
                            FROM conditions c LEFT JOIN sources s ON s.id=c.source_id LEFT JOIN LATERAL
-                             (SELECT * FROM evidence WHERE condition_id=c.id ORDER BY id DESC LIMIT 1) e ON TRUE
+                             (SELECT (array_agg(document_id ORDER BY id DESC))[1] AS document_id,
+                                     (array_agg(page_number ORDER BY id DESC))[1] AS page_number,
+                                     string_agg(text_fragment, E'\n\n' ORDER BY id DESC) AS text_fragment
+                              FROM evidence WHERE condition_id=c.id) e ON TRUE
                            WHERE c.field_id=%s AND c.status='active'
                            ORDER BY c.source_level NULLS LAST,c.id DESC""",
                         (fields[key]["id"],),

@@ -56,6 +56,7 @@ class DataQualityReportService:
                         "_checked_raw": None,
                         "page_number": None,
                         "evidence_quote": None,
+                        "evidence_items": [],
                         "quality_status": "missing",
                         "quality_label": "Не найдено",
                         "quality_reason": "Значение отсутствует.",
@@ -108,6 +109,7 @@ class DataQualityReportService:
                         s.source_type,
                         ev.page_number,
                         ev.text_fragment AS evidence_quote,
+                        ev.items AS evidence_items,
                         stats.active_candidate_count,
                         stats.distinct_value_count
                     FROM companies c
@@ -139,11 +141,13 @@ class DataQualityReportService:
                     ) stats ON TRUE
                     LEFT JOIN sources s ON s.id = cond.source_id
                     LEFT JOIN LATERAL (
-                        SELECT e.page_number, e.text_fragment
+                        SELECT (array_agg(e.page_number ORDER BY e.id DESC))[1] AS page_number,
+                               string_agg(e.text_fragment, E'\n\n' ORDER BY e.id DESC) AS text_fragment,
+                               jsonb_agg(jsonb_build_object('page', e.page_number,
+                                   'section', e.section, 'quote', e.text_fragment)
+                                   ORDER BY e.id DESC) AS items
                         FROM evidence e
                         WHERE e.condition_id = cond.id
-                        ORDER BY e.id DESC
-                        LIMIT 1
                     ) ev ON TRUE
                     WHERE c.status = 'active'
                     ORDER BY c.name, f.sort_order, f.id
@@ -266,6 +270,7 @@ class DataQualityReportService:
                     "_checked_raw": (row["checked_at"] or row["updated_at"]) if raw_found else None,
                     "page_number": row["page_number"] if raw_found else None,
                     "evidence_quote": row["evidence_quote"] if raw_found else None,
+                    "evidence_items": row["evidence_items"] if raw_found else [],
                     "quality_status": audit.status,
                     "quality_label": audit.label,
                     "quality_reason": audit.reason,
@@ -393,3 +398,4 @@ class DataQualityReportService:
         if isinstance(value, datetime):
             return value.astimezone().strftime("%d.%m.%Y %H:%M")
         return str(value)
+

@@ -54,11 +54,9 @@ def main() -> int:
                 ) cond ON TRUE
                 LEFT JOIN sources s ON s.id = cond.source_id
                 LEFT JOIN LATERAL (
-                    SELECT e.text_fragment
+                    SELECT string_agg(e.text_fragment, E'\n\n' ORDER BY e.id DESC) AS text_fragment
                     FROM evidence e
                     WHERE e.condition_id = cond.id
-                    ORDER BY e.id DESC
-                    LIMIT 1
                 ) ev ON TRUE
                 WHERE c.status = 'active'
                 ORDER BY c.name, f.sort_order, f.id
@@ -105,3 +103,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

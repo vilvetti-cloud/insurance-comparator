@@ -66,11 +66,9 @@ class ComparisonService:
                     JOIN companies c ON c.id = p.company_id
                     LEFT JOIN sources s ON s.id = cond.source_id
                     LEFT JOIN LATERAL (
-                        SELECT e.text_fragment
+                        SELECT string_agg(e.text_fragment, E'\n\n' ORDER BY e.id DESC) AS text_fragment
                         FROM evidence e
                         WHERE e.condition_id = cond.id
-                        ORDER BY e.id DESC
-                        LIMIT 1
                     ) ev ON TRUE
                     WHERE cond.status = 'active'
                       AND f.is_active = TRUE
@@ -162,3 +160,4 @@ class ComparisonService:
         ]
 
         return snapshot
+

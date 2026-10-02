@@ -168,10 +168,12 @@
                           <div class="quality-badge quality-badge--review">Кандидат изолирован — не используется в сравнении</div>
                         {% endif %}
                         <div class="report-value">{{ field.value }}</div>
-                        {% if field.evidence_quote %}
+                        {% if field.evidence_items %}
                         <details class="evidence-details">
-                          <summary>Показать подтверждающий фрагмент</summary>
-                          <p>{{ field.evidence_quote }}</p>
+                          <summary>Показать подтверждающие фрагменты</summary>
+                          {% for evidence in field.evidence_items %}
+                            <p>Стр. {{ evidence.page }}{% if evidence.section %} · {{ evidence.section }}{% endif %}: {{ evidence.quote }}</p>
+                          {% endfor %}
                         </details>
                         {% endif %}
                       {% else %}
@@ -256,3 +258,4 @@
   </main>
 </body>
 </html>
+
