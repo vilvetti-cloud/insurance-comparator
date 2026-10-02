@@ -128,6 +128,27 @@ class RepairTests(unittest.TestCase):
         self.assertTrue(validate_fact("payment_terms", fact, ParsedDocument(pages),
             insurer="t-insurance", source_url=URL).passed)
 
+    def test_groq_malformed_evidence_ids_fail_closed_without_aborting_document(self):
+        provider = GroqFieldProvider("test-key")
+        response = Mock(status_code=200)
+        response.json.return_value = {"choices": [{"finish_reason": "stop",
+            "message": {"content": json.dumps({
+                "value": "Полная гибель при превышении 75% страховой стоимости.",
+                "evidence_ids": ["E999", "E999"], "status": "answered",
+                "explanation": "Модель выбрала несуществующий фрагмент.",
+                "missing_information": "",
+            })}}]}
+        with patch("collector.casco_provider.requests.post", return_value=response):
+            result = provider.extract(document=ParsedDocument({3: QUOTE}),
+                company="Т-Страхование", source_url=URL, field_keys=("total_loss",))
+        fact = result["total_loss"]
+        self.assertEqual(fact["evidence"], [])
+        self.assertIsNone(fact["exact_quote"])
+        self.assertEqual(fact["evidence_selection_warning"],
+                         "invalid_or_duplicate_evidence_ids")
+        self.assertFalse(validate_fact("total_loss", fact, ParsedDocument({3: QUOTE}),
+            insurer="t-insurance", source_url=URL).passed)
+
     def test_gap_table_variant_is_an_exact_section_label(self):
         line = "| ГЭП1 | Договорная стоимость ТС равна сумме непогашенной задолженности. |"
         passages = evidence_passages(ParsedDocument({114: line}))
