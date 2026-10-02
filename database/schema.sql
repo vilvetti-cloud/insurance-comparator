@@ -212,6 +212,7 @@ CREATE INDEX IF NOT EXISTS idx_collection_items_company ON collection_items(comp
 
 -- Additive, repeatable CASCO document pipeline migration.
 ALTER TABLE sources ADD COLUMN IF NOT EXISTS casco_analyzed_checksum TEXT;
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS casco_analyzed_version TEXT;
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS section TEXT;
 ALTER TABLE evidence ADD COLUMN IF NOT EXISTS document_checksum TEXT;
 
@@ -222,11 +223,15 @@ CREATE TABLE IF NOT EXISTS casco_document_revisions (
     status TEXT NOT NULL DEFAULT 'pending',
     parsed JSONB,
     provider TEXT,
+    extractor_version TEXT NOT NULL DEFAULT 'legacy',
     error TEXT,
     checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     analyzed_at TIMESTAMPTZ,
     UNIQUE(source_id, checksum)
 );
+ALTER TABLE casco_document_revisions
+    ADD COLUMN IF NOT EXISTS extractor_version TEXT NOT NULL DEFAULT 'legacy';
+
 CREATE TABLE IF NOT EXISTS casco_review_candidates (
     id BIGSERIAL PRIMARY KEY,
     revision_id BIGINT NOT NULL REFERENCES casco_document_revisions(id) ON DELETE CASCADE,
