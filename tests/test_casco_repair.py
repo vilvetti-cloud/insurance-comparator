@@ -108,7 +108,25 @@ class RepairTests(unittest.TestCase):
         self.assertEqual(result["total_loss"]["exact_quote"], QUOTE)
         self.assertEqual(result["total_loss"]["page"], 3)
         self.assertEqual(result["total_loss"]["section"], "9.1.")
-        self.assertIn("evidence_id", post.call_args.kwargs["json"]["response_format"]["json_schema"]["schema"]["required"])
+        self.assertIn("evidence_ids", post.call_args.kwargs["json"]["response_format"]["json_schema"]["schema"]["required"])
+
+    def test_groq_multiple_ids_keep_literal_quotes_and_pages(self):
+        provider = GroqFieldProvider("test-key")
+        pages = {3: "11.2.2. Выплата по риску Угон производится в течение 45 рабочих дней после документов.",
+                 4: "11.2.3. Выплата по риску Ущерб производится в течение 30 рабочих дней после документов."}
+        response = Mock(status_code=200)
+        response.json.return_value = {"choices": [{"finish_reason": "stop",
+            "message": {"content": json.dumps({"value": "Угон: 45 рабочих дней; Ущерб: 30 рабочих дней.",
+                "evidence_ids": ["E1", "E2"], "status": "answered",
+                "explanation": "Оба срока указаны прямо.", "missing_information": ""})}}]}
+        with patch("collector.casco_provider.requests.post", return_value=response):
+            result = provider.extract(document=ParsedDocument(pages), company="Т-Страхование",
+                source_url=URL, field_keys=("payment_terms",))
+        fact = result["payment_terms"]
+        self.assertEqual([item["page"] for item in fact["evidence"]], [3, 4])
+        self.assertEqual([item["exact_quote"] for item in fact["evidence"]], list(pages.values()))
+        self.assertTrue(validate_fact("payment_terms", fact, ParsedDocument(pages),
+            insurer="t-insurance", source_url=URL).passed)
 
     def test_no_matching_pages_costs_no_api_request(self):
         provider = GroqFieldProvider("test-key")
@@ -260,3 +278,4 @@ class RepairTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

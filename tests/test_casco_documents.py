@@ -67,6 +67,19 @@ class EvidenceTests(unittest.TestCase):
     def test_wrong_section(self):
         self.assertFalse(self.validate(dict(FACT, section="19.1.")).passed)
 
+    def test_second_evidence_page_must_match_too(self):
+        second = "9.2. Договор может установить иной порог полной гибели в размере 80%."
+        fact = dict(FACT, value="Полная гибель при превышении 75% или по договору 80%.",
+            evidence=[{"exact_quote": QUOTE, "page": 3, "section": "9.1."},
+                      {"exact_quote": second, "page": 4, "section": "9.2."}])
+        doc = ParsedDocument({3: QUOTE, 4: second})
+        self.assertTrue(validate_fact("total_loss", fact, doc,
+            insurer="reso", source_url="https://reso.ru/rules.pdf").passed)
+        fact["evidence"][1]["page"] = 3
+        verdict = validate_fact("total_loss", fact, doc,
+            insurer="reso", source_url="https://reso.ru/rules.pdf")
+        self.assertEqual(verdict.reason, "quote_not_on_claimed_page")
+
     def test_snapshot_never_passes(self):
         self.assertFalse(self.validate(source_type="official_snapshot").passed)
 
@@ -87,6 +100,23 @@ class EvidenceTests(unittest.TestCase):
                     exact_quote=quote, page=1, section="3.2.")
         self.assertFalse(validate_fact("terrorism", fact, ParsedDocument({1: quote}),
             insurer="reso", source_url="https://reso.ru/rules.pdf").passed)
+
+    def test_terrorism_mention_in_list_does_not_prove_coverage(self):
+        quote = "3.6.17. Любые события с застрахованным ТС в результате террористических актов и вооруженных конфликтов."
+        fact = dict(value="Террористические акты покрываются КАСКО.",
+            exact_quote=quote, page=1, section="3.6.17.")
+        verdict = validate_fact("terrorism", fact, ParsedDocument({1: quote}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf")
+        self.assertFalse(verdict.passed)
+
+    def test_compensation_exception_is_not_total_loss_definition(self):
+        quote = ("11.1.4. В сумму возмещения по риску Ущерб за исключением конструктивной гибели ТС "
+                 "или события, когда размер ущерба превышает 60% страховой суммы, включаются расходы.")
+        fact = dict(value="Полная гибель ТС наступает при ущербе свыше 60% страховой суммы.",
+            exact_quote=quote, page=1, section="11.1.4.")
+        verdict = validate_fact("total_loss", fact, ParsedDocument({1: quote}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf")
+        self.assertEqual(verdict.reason, "quote_does_not_define_total_loss")
 
     def test_conditional_not_bypass_for_numbers(self):
         self.assertFalse(self.validate(dict(FACT, value="По договору полная гибель при 90%.")).passed)

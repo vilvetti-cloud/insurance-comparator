@@ -36,7 +36,7 @@ jobs:
       GEMINI_MODEL: ${{ inputs.model || vars.GEMINI_MODEL }}
       INSURER: ${{ github.event_name == 'push' && 'soglasie' || inputs.insurer }}
       APPLY: ${{ github.event_name == 'push' && 'true' || inputs.apply }}
-      USE_AI: ${{ github.event_name == 'push' && 'false' || inputs.ai }}
+      USE_AI: ${{ github.event_name == 'push' && 'true' || inputs.ai }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

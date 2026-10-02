@@ -143,7 +143,7 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         has_risk = bool(re.search(r"самовозгор|возгоран|пожар", quote_n))
         has_meaning = bool(
             re.search(
-                r"покрыв|застрахован|страхов\w*\s+(?:случ|риск)|"
+            r"покрыв|страхов\w*\s+(?:случ|риск)|"
                 r"возмещ|включ|исключ|не\s+явля|не\s+покрыв",
                 quote_n,
             )
@@ -158,7 +158,7 @@ def is_supported_condition(field_key: str, value: str | None, quote: str | None 
         has_terror = "террор" in quote_n
         has_meaning = bool(
             re.search(
-                r"покрыв|застрахован|страхов\w*\s+(?:случ|риск)|"
+                r"покрыв|страхов\w*\s+(?:случ|риск)|"
                 r"возмещ|включ|исключ|не\s+явля|не\s+покрыв|ущерб\s+от",
                 quote_n,
             )
@@ -373,3 +373,4 @@ def semantic_alignment_issue(
             return "В значении указана денежная форма, но цитата этого не подтверждает."
 
     return None
+

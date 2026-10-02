@@ -1,2 +1,2 @@
-Deterministic revalidation of Soglasie evidence, 2026-10-02.
+Multi-evidence extraction pilot for Soglasie, 2026-10-02.
 

@@ -34,27 +34,49 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     if not isinstance(fact, dict):
         return fail("invalid_fact")
     value, quote, page, section = (fact.get(k) for k in ("value", "exact_quote", "page", "section"))
+    evidence = fact.get("evidence")
+    if evidence is not None:
+        if (not isinstance(evidence, list) or not 1 <= len(evidence) <= 5
+                or not all(isinstance(item, dict) for item in evidence)
+                or any(fact.get(part) != evidence[0].get(part)
+                       for part in ("exact_quote", "page", "section"))):
+            return fail("invalid_evidence_list")
+    else:
+        evidence = [{"exact_quote": quote, "page": page, "section": section}]
     if fact.get("answer_status") not in (None, "answered") and not all(
             isinstance(t, str) and t.strip() for t in (value, quote, section)):
         return fail("incomplete_answer")
     if not all(isinstance(t, str) and t.strip() for t in (value, quote, section)):
         return fail("missing_value_quote_section")
-    if type(page) is not int or page not in document.pages:
-        return fail("invalid_page")
-    page_text, quote_n, section_n = map(normalize, (document.pages[page], quote, section))
-    if len(quote_n) < 25 or quote_n not in page_text:
-        return fail("quote_not_on_claimed_page")
-    start = page_text.index(quote_n)
-    # Section must actually precede/contain this quote on this page.
-    prefix = page_text[:start + len(quote_n)]
-    if not re.search(r"(?<!\w)" + re.escape(section_n) + r"(?!\w)", prefix):
-        return fail("section_not_on_claimed_page")
+    quotes, contexts = [], []
+    for item in evidence:
+        item_quote, item_page, item_section = (item.get(k) for k in
+            ("exact_quote", "page", "section"))
+        if not isinstance(item_quote, str) or not isinstance(item_section, str) or not item_section.strip():
+            return fail("missing_value_quote_section")
+        if type(item_page) is not int or item_page not in document.pages:
+            return fail("invalid_page")
+        page_text, quote_n, section_n = map(normalize,
+            (document.pages[item_page], item_quote, item_section))
+        if len(quote_n) < 25 or quote_n not in page_text:
+            return fail("quote_not_on_claimed_page")
+        start = page_text.index(quote_n)
+        prefix = page_text[:start + len(quote_n)]
+        if not re.search(r"(?<!\w)" + re.escape(section_n) + r"(?!\w)", prefix):
+            return fail("section_not_on_claimed_page")
+        quotes.append(quote_n)
+        contexts.append(page_text[max(0, start - 350):start + len(quote_n)])
     if fact.get("answer_status") not in (None, "answered"):
         return fail("incomplete_answer")
     # An excerpt cannot omit a nearby exclusion or a condition and reverse it.
-    context = page_text[max(0, start - 350):start + len(quote_n)]
+    context = " ".join(contexts)
     value_n = normalize(value).lower()
-    quote_lower = quote_n.lower()
+    quote = "\n".join(quotes)
+    quote_lower = quote.lower()
+    if key == "total_loss" and re.search(r"за исключением[^.]{0,100}гибел", quote_lower):
+        # A compensation clause that excludes constructive loss and happens
+        # to mention a percentage does not establish the loss threshold.
+        return fail("quote_does_not_define_total_loss")
     neg = r"не\s+(?:покрыва|возмещ|явля|предусмотр|включ|оплач|призна)|исключ"
     pos = r"покрыва|возмещ|включ|оплач|предостав|страховым случаем"
     coverage_fields = {"without_certificates", "gap", "self_ignition", "terrorism", "drone", "tow_truck", "repair_type"}

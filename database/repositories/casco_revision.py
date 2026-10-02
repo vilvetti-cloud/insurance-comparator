@@ -224,14 +224,18 @@ class CascoRevisionRepository(BaseRepository):
                         (fields[key]["id"], source["id"], fact["value"], source["source_level"]),
                     )
                     condition_id = cur.fetchone()["id"]
-                    cur.execute(
-                        """INSERT INTO evidence
-                           (condition_id,source_id,document_id,page_number,text_fragment,verification_status,
-                            verified_at,verified_by,section,document_checksum)
-                           VALUES (%s,%s,%s,%s,%s,'verified',NOW(),'casco-evidence-gate',%s,%s)""",
-                        (condition_id, source["id"], document["id"], fact["page"],
-                         fact["exact_quote"], fact["section"], checksum),
-                    )
+                    # Keep all independently checked passages in the existing
+                    # evidence table. Insert the primary last for older UI
+                    # queries that display only the latest evidence row.
+                    for item in reversed(fact.get("evidence") or [fact]):
+                        cur.execute(
+                            """INSERT INTO evidence
+                               (condition_id,source_id,document_id,page_number,text_fragment,verification_status,
+                                verified_at,verified_by,section,document_checksum)
+                               VALUES (%s,%s,%s,%s,%s,'verified',NOW(),'casco-evidence-gate',%s,%s)""",
+                            (condition_id, source["id"], document["id"], item["page"],
+                             item["exact_quote"], item["section"], checksum),
+                        )
                     cur.execute(
                         """INSERT INTO change_log(entity_type,entity_id,field_name,new_value,reason)
                            VALUES ('condition',%s,'value',%s,'casco_document_PASS')""",
@@ -250,3 +254,4 @@ class CascoRevisionRepository(BaseRepository):
                     cur.execute("UPDATE casco_document_revisions SET status='degraded',error='parser_degraded' WHERE id=%s",
                                 (revision["id"],))
                 return passed
+

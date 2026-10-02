@@ -199,12 +199,12 @@ GROQ_FIELD_SCHEMA = {
     "type": "object",
     "properties": {
         "value": {"type": ["string", "null"]},
-        "evidence_id": {"type": ["string", "null"]},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
         "status": {"type": "string", "enum": ANSWER_STATUSES},
         "explanation": {"type": "string"},
         "missing_information": {"type": "string"},
     },
-    "required": ["value", "evidence_id", "status", "explanation", "missing_information"],
+    "required": ["value", "evidence_ids", "status", "explanation", "missing_information"],
     "additionalProperties": False,
 }
 
@@ -281,15 +281,13 @@ class GroqFieldProvider:
                 "общий порядок и прямо укажи, что остаётся неясным. "
                 "value: короткий содержательный ответ до 520 символов; не оставляй его "
                 "пустым, если из контекста можно дать хотя бы ограниченный ответ. "
-                "Выбери один evidence_id из пронумерованных дословных фрагментов ниже. "
-                "Не пиши цитату сам: система подставит исходный текст, страницу и раздел "
-                "по выбранному ID. value должен следовать только из этого фрагмента. "
-                "Если для полного ответа нужны несколько пунктов, дай лишь доказанную "
-                "выбранным фрагментом часть, поставь status=partial и объясни ограничение. "
-                "Если есть контекстный ответ, но ни один фрагмент его не доказывает, "
-                "оставь evidence_id=null, сохрани value и status=partial. "
-                "Если для полного ответа нужны несколько разрозненных пунктов, верни "
-                "доказанную часть и status=partial; объясни, что ещё нужно проверить. "
+                "Выбери до пяти evidence_ids из пронумерованных дословных фрагментов ниже. "
+                "Не пиши цитаты сам: система подставит исходный текст, страницы и разделы "
+                "по выбранным ID. Каждое утверждение и число в value должны следовать из "
+                "выбранных фрагментов. Несколько ID используй для условий из разных пунктов. "
+                "Если выбранные фрагменты доказывают лишь часть ответа, сформулируй только "
+                "эту часть и поставь status=partial. Если ни один фрагмент не доказывает "
+                "контекстный вывод, оставь evidence_ids=[], сохрани value и status=partial. "
                 "Поджог или подрыв не доказывает, что террористический акт автоматически покрыт. "
                 "Падение предмета не доказывает, что любой БПЛА покрыт: проверь военные исключения. "
                 "Если даже контекстного ответа нет, "
@@ -318,7 +316,9 @@ class GroqFieldProvider:
                     raise ProviderUnavailable("Groq response incomplete")
                 fact = json.loads(choice["message"]["content"])
                 legacy = set(fact) == {*FACT_SCHEMA["required"], "status", "explanation", "missing_information"} if isinstance(fact, dict) else False
-                if not isinstance(fact, dict) or not (legacy or set(fact) == set(GROQ_FIELD_SCHEMA["required"])):
+                single_id_legacy = (isinstance(fact, dict) and
+                    set(fact) == {"value", "evidence_id", "status", "explanation", "missing_information"})
+                if not isinstance(fact, dict) or not (legacy or single_id_legacy or set(fact) == set(GROQ_FIELD_SCHEMA["required"])):
                     raise ProviderUnavailable("Groq schema mismatch")
                 if fact["status"] not in GROQ_FIELD_SCHEMA["properties"]["status"]["enum"]:
                     raise ProviderUnavailable("Groq answer status invalid")
@@ -329,9 +329,16 @@ class GroqFieldProvider:
                 elif legacy:
                     facts[key] = {part: fact[part] for part in FACT_SCHEMA["required"]}
                 else:
-                    selected = passages.get(fact["evidence_id"])
-                    facts[key] = {"value": fact["value"],
-                                  **(selected or {"exact_quote": None, "page": None, "section": None})}
+                    ids = fact.get("evidence_ids", [fact.get("evidence_id")])
+                    if not isinstance(ids, list) or len(ids) > 5 or len(set(ids)) != len(ids):
+                        raise ProviderUnavailable("Groq evidence selection invalid")
+                    selected = [passages[eid] for eid in ids if eid in passages]
+                    if len(selected) != len(ids):
+                        raise ProviderUnavailable("Groq evidence ID not found")
+                    primary = selected[0] if selected else {
+                        "exact_quote": None, "page": None, "section": None}
+                    facts[key] = {"value": fact["value"], **primary,
+                                  "evidence": selected}
                 facts[key]["answer_status"] = fact["status"]
                 facts[key]["explanation"] = fact["explanation"]
                 facts[key]["missing_information"] = fact["missing_information"]
@@ -357,3 +364,4 @@ def get_provider() -> LLMProvider:
         return GroqFieldProvider(groq)
     key = os.getenv("GEMINI_API_KEY")
     return GeminiProvider(key) if key else DisabledProvider()
+
