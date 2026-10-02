@@ -1,7 +1,7 @@
 {
   "insurer": "t-insurance",
-  "purpose": "one-document-e2e",
+  "purpose": "versioned-deterministic-e2e",
   "apply": true,
   "provider": "groq",
-  "run": 3
+  "run": 4
 }
