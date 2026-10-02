@@ -55,12 +55,19 @@ def run(insurer_slug: str, *, apply: bool) -> dict:
         raise RuntimeError("No pinned CASCO source")
     pin = pins[0]
 
+    preferred_provider = os.getenv("CASCO_E2E_PROVIDER", "auto").lower()
     gemini_key = os.getenv("GEMINI_API_KEY")
-    provider = (
-        GeminiProvider(gemini_key, model=os.getenv("GEMINI_MODEL") or None)
-        if gemini_key
-        else get_provider()
-    )
+    if preferred_provider == "gemini":
+        provider = (
+            GeminiProvider(gemini_key, model=os.getenv("GEMINI_MODEL") or None)
+            if gemini_key
+            else get_provider()
+        )
+    else:
+        # get_provider prefers the bounded Groq field extractor when GROQ_API_KEY
+        # is configured. It sends only selected relevant pages per field, which
+        # avoids whole-document free-tier input-token spikes.
+        provider = get_provider()
     if not provider.available:
         raise RuntimeError("No LLM provider configured")
 
