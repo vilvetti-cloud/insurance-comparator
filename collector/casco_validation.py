@@ -86,8 +86,9 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     conditional = r"если[^.]{0,80}(?:предусмотр|договор)|при условии|по условию|по соглашению|договором|договоре|дополнительн\w*\s+(?:соглаш|плат|опци|покрыт|услов)"
     if re.search(conditional, quote_lower) and not re.search(conditional + r"|зависит|опци", value_n):
         return fail("omitted_contract_condition")
-    verbs = r"примен|производ|допуска|осуществ|требу|покрыва|возмещ|предусмотр|включ|оплач|предостав|призна"
-    negative = rf"не\s+(?:{verbs})|исключен|исключён"
+    verbs = (r"примен" if key == "franchise" else
+        r"примен|производ|допуска|осуществ|требу|покрыва|возмещ|предусмотр|включ|оплач|предостав|призна")
+    negative = rf"не\s+(?:{verbs})|исключен\b|исключён\b"
     value_negative = bool(re.search(negative, value_n))
     quote_negative = bool(re.search(negative, quote_lower))
     if value_negative != quote_negative and re.search(verbs, value_n) and re.search(verbs, quote_lower):

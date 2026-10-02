@@ -221,6 +221,9 @@ def evidence_passages(document):
             headings = list(re.finditer(
                 r"(?m)^\s*(?:#{1,6}\s*|[-*]\s*)?(\d+(?:\.\d+){1,5}\.?)(?=\s|$)", prefix))
             section = headings[-1].group(1) if headings else None
+            if section is None:
+                table_option = re.match(r"\|\s*(ГЭП\d+)\s*\|", quote, re.I)
+                section = table_option.group(1) if table_option else None
             evidence_id = f"E{len(passages) + 1}"
             passages[evidence_id] = {
                 "page": page, "section": section, "exact_quote": quote,

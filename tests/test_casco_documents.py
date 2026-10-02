@@ -58,6 +58,16 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse(validate_fact("franchise", fact, ParsedDocument({1: quote}),
             insurer="reso", source_url="https://reso.ru/rules.pdf").passed)
 
+    def test_franchise_optional_caveat_is_not_a_polarity_reversal(self):
+        quote = ("5.4. Если договором предусмотрена динамическая франшиза, то, если иное "
+                 "не предусмотрено договором, её размер зависит от номера страхового случая.")
+        fact = dict(value="Динамическая франшиза может быть предусмотрена договором; "
+            "её размер зависит от номера страхового случая, если иное не предусмотрено договором.",
+            exact_quote=quote, page=1, section="5.4.")
+        verdict = validate_fact("franchise", fact, ParsedDocument({1: quote}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf")
+        self.assertTrue(verdict.passed, verdict.reason)
+
     def test_omitted_optional_agreement(self):
         quote = "5.1. Эвакуация оплачивается по дополнительному соглашению."
         fact = dict(value="Эвакуация оплачивается.", exact_quote=quote, page=1, section="5.1.")

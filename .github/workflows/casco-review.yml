@@ -19,6 +19,9 @@ on:
         description: Optional Gemini model for this manual run only
         type: string
         required: false
+  push:
+    paths:
+      - .github/casco-review-request.json
 concurrency:
   group: daily-casco-collection
   cancel-in-progress: false
@@ -44,9 +47,14 @@ jobs:
       - name: Review cached extraction
         shell: bash
         run: |
-          args=(--insurer "$INSURER")
-          if [ "$APPLY" = true ]; then args+=(--apply); fi
-          if [ "$USE_AI" = true ]; then args+=(--ai); fi
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            insurer=$(python -c 'import json; print(json.load(open(".github/casco-review-request.json"))["insurer"])')
+            args=(--insurer "$insurer" --apply)
+          else
+            args=(--insurer "$INSURER")
+            if [ "$APPLY" = true ]; then args+=(--apply); fi
+            if [ "$USE_AI" = true ]; then args+=(--ai); fi
+          fi
           python scripts/casco_review.py "${args[@]}"
       - name: Upload full review report
         if: always()

@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from collector.casco_document import ParsedDocument
-from collector.casco_provider import GroqFieldProvider, ProviderUnavailable, get_provider
+from collector.casco_provider import GroqFieldProvider, ProviderUnavailable, get_provider, evidence_passages
 from collector.casco_validation import validate_fact
 from collector.casco_t_rules import calibrated_fact
 from collector.registry import get_insurer
@@ -127,6 +127,11 @@ class RepairTests(unittest.TestCase):
         self.assertEqual([item["exact_quote"] for item in fact["evidence"]], list(pages.values()))
         self.assertTrue(validate_fact("payment_terms", fact, ParsedDocument(pages),
             insurer="t-insurance", source_url=URL).passed)
+
+    def test_gap_table_variant_is_an_exact_section_label(self):
+        line = "| ГЭП1 | Договорная стоимость ТС равна сумме непогашенной задолженности. |"
+        passages = evidence_passages(ParsedDocument({114: line}))
+        self.assertEqual(passages["E1"]["section"], "ГЭП1")
 
     def test_no_matching_pages_costs_no_api_request(self):
         provider = GroqFieldProvider("test-key")
