@@ -38,7 +38,7 @@ def link_fingerprint(links):
 def casco_link(link):
     # Parent containers may list hundreds of unrelated policies. They provide
     # edition context, but must never make an unrelated link a CASCO candidate.
-    return bool(re.search(r'каско|kasko|casco|\bgap\b|автотранспорт|транспортных средств',
+    return bool(re.search(r'каско|kasko|casco|\bgap\b|\bгэп\b|автотранспорт|транспортных средств',
                           link['title'] + ' ' + link['url'], re.I))
 
 
@@ -69,3 +69,4 @@ def watch_pages(config, fetcher, repository):
             results.append({'insurer': config.slug, 'page': url,
                 'status': 'unavailable', 'reason': type(exc).__name__})
     return results
+

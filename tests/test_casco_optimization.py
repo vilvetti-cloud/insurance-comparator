@@ -18,6 +18,8 @@ class OptimizationTests(unittest.TestCase):
             'url': 'https://reso.ru/property.pdf', 'context': 'КАСКО GAP Имущество'}))
         self.assertTrue(casco_link({'title': 'Правила КАСКО',
             'url': 'https://reso.ru/new.pdf', 'context': ''}))
+        self.assertTrue(casco_link({'title': 'Условия ГЭП',
+            'url': 'https://reso.ru/new.pdf', 'context': ''}))
 
     def test_error_diagnostics_exclude_message_and_secrets(self):
         from collector.casco_provider import error_summary
@@ -95,3 +97,4 @@ class OptimizationTests(unittest.TestCase):
             report = p.analyze(directory=Path(d), manifest=m)
         p.provider.extract.assert_called_once()
         self.assertEqual(report['deferred'][0]['reason'], 'provider_rate_limited')
+
