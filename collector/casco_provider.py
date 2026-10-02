@@ -332,16 +332,36 @@ class GroqFieldProvider:
                 elif legacy:
                     facts[key] = {part: fact[part] for part in FACT_SCHEMA["required"]}
                 else:
-                    ids = fact.get("evidence_ids", [fact.get("evidence_id")])
-                    if not isinstance(ids, list) or len(ids) > 5 or len(set(ids)) != len(ids):
-                        raise ProviderUnavailable("Groq evidence selection invalid")
-                    selected = [passages[eid] for eid in ids if eid in passages]
-                    if len(selected) != len(ids):
-                        raise ProviderUnavailable("Groq evidence ID not found")
+                    raw_ids = fact.get("evidence_ids", [fact.get("evidence_id")])
+                    if raw_ids is None:
+                        raw_ids = []
+                    elif isinstance(raw_ids, str):
+                        raw_ids = [raw_ids]
+                    elif not isinstance(raw_ids, list):
+                        raw_ids = []
+
+                    ids = []
+                    invalid_ids = []
+                    for evidence_id in raw_ids:
+                        if not isinstance(evidence_id, str) or evidence_id not in passages:
+                            invalid_ids.append(evidence_id)
+                            continue
+                        if evidence_id not in ids:
+                            ids.append(evidence_id)
+                        if len(ids) == 5:
+                            break
+
+                    selected = [passages[eid] for eid in ids]
                     primary = selected[0] if selected else {
                         "exact_quote": None, "page": None, "section": None}
                     facts[key] = {"value": fact["value"], **primary,
                                   "evidence": selected}
+                    if invalid_ids or len(raw_ids) != len(ids):
+                        # Never turn malformed model-selected evidence into trusted evidence.
+                        # Keep the answer for diagnostics, but with only literal validated
+                        # passages. With no valid passage the downstream evidence gate fails
+                        # closed instead of aborting the entire document.
+                        facts[key]["evidence_selection_warning"] = "invalid_or_duplicate_evidence_ids"
                 facts[key]["answer_status"] = fact["status"]
                 facts[key]["explanation"] = fact["explanation"]
                 facts[key]["missing_information"] = fact["missing_information"]
