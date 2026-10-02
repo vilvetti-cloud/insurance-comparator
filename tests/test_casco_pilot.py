@@ -111,6 +111,17 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(pages, [2])
         self.assertIn('по договору', scoped.text)
 
+    def test_without_certificates_finds_provision_of_documents_and_related_pages(self):
+        document = ParsedDocument({
+            10: 'При угоне автомобиль передаётся без документов и ключей.',
+            20: 'Страхователь вправе обратиться без предоставления документов компетентных органов при повреждении остекления.',
+            21: 'Лимит и число таких обращений определяются договором.',
+        })
+        scoped, pages = select_pages(document, 'without_certificates')
+        self.assertIn(20, pages)
+        self.assertIn(21, pages)
+        self.assertIn('без предоставления документов', scoped.text)
+
     def test_initial_collection_stops_after_provider_failure(self):
         repository = Mock()
         repository.review_documents.return_value = [{'url': 'https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf',
@@ -123,3 +134,4 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(result['ai_requests'], 1)
         self.assertEqual(list(result['questions']), ['franchise'])
         provider._request.assert_called_once()
+

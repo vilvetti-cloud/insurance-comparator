@@ -33,7 +33,9 @@ class ModelOutputInvalid(ProviderUnavailable):
     pass
 PAGE_TERMS = {
     'franchise': (r'франшиз',),
-    'without_certificates': (r'без\s+справ', r'без\s+документ', r'компетентн\w*\s+орган', r'упрощенн\w*\s+урегулиров'),
+    'without_certificates': (r'без\s+(?:предоставления\s+)?справ',
+                             r'без\s+(?:предоставления\s+)?документ',
+                             r'компетентн\w*\s+орган', r'упрощенн\w*\s+урегулиров'),
     'gap': (r'\bgap\b', r'\bгап\b', r'уменьшен\w*\s+стоимост', r'дополнительн\w*\s+расход', r'разниц\w*\s+между'),
     'total_loss': (r'полн\w*\s+гибел', r'конструктивн\w*\s+гибел',
                    r'экономическ\w*\s+нецелесообраз', r'стоимост\w*\s+восстановительн\w*\s+ремонт'),
@@ -85,7 +87,7 @@ def select_pages(document, field, *, max_pages=3, max_chars=14000):
     ranked = sorted(((relevance(text, search_terms), page)
                      for page, text in document.pages.items()),
                     key=lambda item: (-item[0], item[1]))
-    seeds = [page for score, page in ranked if score][:1 if field == 'without_certificates' else max_pages]
+    seeds = [page for score, page in ranked if score][:max_pages]
     if not seeds:
         # A missing keyword must not cancel the question: inspect the common
         # risk, settlement and exclusion clauses before recording not_found.
@@ -227,3 +229,4 @@ def analyze_pilot(document, provider, field_keys=FIELD_KEYS):
     finally:
         if response is not None:
             response.close()
+
