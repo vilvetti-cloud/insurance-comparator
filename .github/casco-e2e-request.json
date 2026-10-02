@@ -2,5 +2,6 @@
   "insurer": "t-insurance",
   "purpose": "one-document-e2e",
   "apply": true,
-  "run": 1
+  "provider": "groq",
+  "run": 2
 }
