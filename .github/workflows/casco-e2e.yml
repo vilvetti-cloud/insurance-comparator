@@ -1,0 +1,45 @@
+name: CASCO one-document E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/casco-e2e-request.json"
+
+concurrency:
+  group: casco-one-document-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install CASCO runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-casco.txt
+
+      - name: Run T-Insurance end-to-end
+        run: python scripts/casco_e2e.py --insurer t-insurance --apply
+
+      - name: Upload full E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casco-e2e-report
+          path: casco-e2e-report.json
+          retention-days: 14
