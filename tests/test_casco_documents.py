@@ -91,6 +91,23 @@ class EvidenceTests(unittest.TestCase):
     def test_conditional_not_bypass_for_numbers(self):
         self.assertFalse(self.validate(dict(FACT, value="По договору полная гибель при 90%.")).passed)
 
+    def test_unrelated_exclusion_before_total_loss_does_not_block_threshold(self):
+        prefix = "9.0. Отдельные расходы не возмещаются. "
+        fact = dict(FACT, value="Полная гибель: стоимость ремонта превышает 75% страховой стоимости.")
+        verdict = validate_fact("total_loss", fact, ParsedDocument({3: prefix + QUOTE}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf")
+        self.assertTrue(verdict.passed, verdict.reason)
+
+    def test_named_optional_condition_preserved_in_answer(self):
+        quote = ("5.1. По условию «Расширенное урегулирование без справок» страховщик "
+                 "возмещает повреждение остекления без документов компетентных органов.")
+        fact = {"value": "По условию «Расширенное урегулирование без справок» возмещается "
+                "повреждение остекления без документов компетентных органов.",
+                "exact_quote": quote, "page": 1, "section": "5.1."}
+        verdict = validate_fact("without_certificates", fact, ParsedDocument({1: quote}),
+            insurer="reso", source_url="https://reso.ru/rules.pdf")
+        self.assertTrue(verdict.passed, verdict.reason)
+
     def test_fallback_parser_cannot_publish(self):
         doc = ParsedDocument({3: QUOTE}, parser="pypdf_review_only")
         self.assertFalse(validate_fact("total_loss", FACT, doc,
@@ -248,3 +265,4 @@ class PipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

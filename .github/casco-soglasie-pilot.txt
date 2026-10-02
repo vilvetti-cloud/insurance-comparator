@@ -1,2 +1,2 @@
-One-time Soglasie evidence-ID pilot, 2026-10-02.
+Deterministic revalidation of Soglasie evidence, 2026-10-02.
 

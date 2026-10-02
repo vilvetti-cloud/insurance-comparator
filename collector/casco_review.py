@@ -61,7 +61,9 @@ def review_insurer(insurer, *, apply=False, use_ai=False, repository=None, provi
                         fact = locate_quote(facts.get(key, {}), document)
                         verdict = validate_fact(key, fact, document, insurer=insurer, source_url=row['url'])
                         replacements[key] = (key, fact, verdict)
-                        details.append({'field': key, 'after_ai': verdict.reason, 'value': fact.get('value')})
+                        details.append({'field': key, 'after_ai': verdict.reason,
+                            'value': fact.get('value'), 'evidence': fact,
+                            'diagnostics': getattr(provider, 'diagnostics', {}).get(key)})
                     candidates = [replacements.get(key, (key, fact, verdict)) for key, fact, verdict in candidates]
                 except ProviderUnavailable as exc:
                     result['provider_error'] = str(exc)
@@ -72,3 +74,4 @@ def review_insurer(insurer, *, apply=False, use_ai=False, repository=None, provi
             result['published_fields'].extend(sorted(passed))
         result['documents'].append({'url': row['url'], 'checksum': row['checksum'], 'fields': details})
     return result
+

@@ -57,9 +57,11 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     quote_lower = quote_n.lower()
     neg = r"не\s+(?:покрыва|возмещ|явля|предусмотр|включ|оплач|призна)|исключ"
     pos = r"покрыва|возмещ|включ|оплач|предостав|страховым случаем"
-    if re.search(neg, context.lower()) and re.search(pos, value_n) and not re.search(neg, value_n):
+    coverage_fields = {"without_certificates", "gap", "self_ignition", "terrorism", "drone", "tow_truck", "repair_type"}
+    if (key in coverage_fields and re.search(neg, context.lower())
+            and re.search(pos, value_n) and not re.search(neg, value_n)):
         return fail("exclusion_context_requires_review")
-    conditional = r"если[^.]{0,80}(?:предусмотр|договор)|при условии|по соглашению|договором|договоре|дополнительн\w*\s+(?:соглаш|плат|опци|покрыт|услов)"
+    conditional = r"если[^.]{0,80}(?:предусмотр|договор)|при условии|по условию|по соглашению|договором|договоре|дополнительн\w*\s+(?:соглаш|плат|опци|покрыт|услов)"
     if re.search(conditional, quote_lower) and not re.search(conditional + r"|зависит|опци", value_n):
         return fail("omitted_contract_condition")
     verbs = r"примен|производ|допуска|осуществ|требу|покрыва|возмещ|предусмотр|включ|оплач|предостав|призна"
@@ -105,3 +107,4 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     if audit.status not in {"confirmed", "conditional"}:
         return fail(audit.reason)
     return Verdict(True, "PASS")
+
