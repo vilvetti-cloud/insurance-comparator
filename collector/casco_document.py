@@ -26,7 +26,7 @@ class ParsedDocument:
 
     @property
     def promotable(self) -> bool:
-        return self.parser == "docling" and bool(self.pages) and not self.warning
+        return self.parser in {"docling", "official_html"} and bool(self.pages) and not self.warning
 
 
 class CascoDocumentParser:

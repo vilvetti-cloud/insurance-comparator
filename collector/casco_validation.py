@@ -24,10 +24,10 @@ class Verdict:
 
 
 def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: str,
-                  source_type: str = "pdf") -> Verdict:
+                  source_type: str = "pdf", source_level: int = 1) -> Verdict:
     def fail(reason):
         return Verdict(False, reason)
-    if key not in FIELD_KEYS or source_type != "pdf" or not official_url(insurer, source_url):
+    if key not in FIELD_KEYS or source_type not in {"pdf", "official_site"} or not official_url(insurer, source_url):
         return fail("unofficial_or_diagnostic_source")
     if not document.promotable:
         return fail("parser_degraded")
@@ -130,7 +130,7 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     issue = semantic_alignment_issue(key, value, quote)
     if issue:
         return fail(issue)
-    audit = audit_condition(key, value, quote, source_level=1, source_type="pdf",
+    audit = audit_condition(key, value, quote, source_level=source_level, source_type=source_type,
                             confidence=1.0, verification_status="verified")
     if audit.status not in {"confirmed", "conditional"}:
         return fail(audit.reason)
