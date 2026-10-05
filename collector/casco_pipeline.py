@@ -95,11 +95,14 @@ class CascoCollectionPipeline:
                         http_status=fetched.status_code)
                     document = self.documents.upsert(source_id=source["id"], document_url=pin.url,
                         checksum=checksum, title="Правила/условия КАСКО")
-                    if self.revisions.completed(source["id"], checksum):
+                    has_active = self.revisions.has_active_conditions(company["id"])
+                    if self.revisions.completed(source["id"], checksum) and has_active:
                         manifest["unchanged"].append({"insurer": insurer.slug, "url": pin.url})
                         print(f"[checksum] {insurer.slug} unchanged: analysis skipped", flush=True)
                         continue
-                    if not retry_failed and self.revisions.attempted(source['id'], checksum):
+                    if self.revisions.completed(source["id"], checksum) and not has_active:
+                        print(f"[checksum] {insurer.slug} completed without active conditions: reanalyzing", flush=True)
+                    if not retry_failed and has_active and self.revisions.attempted(source['id'], checksum):
                         manifest['deferred'].append({'insurer': insurer.slug, 'url': pin.url,
                             'reason': 'previous_attempt_requires_explicit_retry'})
                         continue

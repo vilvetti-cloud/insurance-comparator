@@ -7,6 +7,20 @@ from collector.casco_version import CASCO_EXTRACTOR_VERSION
 
 
 class CascoRevisionRepository(BaseRepository):
+    def has_active_conditions(self, company_id: int) -> bool:
+        row = self.fetch_one(
+            """SELECT EXISTS (
+                   SELECT 1
+                   FROM conditions c
+                   JOIN comparison_fields f ON f.id = c.field_id
+                   JOIN products p ON p.id = f.product_id
+                   WHERE p.company_id=%s AND p.product_type='casco'
+                     AND c.status='active' AND c.verification_status='verified'
+               ) AS present""",
+            (company_id,),
+        )
+        return bool(row and row["present"])
+
     def review_documents(self, insurer):
         """Current pinned revisions only; no historical document can repair today's card."""
         from collector.casco_sources import sources_for
