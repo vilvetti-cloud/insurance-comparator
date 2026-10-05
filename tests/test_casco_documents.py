@@ -240,7 +240,9 @@ class PipelineTests(unittest.TestCase):
             report = p.analyze(directory=Path(d), manifest=m)
         self.assertEqual(len(report["degraded"]), 1)
         p.revisions.publish.assert_not_called()
-        p.parser.parse.assert_not_called()
+        # The document is parsed before deciding whether AI is needed, so
+        # deterministic extraction can seed an empty database when possible.
+        p.parser.parse.assert_called_once()
         p.revisions.save_degraded.assert_called_once()
 
     def test_one_ai_call_per_document_and_no_snapshot_fields(self):

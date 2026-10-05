@@ -1,0 +1,72 @@
+name: CASCO initial bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      insurer:
+        description: Optional insurer slug; empty means all registered insurers
+        required: false
+        type: string
+      retry_failed:
+        description: Retry unchanged documents with a previous failed attempt
+        required: false
+        type: boolean
+        default: false
+      probe_missing:
+        description: Search official pages and web for unresolved fields into a review report
+        required: false
+        type: boolean
+        default: true
+      publish_official_site:
+        description: Publish only evidence-validated values extracted from official HTML pages
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: casco-bootstrap
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: Install document parser
+        run: python -m pip install -r requirements-casco.txt
+      - name: Run full initial collection
+        env:
+          INSURER_INPUT: ${{ inputs.insurer }}
+          RETRY_FAILED: ${{ inputs.retry_failed }}
+          PROBE_MISSING: ${{ inputs.probe_missing }}
+          PUBLISH_OFFICIAL_SITE: ${{ inputs.publish_official_site }}
+        run: |
+          args=(--max-documents 20)
+          if [ -n "$INSURER_INPUT" ]; then args+=(--insurer "$INSURER_INPUT"); fi
+          if [ "$RETRY_FAILED" = "true" ]; then args+=(--retry-failed); fi
+          if [ "$PROBE_MISSING" = "true" ]; then args+=(--probe-missing); fi
+          if [ "$PUBLISH_OFFICIAL_SITE" = "true" ]; then args+=(--publish-official-site); fi
+          python scripts/casco_bootstrap.py "${args[@]}"
+      - name: Upload bootstrap report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casco-bootstrap-report
+          path: work/casco-bootstrap/bootstrap-report.json
+          retention-days: 30

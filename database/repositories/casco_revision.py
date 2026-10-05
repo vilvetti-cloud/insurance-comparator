@@ -336,7 +336,7 @@ class CascoRevisionRepository(BaseRepository):
                        provider=%s,extractor_version=%s,error=NULL,analyzed_at=NOW() WHERE id=%s""",
                     (Jsonb(parsed), provider, CASCO_EXTRACTOR_VERSION, revision["id"]),
                 )
-                if parsed.get("parser") == "docling" and not parsed.get("warning"):
+                if parsed.get("parser") in {"docling", "official_html"} and not parsed.get("warning"):
                     cur.execute("""UPDATE sources SET casco_analyzed_checksum=%s,
                         casco_analyzed_version=%s WHERE id=%s""",
                         (checksum, CASCO_EXTRACTOR_VERSION, source["id"]))
