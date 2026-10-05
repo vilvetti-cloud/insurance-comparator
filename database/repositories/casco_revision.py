@@ -45,6 +45,16 @@ class CascoRevisionRepository(BaseRepository):
             return False
         with self.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute('''SELECT EXISTS (
+                    SELECT 1 FROM conditions c
+                    JOIN comparison_fields f ON f.id=c.field_id
+                    JOIN products p ON p.id=f.product_id
+                    JOIN sources s ON s.company_id=p.company_id
+                    WHERE s.id=%s AND p.product_type='casco'
+                      AND c.status='active' AND c.verification_status='verified'
+                ) AS present''', (source_id,))
+                if not cur.fetchone()['present']:
+                    return False
                 cur.execute('SELECT checksum FROM sources WHERE id=%s FOR UPDATE', (source_id,))
                 current = cur.fetchone()
                 if not current or current['checksum'] != checksum:
