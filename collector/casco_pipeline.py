@@ -145,7 +145,7 @@ class CascoCollectionPipeline:
         for item in manifest["pending"]:
             source, checksum = item["source"], item["checksum"]
             if (self.revisions.completed(source["id"], checksum)
-                    and self.revisions.has_active_conditions(item["company_id"] or 0)):
+                    and self.revisions.has_active_conditions(item.get("company_id") or 0)):
                 continue
             parsed = None
             try:

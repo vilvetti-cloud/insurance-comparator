@@ -77,7 +77,7 @@ class OfficialSiteCollection:
                 checksum = hashlib.sha256(fetched.body).hexdigest()
                 source = self.pipeline.sources.upsert(
                     company_id=company["id"], url=fetched.url, title=title,
-                    source_type="official_site", source_level=2,
+                    source_type="official_site", source_level=1,
                     checksum=checksum, http_status=fetched.status_code, success=True,
                 )
                 document = self.pipeline.documents.upsert(
@@ -120,7 +120,7 @@ class OfficialSiteCollection:
                             "url": fetched.url, "field": key, "reason": verdict.reason,
                         })
                 published = self.pipeline.revisions.publish(
-                    source={"id": source["id"], "url": fetched.url, "source_level": 2},
+                    source={"id": source["id"], "url": fetched.url, "source_level": 1},
                     document={"id": document["id"]}, checksum=checksum,
                     parsed={"parser": "official_html", "pages": {"1": text}},
                     provider=getattr(self.provider, "name", "unknown") + "+official_site",
