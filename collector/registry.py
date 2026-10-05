@@ -46,7 +46,9 @@ INSURERS = (
         "Ренессанс Страхование",
         "Ренессанс",
         "https://www.renins.ru/",
-        rules_url="https://www.renins.ru/Media/Default/doc/rules/157.pdf",
+        "https://www.renins.ru/auto/kasko/",
+        "https://www.renins.ru/Media/Default/doc/rules_new/49.pdf",
+        official_doc_urls=("https://www.renins.ru/about/rules/",),
     ),
     InsurerConfig(
         "alfa",
@@ -79,8 +81,8 @@ INSURERS = (
         "t-insurance",
         "Т-Страхование",
         "Т-Страхование",
-        "https://www.tbank.ru/",
-        "https://www.tbank.ru/insurance/kasko/",
+        "https://www.tinsurance.ru/",
+        "https://www.tinsurance.ru/kasko/",
         "https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf",
         official_doc_urls=(
             "https://www.tbank.ru/insurance/help/auto/kasko/get-kasko/conditions/",
@@ -114,8 +116,9 @@ INSURERS = (
         "Совкомбанк Страхование",
         "Совкомбанк",
         "https://sovcomins.ru/",
-        "https://sovcomins.ru/product/superkasko/",
+        "https://sovcomins.ru/product/kasko/",
         "https://sovcomins.ru/upload/pravila/kasko_11_23.pdf",
+        official_doc_urls=("https://sovcomins.ru/product/superkasko/",),
     ),
 )
 
