@@ -110,7 +110,7 @@ class OfficialSiteCollection:
                     fact = facts.get(key) or {}
                     verdict = validate_fact(
                         key, fact, parsed, insurer=insurer,
-                        source_url=fetched.url,
+                        source_url=fetched.url, source_type="official_site", source_level=2,
                     )
                     candidates.append((key, fact, verdict))
                     if verdict.passed:
