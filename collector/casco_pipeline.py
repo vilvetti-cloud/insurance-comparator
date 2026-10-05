@@ -147,8 +147,6 @@ class CascoCollectionPipeline:
                 if provider_blocked:
                     report['deferred'].append({'insurer': item['insurer'], 'reason': 'provider_rate_limited'})
                     continue
-                if not self.provider.available:
-                    raise ProviderUnavailable("GEMINI_API_KEY missing; analysis deferred; verified data preserved")
                 path = (directory / item["file"]).resolve()
                 if path.parent != directory.resolve():
                     raise ValueError("Invalid manifest path")
@@ -194,14 +192,30 @@ class CascoCollectionPipeline:
                         unresolved.append(key)
 
                 if unresolved:
-                    model_facts = self.provider.extract(
-                        document=document,
-                        company=get_insurer(item["insurer"]).name,
-                        source_url=source["url"],
-                        field_keys=tuple(unresolved),
-                    )
-                    for key in unresolved:
-                        facts[key] = model_facts.get(key, {})
+                    if not self.provider.available:
+                        if not deterministic:
+                            raise ProviderUnavailable(
+                                "GEMINI_API_KEY missing; no deterministic fields to publish"
+                            )
+                        # Do not discard deterministic facts merely because the
+                        # optional AI provider is unavailable. Unresolved fields
+                        # remain review candidates, while exact clauses can
+                        # still safely seed an initially empty database.
+                        report['deferred'].append({
+                            'insurer': item['insurer'],
+                            'fields': unresolved,
+                            'reason': 'provider_unavailable_after_deterministic_pass',
+                        })
+                        facts.update({key: {} for key in unresolved})
+                    else:
+                        model_facts = self.provider.extract(
+                            document=document,
+                            company=get_insurer(item["insurer"]).name,
+                            source_url=source["url"],
+                            field_keys=tuple(unresolved),
+                        )
+                        for key in unresolved:
+                            facts[key] = model_facts.get(key, {})
 
                 diagnostics = {}
                 provider_diagnostics = getattr(self.provider, 'diagnostics', None)

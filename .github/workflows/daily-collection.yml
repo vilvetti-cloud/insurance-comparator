@@ -78,3 +78,13 @@ jobs:
       - name: Audit existing cards
         if: always()
         run: python scripts/qa_casco_facts.py
+      - name: Refresh unresolved fields from official HTML pages
+        if: always()
+        run: python scripts/casco_site_refresh.py
+      - name: Upload official-site refresh report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casco-site-refresh-report
+          path: work/casco/site-refresh-report.json
+          retention-days: 14
