@@ -21,7 +21,7 @@ HOSTS = {
     "alfa": {"www.alfastrah.ru", "alfastrah.ru", "alfastrah.com"},
     "soglasie": {"www.soglasie.ru", "soglasie.ru", "api.soglasie.ru"},
     "rgs": {"www.rgs.ru", "rgs.ru", "www-data.rgs.ru"},
-    "t-insurance": {"www.tbank.ru", "tbank.ru", "cdn.tinsurance.ru"},
+    "t-insurance": {"www.tbank.ru", "tbank.ru", "tinsurance.ru", "www.tinsurance.ru", "cdn.tinsurance.ru"},
     "sber": {"sberbankins.ru", "www.sberbankins.ru"},
     "yugoria": {"ugsk.ru", "www.ugsk.ru"},
     "sovcom": {"sovcomins.ru", "www.sovcomins.ru"},
