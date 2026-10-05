@@ -113,7 +113,8 @@ class CascoCollectionPipeline:
                     filename = f"{source['id']}-{checksum}.pdf"
                     (directory / filename).write_bytes(fetched.body)
                     manifest["pending"].append({
-                        "insurer": insurer.slug, "source": source, "document": document,
+                        "insurer": insurer.slug, "company_id": company["id"],
+                        "source": source, "document": document,
                         "fields": fields, "checksum": checksum, "file": filename,
                         "final_url": fetched.url,
                     })
@@ -143,7 +144,8 @@ class CascoCollectionPipeline:
         provider_blocked = False
         for item in manifest["pending"]:
             source, checksum = item["source"], item["checksum"]
-            if self.revisions.completed(source["id"], checksum):
+            if (self.revisions.completed(source["id"], checksum)
+                    and self.revisions.has_active_conditions(item["company_id"] or 0)):
                 continue
             parsed = None
             try:

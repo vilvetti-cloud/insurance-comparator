@@ -122,7 +122,10 @@ def main() -> int:
     output = args.directory / "bootstrap-report.json"
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if not result["source_errors"] else 1
+    # Source outages are expected operational review items. The report and
+    # any verified fields are still useful; fail only on initialization or
+    # execution exceptions, not because one insurer blocks a request.
+    return 0
 
 
 if __name__ == "__main__":
