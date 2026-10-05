@@ -36,7 +36,9 @@ def official_url(insurer: str, url: str) -> bool:
 
 def sources_for(insurer: str) -> tuple[PinnedSource, ...]:
     config = next(item for item in INSURERS if item.slug == insurer)
-    sources = [PinnedSource(insurer, config.rules_url)]
+    # The current product description is the primary commercial source.
+    # Rules PDFs remain an official level-2 legal/supporting source.
+    sources = [PinnedSource(insurer, config.rules_url, 2)]
     for url in config.official_doc_urls:
         # Disclosure/navigation pages are not documents. Their links are not crawled daily.
         if url.lower().endswith(".pdf") or "/cms/assets/" in url:
