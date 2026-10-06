@@ -286,6 +286,60 @@ class CascoRevisionRepository(BaseRepository):
                          "PASS" if verdict.passed else "FAIL", verdict.reason),
                     )
                     if not verdict.passed:
+                        # Keep a substantive model answer visible in the
+                        # comparison table. It is explicitly non-verified and
+                        # therefore cannot drive sales insights until repaired,
+                        # but the answer itself must not disappear merely
+                        # because page/section evidence needs review.
+                        review_value = fact.get("value") if isinstance(fact, dict) else None
+                        if review_value:
+                            cur.execute(
+                                """SELECT id,verification_status FROM conditions
+                                   WHERE field_id=%s AND status='active'
+                                   ORDER BY id DESC""",
+                                (fields[key]["id"],),
+                            )
+                            active = list(cur.fetchall())
+                            has_verified = any(
+                                row.get("verification_status") == "verified" for row in active
+                            )
+                            if not has_verified:
+                                cur.execute(
+                                    """UPDATE conditions SET status='archived'
+                                       WHERE field_id=%s AND status='active'""",
+                                    (fields[key]["id"],),
+                                )
+                                cur.execute(
+                                    """INSERT INTO conditions
+                                       (field_id,source_id,value,source_level,confidence,status,
+                                        verification_status,checked_at)
+                                       VALUES (%s,%s,%s,%s,0.70,'active','needs_review',NOW())
+                                       RETURNING id""",
+                                    (fields[key]["id"], source["id"], review_value,
+                                     source["source_level"]),
+                                )
+                                review_condition_id = cur.fetchone()["id"]
+                                evidence_items = fact.get("evidence") or [fact]
+                                for evidence_item in reversed(evidence_items):
+                                    if not isinstance(evidence_item, dict):
+                                        continue
+                                    quote = evidence_item.get("exact_quote")
+                                    if not quote:
+                                        continue
+                                    cur.execute(
+                                        """INSERT INTO evidence
+                                           (condition_id,source_id,document_id,page_number,text_fragment,
+                                            verification_status,section,document_checksum)
+                                           VALUES (%s,%s,%s,%s,%s,'needs_review',%s,%s)""",
+                                        (review_condition_id, source["id"], document["id"],
+                                         evidence_item.get("page"), quote,
+                                         evidence_item.get("section"), checksum),
+                                    )
+                                cur.execute(
+                                    """INSERT INTO change_log(entity_type,entity_id,field_name,new_value,reason)
+                                       VALUES ('condition',%s,'value',%s,'casco_document_REVIEW')""",
+                                    (review_condition_id, review_value),
+                                )
                         continue
                     cur.execute(
                         """SELECT c.*, s.source_type, e.document_id, e.page_number, e.text_fragment
