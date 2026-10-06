@@ -382,9 +382,14 @@ class GroqFieldProvider:
 
 
 def get_provider() -> LLMProvider:
+    key = os.getenv("GEMINI_API_KEY")
     groq = os.getenv("GROQ_API_KEY")
+    preferred = os.getenv("CASCO_AI_PROVIDER", "groq").strip().lower()
+    if preferred == "groq" and groq:
+        return GroqFieldProvider(groq)
+    if key:
+        return GeminiProvider(key)
     if groq:
         return GroqFieldProvider(groq)
-    key = os.getenv("GEMINI_API_KEY")
-    return GeminiProvider(key) if key else DisabledProvider()
+    return DisabledProvider()
 
