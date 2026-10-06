@@ -384,11 +384,17 @@ class CascoRevisionRepository(BaseRepository):
                         )
                     cur.execute("UPDATE conditions SET status='archived' WHERE field_id=%s AND status='active'",
                                 (fields[key]["id"],))
+                    source_needs_review = (
+                        source.get("source_level", 1) >= 3
+                        or source.get("source_type") in {"web_search", "fallback"}
+                    )
+                    published_verification = "needs_review" if source_needs_review else "verified"
                     cur.execute(
                         """INSERT INTO conditions
                            (field_id,source_id,value,source_level,confidence,status,verification_status,checked_at)
-                           VALUES (%s,%s,%s,%s,1.0,'active','verified',NOW()) RETURNING id""",
-                        (fields[key]["id"], source["id"], fact["value"], source["source_level"]),
+                           VALUES (%s,%s,%s,%s,%s,'active',%s,NOW()) RETURNING id""",
+                        (fields[key]["id"], source["id"], fact["value"], source["source_level"],
+                         0.70 if source_needs_review else 1.0, published_verification),
                     )
                     condition_id = cur.fetchone()["id"]
                     # Keep all independently checked passages in the existing
@@ -399,16 +405,20 @@ class CascoRevisionRepository(BaseRepository):
                             """INSERT INTO evidence
                                (condition_id,source_id,document_id,page_number,text_fragment,verification_status,
                                 verified_at,verified_by,section,document_checksum)
-                               VALUES (%s,%s,%s,%s,%s,'verified',NOW(),'casco-evidence-gate',%s,%s)""",
+                               VALUES (%s,%s,%s,%s,%s,%s,NOW(),%s,%s,%s)""",
                             (condition_id, source["id"], document["id"], item["page"],
-                             item["exact_quote"], item["section"], checksum),
+                             item["exact_quote"], published_verification,
+                             'casco-evidence-gate' if not source_needs_review else 'source-level-3',
+                             item["section"], checksum),
                         )
                     cur.execute(
                         """INSERT INTO change_log(entity_type,entity_id,field_name,new_value,reason)
-                           VALUES ('condition',%s,'value',%s,'casco_document_PASS')""",
-                        (condition_id, fact["value"]),
+                           VALUES ('condition',%s,'value',%s,%s)""",
+                        (condition_id, fact["value"],
+                         'casco_document_REVIEW' if source_needs_review else 'casco_document_PASS'),
                     )
-                    passed.add(key)
+                    if not source_needs_review:
+                        passed.add(key)
                 cur.execute(
                     """UPDATE casco_document_revisions SET status='complete',parsed=%s,
                        provider=%s,extractor_version=%s,error=NULL,analyzed_at=NOW() WHERE id=%s""",

@@ -125,7 +125,12 @@ class CascoCollectionPipeline:
                     print(f"[checksum] {insurer.slug} source unavailable: {exc}", flush=True)
         # Keep only JSON-compatible repository fields; timestamps are not needed for analysis.
         for item in manifest["pending"]:
-            item["source"] = {k: item["source"][k] for k in ("id", "url", "source_level")}
+            item["source"] = {
+                "id": item["source"]["id"],
+                "url": item["source"]["url"],
+                "source_level": item["source"]["source_level"],
+                "source_type": item["source"].get("source_type", "pdf"),
+            }
             item["document"] = {"id": item["document"]["id"]}
             item["fields"] = {k: {"id": v["id"]} for k, v in item["fields"].items()}
         (directory / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -230,8 +235,11 @@ class CascoCollectionPipeline:
                 if deterministic:
                     report['deterministic_fields'][item['insurer']] = sorted(deterministic)
 
-                candidates = [(key, facts.get(key, {}), validate_fact(key, facts.get(key, {}),
-                    document, insurer=item["insurer"], source_url=item["final_url"])) for key in FIELD_KEYS]
+                candidates = [(key, facts.get(key, {}), validate_fact(
+                    key, facts.get(key, {}), document, insurer=item["insurer"],
+                    source_url=item["final_url"], source_type=source.get("source_type", "pdf"),
+                    source_level=source.get("source_level", 1),
+                    require_evidence=False)) for key in FIELD_KEYS]
                 report["validation_failures"].extend(
                     {"insurer": item["insurer"], "field": key, "reason": verdict.reason}
                     for key, _, verdict in candidates if not verdict.passed)

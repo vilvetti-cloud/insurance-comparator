@@ -111,6 +111,7 @@ class ComparisonService:
                 source_type=row["source_type"],
                 confidence=float(row["confidence"]) if row["confidence"] is not None else None,
                 verification_status=row["verification_status"],
+                trust_official_context=row["source_level"] in {1, 2},
             )
 
             # Prefer the canonical field when both legacy "fire" and
