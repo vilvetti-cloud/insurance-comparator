@@ -56,16 +56,16 @@ def audit_condition(
     text = " ".join(f"{value or ''} {quote or ''}".lower().split())
     normalized_value = " ".join(str(value).lower().split())
 
-    if source_level not in {1, 2}:
-        return _result(
-            "review",
-            "Источник не относится к официальным правилам или официальному сайту страховщика.",
-        )
-
     if source_type in {"web_search", "fallback"}:
         return _result(
             "review",
             "Информация из открытых источников. Требуется проверка.",
+        )
+
+    if source_level not in {1, 2}:
+        return _result(
+            "review",
+            "Источник не относится к официальным правилам или официальному сайту страховщика.",
         )
 
     if confidence is not None:

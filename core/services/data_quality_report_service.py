@@ -222,7 +222,8 @@ class DataQualityReportService:
                 source_type=row["source_type"],
                 confidence=float(row["confidence"]) if row["confidence"] is not None else None,
                 verification_status=row["verification_status"],
-                trust_official_context=row["source_level"] in {1, 2},
+                trust_official_context=(row["source_level"] in {1, 2}
+                                        and row["source_type"] in {"pdf", "official_site"}),
             )
 
             if raw_found and (row["distinct_value_count"] or 0) > 1:

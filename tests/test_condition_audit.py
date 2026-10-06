@@ -15,6 +15,7 @@ class ConditionAuditTests(unittest.TestCase):
             source_type=kwargs.get("source_type", "pdf"),
             confidence=kwargs.get("confidence", 0.95),
             verification_status=kwargs.get("verification_status", "verified"),
+            trust_official_context=kwargs.get("trust_official_context", False),
         )
 
     def test_confirmed_total_loss(self):
@@ -69,6 +70,29 @@ class ConditionAuditTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "review")
         self.assertFalse(result.sales_eligible)
+
+    def test_official_context_does_not_require_external_quote_review(self):
+        result = self.audit(
+            "franchise",
+            "Предусмотрены условная и безусловная франшизы; размер определяется договором.",
+            None,
+            source_level=1,
+            source_type="pdf",
+            trust_official_context=True,
+        )
+        self.assertEqual(result.status, "conditional")
+        self.assertFalse(result.sales_eligible)
+
+    def test_open_source_has_explicit_review_label(self):
+        result = self.audit(
+            "gap",
+            "GAP сохраняет страховую стоимость автомобиля.",
+            None,
+            source_level=3,
+            source_type="web_search",
+        )
+        self.assertEqual(result.label, "Нужно перепроверить")
+        self.assertEqual(result.reason, "Информация из открытых источников. Требуется проверка.")
 
     def test_needs_review_cannot_be_promoted_to_confirmed(self):
         result = self.audit(
