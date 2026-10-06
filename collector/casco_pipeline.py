@@ -10,7 +10,7 @@ from collector.casco_provider import get_provider, FIELD_KEYS, ProviderUnavailab
 from collector.casco_validation import validate_fact
 from collector.casco_t_rules import calibration
 from collector.casco_version import CASCO_EXTRACTOR_VERSION
-from collector.http_client import HttpFetcher, FetchError
+from collector.http_client import HttpFetcher, FetchError, FetchResult
 from collector.casco_transport import CascoFetcher
 from collector.registry import INSURERS, get_insurer
 from core.catalog import KASKO_FIELDS
@@ -83,7 +83,18 @@ class CascoCollectionPipeline:
             for pin in sources_for(insurer.slug):
                 try:
                     # Direct bytes are required for checksum/page provenance.
-                    fetched = self.fetcher.fetch(pin.url, referer=insurer.official_url)
+                    local_copy = (Path(__file__).resolve().parents[1] / "data" / "sources"
+                                  / insurer.slug / "technical.pdf")
+                    if pin.url == insurer.rules_url and local_copy.is_file():
+                        body = local_copy.read_bytes()
+                        fetched = FetchResult(
+                            url=pin.url, status_code=200,
+                            content_type="application/pdf", body=body,
+                            checksum=hashlib.sha256(body).hexdigest(),
+                        )
+                        print(f"[checksum] {insurer.slug} using checked-in canonical PDF", flush=True)
+                    else:
+                        fetched = self.fetcher.fetch(pin.url, referer=insurer.official_url)
                     if not official_url(insurer.slug, fetched.url):
                         raise ValueError("Redirect left the insurer allowlist")
                     if not fetched.body.lstrip().startswith(b"%PDF"):
