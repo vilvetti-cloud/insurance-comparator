@@ -120,9 +120,12 @@ class ComparisonService:
 
             reportable = audit.status in {"confirmed", "conditional"}
             has_value = row["value"] not in (None, "")
+            # Keep the model's contextual answer visible for human review. It
+            # is not sales-eligible until the evidence audit passes, but hiding
+            # it behind "Не подтверждено" loses the answer the user asked for.
+            display_value = row["value"] if has_value else "Не найдено"
             company_data[field_key] = {
-                "value": row["value"] if reportable and has_value else (
-                    "Не подтверждено" if has_value else "Не найдено"),
+                "value": display_value,
                 "diagnostic_value": row["value"] if has_value and not reportable else None,
                 "source": _ui_source(row["source_level"], row["source_type"]),
                 "url": row["source_url"],

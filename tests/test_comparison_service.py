@@ -5,7 +5,7 @@ from core.services.comparison_service import ComparisonService
 
 
 class ComparisonServiceTests(unittest.TestCase):
-    def test_review_value_is_diagnostic_only_in_legacy_card(self):
+    def test_review_value_is_visible_but_not_sales_eligible(self):
         quote = "6.8. В договоре страхования может быть установлена безусловная франшиза."
         rows = [
             {"company_name": "Т-Страхование", "field_key": "franchise",
@@ -31,7 +31,7 @@ class ComparisonServiceTests(unittest.TestCase):
                          "confirmed")
         self.assertIn("франшиза", snapshot["Т-Страхование"]["franchise"]["value"])
         self.assertEqual(snapshot["Т-Страхование"]["drone"]["value"],
-                         "Не подтверждено")
+                         "БПЛА покрываются по всем программам.")
         self.assertEqual(snapshot["Т-Страхование"]["drone"]["diagnostic_value"],
                          "БПЛА покрываются по всем программам.")
         self.assertEqual(snapshot["Т-Страхование"]["terrorism"]["value"],
