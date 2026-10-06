@@ -195,5 +195,15 @@ def update():
     )
 
 
+
+
+# OpenAI Agent Skills integration
+try:
+    from skill_manager import register_skill_routes
+    register_skill_routes(app)
+except Exception as _skills_exc:
+    logging.getLogger(__name__).warning("OpenAI Skills routes unavailable: %s", _skills_exc)
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
