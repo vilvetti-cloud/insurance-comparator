@@ -106,9 +106,9 @@ INSURERS = (
         "Югория",
         "https://www.ugsk.ru/",
         "https://ugsk.ru/",
-        rules_url="https://ugsk.ru/pravila/Kasko.pdf",
+        rules_url="https://www.ugsk.ru/upload/ugsk_official/pravila_kasko.pdf",
         official_doc_urls=(
-            "https://ugsk.ru/about/pravila/Gap.pdf",
+            "https://ugsk.ru/pravila/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20GAP%20(105%20%D1%80%D0%B5%D0%B4.2).pdf",
         ),
     ),
     InsurerConfig(
