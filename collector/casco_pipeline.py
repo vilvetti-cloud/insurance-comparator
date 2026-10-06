@@ -149,9 +149,6 @@ class CascoCollectionPipeline:
                 continue
             parsed = None
             try:
-                if provider_blocked:
-                    report['deferred'].append({'insurer': item['insurer'], 'reason': 'provider_rate_limited'})
-                    continue
                 path = (directory / item["file"]).resolve()
                 if path.parent != directory.resolve():
                     raise ValueError("Invalid manifest path")
@@ -264,8 +261,6 @@ class CascoCollectionPipeline:
                       f"version={CASCO_EXTRACTOR_VERSION}", flush=True)
             except Exception as exc:
                 reason = str(exc)[:500] if isinstance(exc, (ProviderUnavailable, ValueError)) else type(exc).__name__
-                if isinstance(exc, ProviderUnavailable) and 'HTTP 429' in reason:
-                    provider_blocked = True
                 self.revisions.save_degraded(source_id=source["id"], checksum=checksum,
                     reason=reason, parsed=parsed)
                 report["degraded"].append({"insurer": item["insurer"], "reason": reason})
