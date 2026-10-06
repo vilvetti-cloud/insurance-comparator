@@ -107,9 +107,8 @@ INSURERS = (
         "https://www.ugsk.ru/",
         "https://ugsk.ru/",
         rules_url="https://ugsk.ru/pravila/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%D0%9A%D0%90%D0%A1%D0%9A%D0%9E_04_%D1%80%D0%B5%D0%B4.9.0.pdf",
-        official_doc_urls=(
-            "https://ugsk.ru/pravila/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20GAP%20(105%20%D1%80%D0%B5%D0%B4.2).pdf",
-        ),
+        # GAP is not required for the first pass: the canonical rules PDF is
+        # processed locally, while the separate GAP URL is anti-bot blocked.
     ),
     InsurerConfig(
         "sovcom",
