@@ -87,7 +87,7 @@ class OptimizationTests(unittest.TestCase):
         p.provider.extract.assert_not_called()
         self.assertEqual(m['pending'], [])
 
-    def test_429_stops_remaining_api_calls(self):
+    def test_429_does_not_stop_remaining_documents(self):
         p = fixtures.PipelineTests().pipeline()
         p.parser.parse.return_value = ParsedDocument({3: fixtures.QUOTE})
         p.provider.extract.side_effect = ProviderUnavailable('Gemini HTTP 429')
@@ -95,6 +95,7 @@ class OptimizationTests(unittest.TestCase):
             m = p.checksum_check(directory=Path(d), insurer_slugs=['reso'])
             m['pending'].append(dict(m['pending'][0]))
             report = p.analyze(directory=Path(d), manifest=m)
-        p.provider.extract.assert_called_once()
-        self.assertEqual(report['deferred'][0]['reason'], 'provider_rate_limited')
+        self.assertEqual(p.provider.extract.call_count, 2)
+        self.assertEqual(len(report['degraded']), 2)
+        self.assertEqual(report['deferred'], [])
 

@@ -109,6 +109,22 @@ class GeminiProvider:
         keys = tuple(FIELD_KEYS if field_keys is None else field_keys)
         if not keys or len(set(keys)) != len(keys) or set(keys) - set(FIELD_KEYS):
             raise ValueError('Invalid extraction field selection')
+        # Large technical PDFs can exceed provider input limits. Keep physical
+        # page numbers, but send only relevant pages for the requested fields.
+        if len(keys) > 2 and len(document.text) > 60000:
+            from collector.casco_pilot import select_pages
+            selected_pages = {}
+            for key in keys:
+                scoped, _ = select_pages(document, key, max_pages=3, max_chars=12000)
+                if scoped:
+                    for page, text in scoped.pages.items():
+                        selected_pages.setdefault(page, text)
+            if selected_pages:
+                document = type(document)(
+                    pages=dict(sorted(selected_pages.items())),
+                    parser=document.parser,
+                    structure=document.structure,
+                )
         schema = dict(RESPONSE_SCHEMA, properties={key: GEMINI_FACT_SCHEMA for key in keys}, required=list(keys))
         if len(document.text) > 1500000:
             raise ProviderUnavailable("Document exceeds extraction budget; no silent truncation")
