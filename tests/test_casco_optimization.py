@@ -4,7 +4,7 @@ import tempfile
 from unittest.mock import Mock
 from collector.casco_page_watch import document_links, link_fingerprint, watch_pages
 from collector.casco_questions import QUESTIONS, question_prompt
-from collector.casco_provider import FIELD_KEYS, ProviderUnavailable
+from collector.casco_provider import FIELD_KEYS, ProviderUnavailable, FallbackProvider
 from collector.registry import get_insurer
 from collector.http_client import FetchResult
 from tests import test_casco_documents as fixtures
@@ -98,4 +98,19 @@ class OptimizationTests(unittest.TestCase):
         self.assertEqual(p.provider.extract.call_count, 2)
         self.assertEqual(len(report['degraded']), 2)
         self.assertEqual(report['deferred'], [])
+
+    def test_provider_fallback_uses_second_provider_after_quota_error(self):
+        first = Mock(name="gemini")
+        first.name = "gemini"
+        first.extract.side_effect = ProviderUnavailable("Gemini HTTP 429")
+        second = Mock(name="groq")
+        second.name = "groq"
+        second.extract.return_value = {"franchise": {"value": "ответ"}}
+        provider = FallbackProvider([first, second])
+
+        result = provider.extract(document=Mock(), company="ВСК", source_url="https://vsk.ru/rules.pdf")
+
+        self.assertEqual(result["franchise"]["value"], "ответ")
+        first.extract.assert_called_once()
+        second.extract.assert_called_once()
 

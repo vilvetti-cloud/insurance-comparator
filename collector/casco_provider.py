@@ -96,6 +96,29 @@ class DisabledProvider:
         raise ProviderUnavailable("GEMINI_API_KEY is not configured; verified data preserved")
 
 
+class FallbackProvider:
+    """Try configured providers in order without aborting the document run."""
+    name = "fallback"
+
+    def __init__(self, providers):
+        self.providers = tuple(providers)
+        self.available = bool(self.providers)
+        self.diagnostics = {}
+
+    def extract(self, **kwargs) -> dict:
+        failures = []
+        for provider in self.providers:
+            try:
+                result = provider.extract(**kwargs)
+                self.diagnostics = getattr(provider, "diagnostics", {})
+                return result
+            except ProviderUnavailable as exc:
+                failures.append(f"{provider.name}: {exc}")
+        if failures:
+            raise ProviderUnavailable("AI providers exhausted: " + " | ".join(failures)[:700])
+        raise ProviderUnavailable("No AI provider is configured; verified data preserved")
+
+
 class GeminiProvider:
     name = "gemini"
     available = True
@@ -400,12 +423,21 @@ class GroqFieldProvider:
 def get_provider() -> LLMProvider:
     key = os.getenv("GEMINI_API_KEY")
     groq = os.getenv("GROQ_API_KEY")
+    # Keep the historical local default; CI explicitly sets `auto` for fallback.
     preferred = os.getenv("CASCO_AI_PROVIDER", "groq").strip().lower()
-    if preferred == "groq" and groq:
-        return GroqFieldProvider(groq)
-    if key:
-        return GeminiProvider(key)
-    if groq:
-        return GroqFieldProvider(groq)
-    return DisabledProvider()
+    available = {
+        "gemini": GeminiProvider(key) if key else None,
+        "groq": GroqFieldProvider(groq) if groq else None,
+    }
+    if preferred == "auto":
+        order = ["gemini", "groq"]
+    elif preferred == "gemini":
+        order = ["gemini", "groq"]
+    else:
+        # Explicit `groq` remains a single-provider mode for local callers.
+        order = ["groq"]
+    providers = [available[name] for name in order if available[name] is not None]
+    if not providers:
+        return DisabledProvider()
+    return providers[0] if len(providers) == 1 else FallbackProvider(providers)
 
