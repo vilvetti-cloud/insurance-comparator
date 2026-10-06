@@ -1,15 +1,20 @@
-import base64
-import io
 import os
-import zipfile
 import requests
 
 OPENAI_SKILLS_URL = "https://api.openai.com/v1/skills"
-BUNDLE_PATH = os.path.join(os.path.dirname(__file__), "openai-skills-bundle.b64")
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+
 SKILL_NAMES = [
-    "frontend-design", "mcp-builder", "pdf", "pptx",
-    "skill-creator", "web-artifacts-builder", "webapp-testing", "xlsx",
+    "frontend-design",
+    "mcp-builder",
+    "pdf",
+    "pptx",
+    "skill-creator",
+    "web-artifacts-builder",
+    "webapp-testing",
+    "xlsx",
 ]
+
 
 def _headers():
     key = os.environ.get("OPENAI_API_KEY", "")
@@ -17,66 +22,73 @@ def _headers():
         raise RuntimeError("OPENAI_API_KEY is not configured")
     return {"Authorization": f"Bearer {key}"}
 
-def _bundle_bytes():
-    with open(BUNDLE_PATH, "r", encoding="ascii") as f:
-        return base64.b64decode(f.read())
 
 def list_remote_skills():
-    r = requests.get(OPENAI_SKILLS_URL, headers=_headers(), params={"limit": 100}, timeout=30)
-    r.raise_for_status()
-    return r.json().get("data", [])
+    response = requests.get(
+        OPENAI_SKILLS_URL,
+        headers=_headers(),
+        params={"limit": 100},
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json().get("data", [])
 
-def install_all():
-    existing = {x["name"]: x for x in list_remote_skills()}
-    results = []
-    with zipfile.ZipFile(io.BytesIO(_bundle_bytes())) as bundle:
-        for name in SKILL_NAMES:
-            if name in existing:
-                results.append({"name": name, "status": "already_installed", "id": existing[name]["id"]})
-                continue
-            filename = f"{name}.zip"
-            payload = bundle.read(filename)
-            r = requests.post(
-                OPENAI_SKILLS_URL,
-                headers=_headers(),
-                files={"files": (filename, payload, "application/zip")},
-                timeout=120,
-            )
-            if not r.ok:
-                results.append({"name": name, "status": "error", "http_status": r.status_code, "error": r.text[:1000]})
-                continue
-            data = r.json()
-            results.append({"name": name, "status": "installed", "id": data.get("id"), "version": data.get("latest_version")})
-            existing[name] = data
-    return results
 
 def skills_for_response():
     skills = list_remote_skills()
-    by_name = {x["name"]: x for x in skills}
+    by_name = {skill.get("name"): skill for skill in skills}
+
+    missing = [name for name in SKILL_NAMES if name not in by_name]
+    if missing:
+        raise RuntimeError(
+            "Required OpenAI Skills are not installed: " + ", ".join(missing)
+        )
+
     return [
-        {"type": "skill_reference", "skill_id": by_name[name]["id"], "version": "latest"}
-        for name in SKILL_NAMES if name in by_name
+        {
+            "type": "skill_reference",
+            "skill_id": by_name[name]["id"],
+            "version": "latest",
+        }
+        for name in SKILL_NAMES
     ]
+
 
 def run_agent(prompt):
     refs = skills_for_response()
-    if not refs:
-        raise RuntimeError("No installed skills found")
     key = os.environ["OPENAI_API_KEY"]
     model = os.environ.get("OPENAI_MODEL", "gpt-6-astra")
-    r = requests.post(
-        "https://api.openai.com/v1/responses",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+
+    response = requests.post(
+        OPENAI_RESPONSES_URL,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
         json={
             "model": model,
-            "tools": [{"type": "shell", "environment": {"type": "container_auto", "skills": refs}}],
+            "tools": [
+                {
+                    "type": "shell",
+                    "environment": {
+                        "type": "container_auto",
+                        "skills": refs,
+                    },
+                }
+            ],
             "input": prompt,
         },
         timeout=180,
     )
-    if not r.ok:
-        raise RuntimeError(f"OpenAI Responses API {r.status_code}: {r.text[:1500]}")
-    return r.json()
+
+    if not response.ok:
+        raise RuntimeError(
+            f"OpenAI Responses API {response.status_code}: "
+            f"{response.text[:1500]}"
+        )
+
+    return response.json()
+
 
 def register_skill_routes(app):
     from flask import request
@@ -85,29 +97,52 @@ def register_skill_routes(app):
     def skills_status():
         try:
             data = list_remote_skills()
-            return {"ok": True, "skills": [
-                {"name": x.get("name"), "id": x.get("id"), "version": x.get("latest_version")}
-                for x in data
-            ]}
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}, 500
+            installed = {
+                skill.get("name"): skill
+                for skill in data
+                if skill.get("name") in SKILL_NAMES
+            }
 
-    @app.get("/skills/install")
-    def skills_install():
-        expected = os.environ.get("SKILLS_INSTALL_TOKEN")
-        if expected and request.args.get("token") != expected:
-            return {"ok": False, "error": "invalid install token"}, 403
-        try:
-            return {"ok": True, "results": install_all()}
+            return {
+                "ok": True,
+                "skills": [
+                    {
+                        "name": name,
+                        "id": installed[name].get("id"),
+                        "version": installed[name].get("latest_version"),
+                    }
+                    for name in SKILL_NAMES
+                    if name in installed
+                ],
+                "missing": [
+                    name for name in SKILL_NAMES if name not in installed
+                ],
+            }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}, 500
 
     @app.post("/skills/run")
     def skills_run():
+        expected_token = os.environ.get("SKILLS_RUN_TOKEN")
+        if not expected_token:
+            return {
+                "ok": False,
+                "error": "SKILLS_RUN_TOKEN is not configured",
+            }, 503
+
+        supplied_token = request.headers.get("X-Skills-Token")
+        if supplied_token != expected_token:
+            return {"ok": False, "error": "unauthorized"}, 401
+
         body = request.get_json(silent=True) or {}
         prompt = body.get("prompt")
+
         if not isinstance(prompt, str) or not prompt.strip():
-            return {"ok": False, "error": "JSON body must contain a non-empty 'prompt'"}, 400
+            return {
+                "ok": False,
+                "error": "JSON body must contain a non-empty 'prompt'",
+            }, 400
+
         try:
             return {"ok": True, "response": run_agent(prompt)}
         except Exception as exc:
