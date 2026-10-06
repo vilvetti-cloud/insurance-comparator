@@ -34,6 +34,13 @@ def _selected(slugs: list[str] | None):
         raise ValueError("Unknown insurer slug: " + ", ".join(sorted(unknown)))
     return [item.slug for item in INSURERS if item.slug in requested]
 
+def _without(slugs: list[str], excluded: list[str] | None):
+    excluded = set(excluded or [])
+    unknown = excluded - {item.slug for item in INSURERS}
+    if unknown:
+        raise ValueError("Unknown excluded insurer slug: " + ", ".join(sorted(unknown)))
+    return [slug for slug in slugs if slug not in excluded]
+
 
 def _missing_fields(report: dict, insurers: list[str]) -> dict[str, list[str]]:
     missing = {slug: set(FIELD_KEYS) for slug in insurers}
@@ -51,6 +58,8 @@ def _missing_fields(report: dict, insurers: list[str]) -> dict[str, list[str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bootstrap the CASCO comparison database")
     parser.add_argument("--insurer", action="append", dest="insurers")
+    parser.add_argument("--skip-insurer", action="append", default=[],
+                        help="Temporarily exclude an insurer without changing the registry")
     parser.add_argument("--directory", type=Path, default=Path("work/casco-bootstrap"))
     parser.add_argument("--max-documents", type=int, default=20)
     parser.add_argument("--retry-failed", action="store_true")
@@ -66,7 +75,7 @@ def main() -> int:
     if not init_db():
         print("Database schema initialization failed", file=sys.stderr)
         return 3
-    insurers = _selected(args.insurers)
+    insurers = _without(_selected(args.insurers), args.skip_insurer)
     if not 0 <= args.max_documents <= 20:
         parser.error("--max-documents must be between 0 and 20")
 
