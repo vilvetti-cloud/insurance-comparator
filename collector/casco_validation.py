@@ -24,16 +24,31 @@ class Verdict:
 
 
 def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: str,
-                  source_type: str = "pdf", source_level: int = 1) -> Verdict:
+                  source_type: str = "pdf", source_level: int = 1,
+                  require_evidence: bool = True) -> Verdict:
     def fail(reason):
         return Verdict(False, reason)
-    if key not in FIELD_KEYS or source_type not in {"pdf", "official_site"} or not official_url(insurer, source_url):
+    if key not in FIELD_KEYS or source_type not in {"pdf", "official_site", "web_search", "fallback"}:
+        return fail("unofficial_or_diagnostic_source")
+    if source_level in {1, 2} and not official_url(insurer, source_url):
         return fail("unofficial_or_diagnostic_source")
     if not document.promotable:
         return fail("parser_degraded")
     if not isinstance(fact, dict):
         return fail("invalid_fact")
     value, quote, page, section = (fact.get(k) for k in ("value", "exact_quote", "page", "section"))
+    # Levels 1–2 are already official product sources. The model's contextual
+    # answer is accepted without a second quote/section gate; the source URL,
+    # document checksum and AI answer remain attached for traceability.
+    if (not require_evidence and source_level in {1, 2}
+            and source_type in {"pdf", "official_site"}
+            and isinstance(value, str) and value.strip()
+            and fact.get("answer_status") in (None, "answered", "partial")):
+        return Verdict(True, "OFFICIAL_SOURCE_AI_ANSWER")
+    if (not require_evidence and source_level >= 3
+            and source_type in {"web_search", "fallback"}
+            and isinstance(value, str) and value.strip()):
+        return Verdict(True, "OPEN_SOURCE_REVIEW")
     evidence = fact.get("evidence")
     if evidence is not None:
         if (not isinstance(evidence, list) or not 1 <= len(evidence) <= 5

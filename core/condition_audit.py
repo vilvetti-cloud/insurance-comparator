@@ -42,6 +42,7 @@ def audit_condition(
     source_type: str | None,
     confidence: float | None,
     verification_status: str | None,
+    trust_official_context: bool = False,
 ) -> ConditionAudit:
     if not value:
         return _result("missing", "Значение отсутствует.")
@@ -64,7 +65,7 @@ def audit_condition(
     if source_type in {"web_search", "fallback"}:
         return _result(
             "review",
-            "Значение получено из резервного/поискового источника, а не из официального материала.",
+            "Информация из открытых источников. Требуется проверка.",
         )
 
     if confidence is not None:
@@ -90,9 +91,25 @@ def audit_condition(
             "Snapshot содержит подготовленный пересказ без прямой цитаты из первоисточника; требуется подтверждение исходным документом.",
         )
 
-    # A quote and verified status are mandatory for both confirmed and
-    # conditional facts. Older needs_review rows must never become reportable
-    # merely because their value says "depends on the contract".
+    # Levels 1–2 are official source material. Their contextual AI answer is
+    # reportable without a second manual quote gate; quote remains optional
+    # traceability when the parser captured it.
+    if (trust_official_context and source_level in {1, 2}
+            and source_type in {"pdf", "official_site"}
+            and verification_status == "verified"):
+        if _CONDITIONAL_RE.search(text):
+            return _result(
+                "conditional",
+                "Официальный источник показывает, что условие зависит от программы, договора или дополнительной опции.",
+            )
+        return _result(
+            "confirmed",
+            "Ответ сформирован AI по официальному документу/сайту страховщика.",
+        )
+
+    # A quote and verified status are mandatory for remaining non-official
+    # facts. Older needs_review rows must never become reportable merely
+    # because their value says "depends on the contract".
     if not quote or not str(quote).strip():
         return _result(
             "review",
