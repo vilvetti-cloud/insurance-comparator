@@ -21,7 +21,7 @@ INSURERS = (
         "РЕСО",
         "https://reso.ru/",
         "https://reso.ru/individual/auto/kasko/",
-        "https://reso.ru/individual/auto/kasko/sredstv-avtotransporta-03022025.pdf",
+        "https://reso.ru/export/sites/reso/individual/auto/kasko/sredstv-avtotransporta-03022025.pdf",
     ),
     InsurerConfig(
         "vsk",
@@ -29,7 +29,7 @@ INSURERS = (
         "ВСК",
         "https://vsk.ru/",
         "https://www.vsk.ru/klientam/avto/kasko-kompakt-minimum",
-        rules_url="https://www.vsk.ru/cms/assets/1179953c-dc8f-45f9-9d46-8eaba56b9c10",
+        rules_url="https://www.vsk.ru/cms/assets/b10c0966-2061-4530-9a24-b72db6c5ee35",
         official_doc_urls=(
             "https://www.vsk.ru/cms/assets/209bfe0b-8b20-474c-8428-82d51132f54b",
         ),
@@ -39,7 +39,7 @@ INSURERS = (
         "Ингосстрах",
         "Ингосстрах",
         "https://www.ingos.ru/",
-        rules_url="https://cdn.ingos.ru/docs/prav_strakh_ats-2024.pdf",
+        rules_url="https://www.ingos.ru/docs/prav_strakh_ats-2025.pdf",
     ),
     InsurerConfig(
         "renins",
@@ -56,7 +56,7 @@ INSURERS = (
         "Альфа",
         "https://www.alfastrah.ru/",
         "https://www.alfastrah.ru/individuals/auto/kasko/",
-        "https://alfastrah.com/upload/iblock/da8/6hxelk9vq4cnlhue3okjcluz1lowk2k0.pdf",
+        "https://www.alfastrah.ru/upload/iblock/464/464485b507cb3ecec4aa8cb7c87f932f.pdf",
     ),
     InsurerConfig(
         "soglasie",
@@ -64,7 +64,7 @@ INSURERS = (
         "Согласие",
         "https://www.soglasie.ru/",
         "https://www.soglasie.ru/individuals/avto/kasko/",
-        "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/Правила%20страхования.pdf",
+        "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20%D1%81%D1%82%D1%80%D0%B0%D1%85%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F.pdf",
         official_doc_urls=(
             "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
         ),
@@ -75,7 +75,7 @@ INSURERS = (
         "РГС",
         "https://www.rgs.ru/",
         "https://www.rgs.ru/auto/ekasko/kasko-ot-ugona-i-gibeli",
-        "https://www-data.rgs.ru/upload/iblock/c24/g1xtpnmp9yuzbacb6jrcwrxd1wf7ljyv/171_-Pravila_24022026.pdf",
+        "https://www-data.rgs.ru/upload/iblock/c91/9j54j63k00f9ui0uyemnb5wesgfmcuy6/Pravila-KASKO-_-171.pdf",
     ),
     InsurerConfig(
         "t-insurance",
@@ -83,7 +83,7 @@ INSURERS = (
         "Т-Страхование",
         "https://www.tinsurance.ru/",
         "https://www.tinsurance.ru/kasko/",
-        "https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf",
+        "https://cdn.tinsurance.ru/static/documents/kasko_15072024.pdf",
         official_doc_urls=(
             "https://www.tbank.ru/insurance/help/auto/kasko/get-kasko/conditions/",
         ),
@@ -94,7 +94,7 @@ INSURERS = (
         "Сбер",
         "https://sberbankins.ru/",
         "https://sberbankins.ru/products/kasko/",
-        "https://sberbankins.ru/upload/iblock/4aa/wef0vo0p52bngziwkksqhic13381u1j9/pravila_134_19.pdf",
+        "https://sberbankins.ru/upload/iblock/257/Pravila-dobrovolnogo-strakhovaniya-transportnykh-sredstv-_-85.1.pdf",
         official_doc_urls=(
             "https://sberbankins.ru/upload/iblock/c2c/zjn30vv4p5vsvvmr88nfnm5vne7amz1t/Pravila-strakhovaniya-finansovykh-riskov-vladeltsev-transportnykh-sredstv-GAP-_-16.1.pdf",
             "https://sberbankins.ru/about/disclosure/",

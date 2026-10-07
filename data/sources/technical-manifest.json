@@ -1,0 +1,121 @@
+[
+  {
+    "insurer": "alfa",
+    "role": "canonical_level_1",
+    "path": "data/sources/alfa/technical.pdf",
+    "sha256": "9a99eb09e431293542bea4ec47ce9339d686e0ede41dc539fe676c5b6d78bc99",
+    "bytes": 643224
+  },
+  {
+    "insurer": "ingos",
+    "role": "canonical_level_1",
+    "path": "data/sources/ingos/technical.pdf",
+    "sha256": "b1a47b9ec2989f561c73804f3c654c6a04fa186606d35845f33b4057329803e6",
+    "bytes": 747315
+  },
+  {
+    "insurer": "renins",
+    "role": "canonical_level_1",
+    "path": "data/sources/renins/technical.pdf",
+    "sha256": "f506b83801ed2097458f12b8f26f83c1d944f565fa877706056aeefc2e932242",
+    "bytes": 2544609
+  },
+  {
+    "insurer": "reso",
+    "role": "canonical_level_1",
+    "path": "data/sources/reso/technical.pdf",
+    "sha256": "74f12c8823626999febc3ba9587dbb6098c388ad5cd593463e6dcca87dd90db7",
+    "bytes": 520252
+  },
+  {
+    "insurer": "rgs",
+    "role": "canonical_level_1",
+    "path": "data/sources/rgs/technical.pdf",
+    "sha256": "f234abc20e12c7451cee99eee0875ee088ee40ac486d4cd933656ab2c5cd56ad",
+    "bytes": 1741907
+  },
+  {
+    "insurer": "sber",
+    "role": "canonical_level_1",
+    "path": "data/sources/sber/technical.pdf",
+    "sha256": "ebd2f49f0d3c8a4ee5357f31fc276e9ee7baa039bfce7e614b72f8be07e40664",
+    "bytes": 33102060
+  },
+  {
+    "insurer": "soglasie",
+    "role": "canonical_level_1",
+    "path": "data/sources/soglasie/technical.pdf",
+    "sha256": "0407bcf7d0cb5f51338fd59ed1a6603aa43d014574cdb50f154fe95a12263f68",
+    "bytes": 1642359
+  },
+  {
+    "insurer": "sovcom",
+    "role": "canonical_level_1",
+    "path": "data/sources/sovcom/technical.pdf",
+    "sha256": "060da9db6a03f6cbf64cf47715e5177102ef7ff7f88965d3846f096456cdd36f",
+    "bytes": 1665957
+  },
+  {
+    "insurer": "t-insurance",
+    "role": "canonical_level_1",
+    "path": "data/sources/t-insurance/technical.pdf",
+    "sha256": "69df14f06bb22ecc7293e584ffa71f1da22aec5b16de29622c0d146480515a99",
+    "bytes": 501689
+  },
+  {
+    "insurer": "vsk",
+    "role": "canonical_level_1",
+    "path": "data/sources/vsk/technical.pdf",
+    "sha256": "277a97249309b9990c05d5df89ceecff88cbd25086933757f3a8d4d3f2c735f4",
+    "bytes": 463990
+  },
+  {
+    "insurer": "yugoria",
+    "role": "canonical_level_1",
+    "path": "data/sources/yugoria/technical.pdf",
+    "sha256": "7610af1b1977116fb24ccb4713b8bd22d62cf9fae885782854b0e9f6db22e37e",
+    "bytes": 1160598
+  },
+  {
+    "insurer": "alfa",
+    "role": "supporting_official_pdf",
+    "path": "data/sources/alfa/supporting/alfa-gap.pdf",
+    "sha256": "6586d51dde172002bf597ef965453a3a3fdcf3c83c68be5c7778ed5575a03ba0",
+    "bytes": 518600
+  },
+  {
+    "insurer": "ingos",
+    "role": "supporting_official_pdf",
+    "path": "data/sources/ingos/supporting/ingos-ts-13-05-2025.pdf",
+    "sha256": "c774c69573e3945b995e805397e4fa8e4f317e707add4aa164a6f6a5c522c2d5",
+    "bytes": 916832
+  },
+  {
+    "insurer": "renins",
+    "role": "supporting_official_pdf",
+    "path": "data/sources/renins/supporting/ren-2.pdf",
+    "sha256": "10426b7c97f74af903340ea9e2a524d962091b12cd45b83db4779ab48a7e67e7",
+    "bytes": 1004750
+  },
+  {
+    "insurer": "renins",
+    "role": "supporting_official_pdf",
+    "path": "data/sources/renins/supporting/ren-3-accident.pdf",
+    "sha256": "69e96e95fa300b14b81ce1e9f5e63fcc6777a00b9d70fc7baf269aa93a1c719f",
+    "bytes": 631274
+  },
+  {
+    "insurer": "renins",
+    "role": "supporting_official_pdf",
+    "path": "data/sources/renins/supporting/ren-4-gap.pdf",
+    "sha256": "13908c0807eb36fa705046c1aa4aede353e53bc45131f6e113a642e8d15d86c9",
+    "bytes": 1353855
+  },
+  {
+    "insurer": "sber",
+    "role": "supporting_official_pdf",
+    "path": "data/sources/sber/supporting/sber-349-2020.pdf",
+    "sha256": "77752a63355f6976ace4ac78aaaf3617721a19ea2e1636753323da8384d5bb2f",
+    "bytes": 1127765
+  }
+]
