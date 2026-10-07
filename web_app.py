@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from flask import Flask, jsonify, redirect, render_template, request
 
 from collector.registry import INSURERS
@@ -197,12 +199,12 @@ def update():
 
 
 
-# OpenAI Agent Skills integration
+# Free-provider Skills integration
 try:
     from skill_manager import register_skill_routes
     register_skill_routes(app)
 except Exception as _skills_exc:
-    logging.getLogger(__name__).warning("OpenAI Skills routes unavailable: %s", _skills_exc)
+    logging.getLogger(__name__).warning("Skills routes unavailable: %s", _skills_exc)
 
 
 if __name__ == "__main__":
