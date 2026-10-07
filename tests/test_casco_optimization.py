@@ -1,10 +1,11 @@
 import unittest
 from pathlib import Path
 import tempfile
-from unittest.mock import Mock
+import json
+from unittest.mock import Mock, patch
 from collector.casco_page_watch import document_links, link_fingerprint, watch_pages
 from collector.casco_questions import QUESTIONS, question_prompt
-from collector.casco_provider import FIELD_KEYS, ProviderUnavailable, FallbackProvider
+from collector.casco_provider import FIELD_KEYS, ProviderUnavailable, FallbackProvider, GroqFieldProvider
 from collector.registry import get_insurer
 from collector.http_client import FetchResult
 from tests import test_casco_documents as fixtures
@@ -42,6 +43,15 @@ class OptimizationTests(unittest.TestCase):
         p.provider.extract.assert_not_called()
         p.revisions.publish.assert_not_called()
         self.assertEqual(result['unchanged'], 1)
+
+    def test_complete_revision_is_locked_without_verified_active_condition(self):
+        p = fixtures.PipelineTests().pipeline()
+        p.revisions.completed.return_value = True
+        p.revisions.has_active_conditions.return_value = False
+        with tempfile.TemporaryDirectory() as d:
+            manifest = p.checksum_check(directory=Path(d), insurer_slugs=['reso'])
+        self.assertEqual(len(manifest['pending']), 0)
+        self.assertEqual(len(manifest['unchanged']), 1)
 
     def test_every_field_has_a_specific_question(self):
         self.assertEqual(set(QUESTIONS), set(FIELD_KEYS))
@@ -113,4 +123,19 @@ class OptimizationTests(unittest.TestCase):
         self.assertEqual(result["franchise"]["value"], "ответ")
         first.extract.assert_called_once()
         second.extract.assert_called_once()
+
+    def test_document_provider_makes_one_http_request_for_all_fields(self):
+        provider = GroqFieldProvider("test-key")
+        response = Mock(status_code=200)
+        response.json.return_value = {"choices": [{"finish_reason": "stop",
+            "message": {"content": json.dumps({
+                key: {"value": None, "evidence_ids": [], "status": "not_found",
+                      "explanation": "Нет подтверждённого фрагмента.",
+                      "missing_information": ""}
+                for key in FIELD_KEYS})}}]}
+        document = ParsedDocument({1: "КАСКО страховая сумма ремонт франшиза ущерб выплата эвакуатор"})
+        with patch("collector.casco_provider.requests.post", return_value=response) as post:
+            provider.extract(document=document, company="Тест", source_url="https://reso.ru/rules.pdf",
+                             field_keys=FIELD_KEYS)
+        self.assertEqual(post.call_count, 1)
 

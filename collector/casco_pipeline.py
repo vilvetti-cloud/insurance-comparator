@@ -106,13 +106,14 @@ class CascoCollectionPipeline:
                         http_status=fetched.status_code)
                     document = self.documents.upsert(source_id=source["id"], document_url=pin.url,
                         checksum=checksum, title="Правила/условия КАСКО")
-                    has_active = self.revisions.has_active_conditions(company["id"])
-                    if self.revisions.completed(source["id"], checksum) and has_active:
+                    # A complete revision is immutable for this checksum. This prevents
+                    # a successful one-shot bootstrap from being re-run merely because
+                    # some cells are marked needs_review instead of verified.
+                    if self.revisions.completed(source["id"], checksum):
                         manifest["unchanged"].append({"insurer": insurer.slug, "url": pin.url})
                         print(f"[checksum] {insurer.slug} unchanged: analysis skipped", flush=True)
                         continue
-                    if self.revisions.completed(source["id"], checksum) and not has_active:
-                        print(f"[checksum] {insurer.slug} completed without active conditions: reanalyzing", flush=True)
+                    has_active = self.revisions.has_active_conditions(company["id"])
                     if not retry_failed and has_active and self.revisions.attempted(source['id'], checksum):
                         manifest['deferred'].append({'insurer': insurer.slug, 'url': pin.url,
                             'reason': 'previous_attempt_requires_explicit_retry'})
@@ -160,8 +161,7 @@ class CascoCollectionPipeline:
         provider_blocked = False
         for item in manifest["pending"]:
             source, checksum = item["source"], item["checksum"]
-            if (self.revisions.completed(source["id"], checksum)
-                    and self.revisions.has_active_conditions(item.get("company_id") or 0)):
+            if self.revisions.completed(source["id"], checksum):
                 continue
             parsed = None
             try:
