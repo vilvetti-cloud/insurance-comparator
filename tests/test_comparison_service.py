@@ -34,6 +34,14 @@ class ComparisonServiceTests(unittest.TestCase):
                          "БПЛА покрываются по всем программам.")
         self.assertEqual(snapshot["Т-Страхование"]["drone"]["diagnostic_value"],
                          "БПЛА покрываются по всем программам.")
+        self.assertEqual(snapshot["Т-Страхование"]["drone"]["answer_status"],
+                         "partial")
+        self.assertEqual(snapshot["Т-Страхование"]["drone"]["evidence_page"], 7)
+        self.assertEqual(snapshot["Т-Страхование"]["drone"]["evidence_section"], "4.2")
+        self.assertEqual(
+            snapshot["Т-Страхование"]["drone"]["missing_information"],
+            "Проверить исключения и лимиты.",
+        )
         self.assertEqual(snapshot["Т-Страхование"]["terrorism"]["value"],
                          "Не найдено")
 
