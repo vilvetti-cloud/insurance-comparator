@@ -919,7 +919,7 @@ class SalesInsightsService:
         if pattern and re.search(pattern, text):
             return 0
 
-        paid = bool(re.search(r"за\s+доп(?:олнительн)?\.?\s+плат|доплат[ау]|платн\w*", text))
+        paid = bool(re.search(r"за\s+доп(?:олнительн\w*)?\s+плат|доплат[ау]|платн\w*", text))
         positive = bool(
             re.search(
                 r"входит|включен|включён|предусмотрен|предусмотрено|"
