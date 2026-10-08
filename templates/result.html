@@ -172,12 +172,6 @@
                         <div class="value-block__text {% if value1 == 'Не найдено' %}value-block__text--empty{% endif %}">
                           {{ value1 }}
                         </div>
-                        {% if data1.get(key + '_review_note') %}
-                          <div class="value-block__contextual">
-                            <span class="quality-badge quality-badge--review">Требует проверки</span>
-                            <p>{{ data1.get(key + '_review_note') }}</p>
-                          </div>
-                        {% endif %}
                         {% if value1 != 'Не найдено' %}
                           <div class="value-meta">
                             {% if data1.get(key + '_source_level') == 1 %}
@@ -189,9 +183,6 @@
                             {% elif data1.get(key + '_source_level') == 4 %}
                               <span class="badge badge--empty">Справочно</span>
                             {% endif %}
-                            <span class="quality-badge quality-badge--{{ data1.get(key + '_quality_status', 'review') }}" title="{{ data1.get(key + '_quality_reason', '') }}">
-                              {{ data1.get(key + '_quality_label', 'Нужно перепроверить') }}
-                            </span>
                             {% if data1.get(key + '_url') %}
                               <a class="source-link" href="{{ data1.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
                             {% endif %}
@@ -205,12 +196,6 @@
                         <div class="value-block__text {% if value2 == 'Не найдено' %}value-block__text--empty{% endif %}">
                           {{ value2 }}
                         </div>
-                        {% if data2.get(key + '_review_note') %}
-                          <div class="value-block__contextual">
-                            <span class="quality-badge quality-badge--review">Требует проверки</span>
-                            <p>{{ data2.get(key + '_review_note') }}</p>
-                          </div>
-                        {% endif %}
                         {% if value2 != 'Не найдено' %}
                           <div class="value-meta">
                             {% if data2.get(key + '_source_level') == 1 %}
@@ -222,9 +207,6 @@
                             {% elif data2.get(key + '_source_level') == 4 %}
                               <span class="badge badge--empty">Справочно</span>
                             {% endif %}
-                            <span class="quality-badge quality-badge--{{ data2.get(key + '_quality_status', 'review') }}" title="{{ data2.get(key + '_quality_reason', '') }}">
-                              {{ data2.get(key + '_quality_label', 'Нужно перепроверить') }}
-                            </span>
                             {% if data2.get(key + '_url') %}
                               <a class="source-link" href="{{ data2.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
                             {% endif %}
