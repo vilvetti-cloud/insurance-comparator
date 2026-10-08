@@ -212,7 +212,7 @@ def _recheck_field(
                 key,
                 second_fact,
                 parsed_doc,
-                insurer=company,
+                insurer=insurer_slug,
                 source_url=source_url,
                 source_type="pdf",
                 source_level=1,
