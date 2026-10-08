@@ -61,7 +61,7 @@
               <h2>Что подчеркнуть в {{ company1 }}</h2>
             </div>
             {% if sales.advantages %}
-              <span class="sales-status sales-status--advantage">Подтверждено отличий: {{ sales.advantages|length }}</span>
+              <span class="sales-status sales-status--advantage">Преимуществ первой компании: {{ sales.advantages|length }}</span>
             {% else %}
               <span class="sales-status">Доказанных преимуществ нет</span>
             {% endif %}
@@ -267,7 +267,7 @@
 
       <footer class="page-footer">
         <a class="button button--secondary" href="/">← Другое сравнение</a>
-        <span>Скрипт строится только на данных со статусом «Подтверждено» из официальных источников.</span>
+        <span>Скрипт строится только на подтверждённых условиях из официальных источников.</span>
       </footer>
     </div>
   </main>
