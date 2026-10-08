@@ -153,6 +153,7 @@
                     </div>
                   </th>
                   <th>{{ company2 }}</th>
+                  <th>Преимущество {{ company1 }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -230,6 +231,22 @@
                           </div>
                         {% endif %}
                       </div>
+                    </td>
+
+                    <td>
+                      {% set comparison = comparison_by_field.get(key) %}
+                      {% if comparison and comparison.get('outcome') == 'first_advantage' %}
+                        <div class="value-block">
+                          <div class="value-block__text">{{ comparison.get('title') }}</div>
+                          <div class="value-block__contextual">
+                            <strong>{{ comparison.get('own_value') }}</strong>
+                            <span>vs</span>
+                            <strong>{{ comparison.get('competitor_value') }}</strong>
+                          </div>
+                        </div>
+                      {% else %}
+                        <span class="value-block__text value-block__text--empty">—</span>
+                      {% endif %}
                     </td>
                   </tr>
                 {% endfor %}
