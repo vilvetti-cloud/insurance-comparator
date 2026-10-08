@@ -645,8 +645,8 @@ class SalesInsightsService:
         )
 
     def _compare_coverage(self, key, label, own, other, own_l, other_l):
-        own_level = self._coverage_level_v2(own_l)
-        other_level = self._coverage_level_v2(other_l)
+        own_level = self._coverage_level_v2(key, own_l)
+        other_level = self._coverage_level_v2(key, other_l)
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 return self._advantage(
@@ -891,20 +891,35 @@ class SalesInsightsService:
         return None
 
     @staticmethod
-    def _coverage_level_v2(text: str) -> int | None:
-        if re.search(
-            r"исключ(?:ен|ена|ено|ены|ается|аются)|не\s+(?:покрыв|включ|предусмотр|возмещ|предостав)|"
-            r"\bнет\b|не\s+явля\w*\s+страхов",
-            text,
-        ):
+    def _coverage_level_v2(key: str, text: str) -> int | None:
+        negative_patterns = {
+            "gap": r"(?:\bgap\b|гэп)[^.;]{0,80}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|"
+                   r"(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,80}(?:\bgap\b|гэп)",
+            "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,80}(?:не\s+покрыв|исключ)|"
+                             r"(?:не\s+покрыв|исключ)[^.;]{0,80}(?:самовозгор|возгоран)",
+            "terrorism": r"террор[^.;]{0,80}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|"
+                         r"(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,80}террор",
+            "drone": r"(?:бпла|дрон|беспилот)[^.;]{0,80}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|"
+                     r"(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,80}(?:бпла|дрон|беспилот)",
+            "tow_truck": r"эвакуац\w*[^.;]{0,80}(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)|"
+                         r"(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)[^.;]{0,80}эвакуац",
+        }
+        pattern = negative_patterns.get(key)
+        if pattern and re.search(pattern, text):
             return 0
-        if re.search(r"за\s+доп(?:олнительн)?\.?\s+плат|доплат[ау]|платн\w*", text):
+
+        paid = bool(re.search(r"за\s+доп(?:олнительн)?\.?\s+плат|доплат[ау]|платн\w*", text))
+        positive = bool(
+            re.search(
+                r"входит|включен|включён|предусмотрен|предусмотрено|"
+                r"покрыва\w*|возмеща\w*|предоставля\w*|застрахова\w*|"
+                r"отдельн\w+\s+риск",
+                text,
+            )
+        )
+        if paid:
             return 1
-        if re.search(
-            r"входит|включен|включён|предусмотрен|предусмотрено|покрыва\w*|возмеща\w*|"
-            r"предоставля\w*|застрахова\w*|есть|отдельн\w+\s+риск",
-            text,
-        ):
+        if positive:
             return 2
         return None
 
