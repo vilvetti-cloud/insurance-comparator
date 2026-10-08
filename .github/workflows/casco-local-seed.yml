@@ -11,6 +11,7 @@ on:
       - "database/schema.sql"
       - "collector/**"
       - "core/**"
+      - "ops/casco-seed.request"
   workflow_dispatch:
 
 concurrency:
