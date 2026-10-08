@@ -734,8 +734,8 @@ class SalesInsightsService:
         )
 
     def _compare_tow_truck(self, label, own, other, own_l, other_l):
-        own_level = self._coverage_level_v2(own_l)
-        other_level = self._coverage_level_v2(other_l)
+        own_level = self._coverage_level_v2("tow_truck", own_l)
+        other_level = self._coverage_level_v2("tow_truck", other_l)
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 return self._advantage(
