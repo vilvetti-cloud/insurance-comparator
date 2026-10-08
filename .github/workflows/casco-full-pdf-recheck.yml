@@ -1,0 +1,54 @@
+name: CASCO full PDF recheck
+
+on:
+  push:
+    branches:
+      - fix/casco-evidence-golden-benchmark
+  workflow_dispatch:
+
+concurrency:
+  group: casco-full-pdf-recheck
+  cancel-in-progress: false
+
+jobs:
+  recheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      MISTRAL_MODEL: ${{ vars.MISTRAL_MODEL }}
+      OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+      CASCO_AI_PROVIDER: auto
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-casco.txt
+      - name: Cache Docling models
+        uses: actions/cache@v4
+        with:
+          path: .cache/huggingface
+          key: docling-models-v2
+      - name: Recheck all 11 CASCO PDFs
+        run: python scripts/casco_full_recheck.py
+      - name: QA active CASCO facts
+        if: always()
+        run: python scripts/qa_casco_facts.py
+      - name: Upload full recheck report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casco-full-pdf-recheck
+          path: work/casco-full-recheck/
+          retention-days: 30
