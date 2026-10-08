@@ -39,7 +39,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
       - name: Seed CASCO from checked-in local analysis
-        run: python scripts/casco_seed_from_local_analysis.py
+        run: python scripts/casco_seed_from_local_analysis.py --force
       - name: Upload seed report
         if: always()
         uses: actions/upload-artifact@v4
