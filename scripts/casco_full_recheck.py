@@ -329,6 +329,7 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
             parsed_doc,
             key=key,
             company=insurer.name,
+            insurer_slug=slug,
             source_url=source_pin.url,
             provider_factory=provider_factory,
         )
