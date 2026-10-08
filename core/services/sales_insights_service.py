@@ -547,6 +547,12 @@ class SalesInsightsService:
     def _compare_franchise(self, label, own, other, own_l, other_l):
         own_none = self._franchise_none(own_l)
         other_none = self._franchise_none(other_l)
+        if own_none and other_none:
+            return self._comparison(
+                "franchise", label, "equal", "franchise_both_absent", own, other,
+                "У обеих компаний франшиза не применяется.",
+            )
+
         if own_none != other_none:
             if own_none:
                 return self._advantage(
@@ -599,6 +605,11 @@ class SalesInsightsService:
                 "without_certificates", label, "competitor_advantage",
                 "without_documents_positive_vs_negative", own, other,
                 "У конкурента подтверждено урегулирование без справок, у первой страховой — противоположное условие.",
+            )
+        if own_state == other_state == "negative":
+            return self._comparison(
+                "without_certificates", label, "equal", "without_documents_both_negative",
+                own, other, "У обеих компаний урегулирование без справок не предусмотрено в подтверждённых условиях.",
             )
         if own_state == other_state == "positive":
             own_count = self._occurrence_count(own_l)
