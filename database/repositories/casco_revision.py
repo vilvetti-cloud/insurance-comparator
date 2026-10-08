@@ -292,7 +292,8 @@ class CascoRevisionRepository(BaseRepository):
                         # but the answer itself must not disappear merely
                         # because page/section evidence needs review.
                         review_value = fact.get("value") if isinstance(fact, dict) else None
-                        if review_value:
+                        review_status = fact.get("answer_status") if isinstance(fact, dict) else None
+                        if review_value and review_status in {"answered", "partial"}:
                             cur.execute(
                                 """SELECT id,verification_status FROM conditions
                                    WHERE field_id=%s AND status='active'
