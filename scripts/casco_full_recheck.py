@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -183,9 +184,9 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
                 }
                 methods[key] = "provider_failed"
 
-    # Second, single-field pass for anything not fully answered or not validated.
-    # This is intentionally bounded by the already unresolved field set, not by
-    # every field, so the full recheck still uses the deterministic pass first.
+    # Second pass only for true no-answer fields. Existing partial answers are
+    # retained rather than triggering another model call; they remain explicitly
+    # non-verified until independently evidenced.
     selected_for_second_pass: list[str] = []
     candidate_verdicts: dict[str, Any] = {}
 
@@ -203,20 +204,21 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
         )
         candidate_verdicts[key] = verdict
         if methods.get(key) != "deterministic" and (
-            fact.get("answer_status") != "answered" or not verdict.passed
+            fact.get("answer_status") == "not_found" or not fact.get("value")
         ):
             selected_for_second_pass.append(key)
 
     second_pass_failures: dict[str, str] = {}
-    for key in selected_for_second_pass:
+
+    def retry_one(key: str):
+        local_provider = get_provider()
         try:
-            retry = provider.extract(
+            retry = local_provider.extract(
                 document=parsed_doc,
                 company=insurer.name,
                 source_url=source_pin.url,
                 field_keys=(key,),
             )
-            provider_calls += 1
             retry_fact = dict(retry.get(key) or {})
             retry_verdict = validate_fact(
                 key,
@@ -228,22 +230,33 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
                 source_level=1,
                 require_evidence=False,
             )
+            return key, retry_fact, retry_verdict, None
+        except ProviderUnavailable as exc:
+            return key, None, None, str(exc)
+        except Exception as exc:
+            return key, None, None, f"{type(exc).__name__}: {str(exc)[:250]}"
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(retry_one, key) for key in selected_for_second_pass]
+        for future in as_completed(futures):
+            key, retry_fact, retry_verdict, error = future.result()
+            provider_calls += 1
+            if error:
+                second_pass_failures[key] = error
+                continue
+
             current = facts.get(key, {})
             current_verdict = candidate_verdicts[key]
             chosen = choose_better(
                 current,
-                retry_fact,
+                retry_fact or {},
                 current_verdict.passed,
-                retry_verdict.passed,
+                bool(retry_verdict and retry_verdict.passed),
             )
             facts[key] = chosen
-            methods[key] = "provider_single_field" if chosen is retry_fact else methods.get(key, "provider_all_fields")
-            candidate_verdicts[key] = retry_verdict if chosen is retry_fact else current_verdict
-        except ProviderUnavailable as exc:
-            provider_calls += 1
-            second_pass_failures[key] = str(exc)
-        except Exception as exc:
-            second_pass_failures[key] = f"{type(exc).__name__}: {str(exc)[:250]}"
+            if chosen is retry_fact:
+                methods[key] = "provider_single_field"
+                candidate_verdicts[key] = retry_verdict
 
     candidates = []
     for key in FIELD_KEYS:
