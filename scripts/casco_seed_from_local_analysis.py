@@ -330,13 +330,8 @@ def main() -> int:
     parser.add_argument("--check-only", action="store_true", help="Validate report/files without writing the database")
     args = parser.parse_args()
 
-    if not init_db():
-        print("Database initialization failed", file=sys.stderr)
-        return 2
-
     analysis = load_analysis()
     requested = args.insurers or list((analysis.get("results") or {}).keys())
-    known = {item.slug for item in [get_insurer(i.slug) for i in [get_insurer(s) for s in requested]]} if requested else set()
     # Re-resolve through registry so an accidental unknown slug fails early.
     for slug in requested:
         get_insurer(slug)
@@ -350,12 +345,17 @@ def main() -> int:
                 pdf_path = ROOT / "data" / "sources" / slug / "technical.pdf"
                 if not pdf_path.is_file():
                     raise FileNotFoundError(str(pdf_path))
+                answers = ((analysis.get("results") or {}).get(slug) or {}).get("answers") or {}
+                if len(answers) != len(KASKO_FIELDS):
+                    raise ValueError(f"{slug}: expected {len(KASKO_FIELDS)} fields, got {len(answers)}")
                 results.append({
                     "insurer": slug,
                     "status": "check_ok",
                     "checksum": hashlib.sha256(pdf_path.read_bytes()).hexdigest(),
                 })
             else:
+                if not init_db():
+                    raise RuntimeError("Database initialization failed")
                 results.append(seed_insurer(slug, analysis, force=args.force))
         except Exception as exc:
             errors.append({
