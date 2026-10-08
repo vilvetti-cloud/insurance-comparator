@@ -206,6 +206,12 @@ def seed_insurer(slug: str, analysis: dict, *, force: bool = False) -> dict[str,
                 explanation = answer.get("explanation") or answer.get("reason") or ""
                 missing_information = answer.get("missing_information") or ""
 
+                cur.execute(
+                    """UPDATE conditions SET status='archived'
+                       WHERE field_id=%s AND source_id=%s AND status='active'""",
+                    (fields[key]["id"], source["id"]),
+                )
+
                 if status == "not_found" or not value:
                     result["not_found"] += 1
                     result["details"][key] = {
@@ -237,12 +243,6 @@ def seed_insurer(slug: str, analysis: dict, *, force: bool = False) -> dict[str,
                 if verification_status == "verified" and audit.status not in {"confirmed", "conditional"}:
                     verification_status = "needs_review"
                     confidence = 0.70
-
-                cur.execute(
-                    """UPDATE conditions SET status='archived'
-                       WHERE field_id=%s AND source_id=%s AND status='active'""",
-                    (fields[key]["id"], source["id"]),
-                )
 
                 meta = {
                     "answer_status": status,
