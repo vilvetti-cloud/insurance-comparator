@@ -389,12 +389,18 @@ class CascoRevisionRepository(BaseRepository):
                         or source.get("source_type") in {"web_search", "fallback"}
                     )
                     published_verification = "needs_review" if source_needs_review else "verified"
+                    answer_meta = {
+                        "answer_status": fact.get("answer_status"),
+                        "explanation": fact.get("explanation"),
+                        "missing_information": fact.get("missing_information"),
+                    }
                     cur.execute(
                         """INSERT INTO conditions
-                           (field_id,source_id,value,source_level,confidence,status,verification_status,checked_at)
-                           VALUES (%s,%s,%s,%s,%s,'active',%s,NOW()) RETURNING id""",
-                        (fields[key]["id"], source["id"], fact["value"], source["source_level"],
-                         0.70 if source_needs_review else 1.0, published_verification),
+                           (field_id,source_id,value,value_json,source_level,confidence,status,verification_status,checked_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,'active',%s,NOW()) RETURNING id""",
+                        (fields[key]["id"], source["id"], fact["value"], Jsonb(answer_meta),
+                         source["source_level"], 0.70 if source_needs_review else 1.0,
+                         published_verification),
                     )
                     condition_id = cur.fetchone()["id"]
                     # Keep all independently checked passages in the existing
