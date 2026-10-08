@@ -336,7 +336,7 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
 
     # Keep provider concurrency low enough for the shared API quota while
     # still making the 100+ field recheck practical.
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         futures = [executor.submit(run_field, key) for key in tasks]
         for future in as_completed(futures):
             key, result = future.result()
