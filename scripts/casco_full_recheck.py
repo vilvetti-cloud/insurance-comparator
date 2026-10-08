@@ -153,6 +153,7 @@ def _recheck_field(
     *,
     key: str,
     company: str,
+    insurer_slug: str,
     source_url: str,
     provider_factory,
 ):
@@ -176,7 +177,7 @@ def _recheck_field(
             key,
             first_fact,
             parsed_doc,
-            insurer=company,
+            insurer=insurer_slug,
             source_url=source_url,
             source_type="pdf",
             source_level=1,
