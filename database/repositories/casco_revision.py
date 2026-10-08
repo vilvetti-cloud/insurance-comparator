@@ -309,13 +309,18 @@ class CascoRevisionRepository(BaseRepository):
                                        WHERE field_id=%s AND status='active'""",
                                     (fields[key]["id"],),
                                 )
+                                review_meta = {
+                                    "answer_status": fact.get("answer_status"),
+                                    "explanation": fact.get("explanation"),
+                                    "missing_information": fact.get("missing_information"),
+                                }
                                 cur.execute(
                                     """INSERT INTO conditions
-                                       (field_id,source_id,value,source_level,confidence,status,
+                                       (field_id,source_id,value,value_json,source_level,confidence,status,
                                         verification_status,checked_at)
-                                       VALUES (%s,%s,%s,%s,0.70,'active','needs_review',NOW())
+                                       VALUES (%s,%s,%s,%s,%s,0.70,'active','needs_review',NOW())
                                        RETURNING id""",
-                                    (fields[key]["id"], source["id"], review_value,
+                                    (fields[key]["id"], source["id"], review_value, Jsonb(review_meta),
                                      source["source_level"]),
                                 )
                                 review_condition_id = cur.fetchone()["id"]
