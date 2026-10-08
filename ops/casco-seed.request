@@ -1,3 +1,4 @@
 seed=local-manus-analysis
 created=2026-10-08
 purpose=one-time-initial-casco-fill
+mode=force-replace-current-casco-baseline
