@@ -31,7 +31,7 @@ class TestCascoAnswerStatus(unittest.TestCase):
             require_evidence=False,
         )
         self.assertFalse(verdict.passed)
-        self.assertEqual(verdict.reason, "missing_value_quote_section")
+        self.assertEqual(verdict.reason, "incomplete_answer")
 
     def test_answered_official_ai_answer_can_enter_validation_stage(self):
         fact = {
