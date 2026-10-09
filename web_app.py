@@ -145,6 +145,12 @@ def compare():
             "client_message": "",
         }
 
+    comparison_by_field = {
+        item["field_key"]: item
+        for item in sales.get("comparisons", [])
+        if isinstance(item, dict) and item.get("field_key")
+    }
+
     return render_template(
         "result.html",
         company1=company1,
@@ -156,6 +162,7 @@ def compare():
         comparable_count=len(comparable_fields),
         comparison_ready=comparison_ready,
         sales=sales,
+        comparison_by_field=comparison_by_field,
         found1=found1,
         found2=found2,
         last_updated=snapshot.get("_last_updated", "Не обновлялось"),

@@ -61,7 +61,7 @@
               <h2>Что подчеркнуть в {{ company1 }}</h2>
             </div>
             {% if sales.advantages %}
-              <span class="sales-status sales-status--advantage">Подтверждено отличий: {{ sales.advantages|length }}</span>
+              <span class="sales-status sales-status--advantage">Преимуществ первой компании: {{ sales.advantages|length }}</span>
             {% else %}
               <span class="sales-status">Доказанных преимуществ нет</span>
             {% endif %}
@@ -153,6 +153,7 @@
                     </div>
                   </th>
                   <th>{{ company2 }}</th>
+                  <th>Преимущество {{ company1 }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -188,9 +189,6 @@
                             {% elif data1.get(key + '_source_level') == 4 %}
                               <span class="badge badge--empty">Справочно</span>
                             {% endif %}
-                            <span class="quality-badge quality-badge--{{ data1.get(key + '_quality_status', 'review') }}" title="{{ data1.get(key + '_quality_reason', '') }}">
-                              {{ data1.get(key + '_quality_label', 'Нужно перепроверить') }}
-                            </span>
                             {% if data1.get(key + '_url') %}
                               <a class="source-link" href="{{ data1.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
                             {% endif %}
@@ -221,15 +219,28 @@
                             {% elif data2.get(key + '_source_level') == 4 %}
                               <span class="badge badge--empty">Справочно</span>
                             {% endif %}
-                            <span class="quality-badge quality-badge--{{ data2.get(key + '_quality_status', 'review') }}" title="{{ data2.get(key + '_quality_reason', '') }}">
-                              {{ data2.get(key + '_quality_label', 'Нужно перепроверить') }}
-                            </span>
                             {% if data2.get(key + '_url') %}
                               <a class="source-link" href="{{ data2.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
                             {% endif %}
                           </div>
                         {% endif %}
                       </div>
+                    </td>
+
+                    <td>
+                      {% set comparison = comparison_by_field.get(key) %}
+                      {% if comparison and comparison.get('outcome') == 'first_advantage' %}
+                        <div class="value-block">
+                          <div class="value-block__text">{{ comparison.get('title') }}</div>
+                          <div class="value-block__contextual">
+                            <strong>{{ comparison.get('own_value') }}</strong>
+                            <span>vs</span>
+                            <strong>{{ comparison.get('competitor_value') }}</strong>
+                          </div>
+                        </div>
+                      {% else %}
+                        <span class="value-block__text value-block__text--empty">—</span>
+                      {% endif %}
                     </td>
                   </tr>
                 {% endfor %}
@@ -250,7 +261,7 @@
 
       <footer class="page-footer">
         <a class="button button--secondary" href="/">← Другое сравнение</a>
-        <span>Скрипт строится только на данных со статусом «Подтверждено» из официальных источников.</span>
+        <span>Скрипт строится только на подтверждённых условиях из официальных источников.</span>
       </footer>
     </div>
   </main>

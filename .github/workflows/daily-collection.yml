@@ -30,7 +30,12 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      MISTRAL_MODEL: ${{ vars.MISTRAL_MODEL }}
+      OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+      CASCO_AI_PROVIDER: auto
       INSURER: ${{ inputs.insurer }}
       RETRY_FAILED: ${{ inputs.retry_failed }}
       MAX_DOCUMENTS: ${{ inputs.max_documents || '1' }}
