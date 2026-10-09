@@ -500,6 +500,12 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
     if parsed.get("warning"):
         provider_name += "+parser-warning"
 
+    # Force publication for an unchanged checksum: the previous result may
+    # have been seeded or analyzed by an earlier extractor run. Clear this
+    # marker only after the new PDF extraction completed successfully, so a
+    # provider outage never marks incomplete work as freshly analyzed.
+    clear_analyzed_marker(source["id"])
+
     passed = pipeline.revisions.publish(
         source=source,
         document=document,
