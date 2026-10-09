@@ -284,8 +284,6 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
         checksum=checksum,
     )
 
-    clear_analyzed_marker(source["id"])
-
     parsed_doc = pipeline.parser.parse(body)
     parsed = asdict(parsed_doc)
 
@@ -295,12 +293,8 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
     provider_calls = 0
     provider_failures: list[str] = []
 
-    def provider_factory():
-        return get_provider()
-
-    # First, keep the deterministic T-insurance clauses because they are
-    # direct spans of the checked-in PDF. Every other field is independently
-    # re-read from PDF pages by the provider.
+    # Prefer exact, edition-anchored clauses when available. Remaining fields
+    # are sent as one bounded batch per PDF, not one API request per field.
     tasks = []
     for key in FIELD_KEYS:
         deterministic_fact, reason = calibration(
@@ -324,39 +318,147 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
         else:
             tasks.append(key)
 
-    def run_field(key: str):
-        return key, _recheck_field(
+    def validate_one(key: str, fact: dict[str, Any]):
+        return validate_fact(
+            key,
+            fact,
             parsed_doc,
-            key=key,
-            company=insurer.name,
-            insurer_slug=slug,
+            insurer=slug,
             source_url=source_pin.url,
-            provider_factory=provider_factory,
+            source_type="pdf",
+            source_level=1,
+            require_evidence=False,
         )
 
-    # Keep provider concurrency low enough for the shared API quota while
-    # still making the 100+ field recheck practical.
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = [executor.submit(run_field, key) for key in tasks]
-        for future in as_completed(futures):
-            key, result = future.result()
-            facts[key] = dict(result["fact"] or {})
-            methods[key] = "provider_targeted" if result["scope"] == "targeted" else "provider_wide"
+    def fact_rank(key: str, fact: dict[str, Any]) -> int:
+        verdict = validate_one(key, fact)
+        return _fact_rank(fact, verdict)
+
+    # One initial batch uses the provider's per-field page selection and
+    # evidence-passage ranking. If all providers are unavailable, fail this
+    # insurer rather than converting a quota/network failure to not_found.
+    first_facts: dict[str, dict[str, Any]] = {}
+    if tasks:
+        try:
+            first_facts = provider.extract(
+                document=parsed_doc,
+                company=insurer.name,
+                source_url=source_pin.url,
+                field_keys=tuple(tasks),
+            )
+            provider_calls += 1
+        except ProviderUnavailable as exc:
+            raise RuntimeError(
+                f"{slug}: provider batch failed; no recheck results published: "
+                f"{str(exc)[:500]}"
+            ) from None
+
+        for key in tasks:
+            fact = dict(first_facts.get(key) or {})
+            fact.setdefault("answer_status", "answered" if fact.get("value") else "not_found")
+            fact.setdefault("explanation", "")
+            fact.setdefault("missing_information", "")
+            facts[key] = fact
+            methods[key] = "provider_batched"
+            verdict = validate_one(key, fact)
+            diag = getattr(provider, "diagnostics", {})
+            per_key_diag = diag.get(key, {}) if isinstance(diag, dict) else {}
             diagnostics[key] = {
                 "method": methods[key],
-                "context_pages": result["context_pages"],
-                "retried": result["retried"],
-                "first_error": result["first_error"],
-                "second_error": result["second_error"],
-                "first_validation": getattr(result["first_verdict"], "reason", None),
-                "second_validation": getattr(result["second_verdict"], "reason", None),
-                "provider": result["provider"],
+                "context_pages": per_key_diag.get("selected_pages", []),
+                "first_validation": verdict.reason,
+                "provider": getattr(provider, "name", "provider"),
+                "answer_status": fact.get("answer_status"),
             }
-            provider_calls += 1
-            if result["retried"]:
+
+        # Only fields which are missing, partial, conflicting or fail the
+        # evidence gate get a second, wider batch request.
+        wide_keys = [
+            key for key in tasks
+            if fact_rank(key, facts.get(key, {})) < 3
+            or facts.get(key, {}).get("answer_status") in {"not_found", "partial", "conflicting"}
+        ]
+        if wide_keys:
+            wide_pages: dict[int, str] = {}
+            page_map: dict[str, list[int]] = {}
+            for key in wide_keys:
+                context, pages = _field_context(parsed_doc, key, wide=True)
+                page_map[key] = pages
+                if context is not None:
+                    wide_pages.update(context.pages)
+            wider_doc = type(parsed_doc)(
+                pages=dict(sorted(wide_pages.items())) if wide_pages else parsed_doc.pages,
+                parser=parsed_doc.parser,
+                structure=parsed_doc.structure,
+            )
+            try:
+                second_facts = provider.extract(
+                    document=wider_doc,
+                    company=insurer.name,
+                    source_url=source_pin.url,
+                    field_keys=tuple(wide_keys),
+                )
                 provider_calls += 1
-            if result["first_error"] and result["second_error"]:
-                provider_failures.append(f"{key}: {result['second_error']}")
+                for key in wide_keys:
+                    candidate = dict(second_facts.get(key) or {})
+                    candidate.setdefault("answer_status", "answered" if candidate.get("value") else "not_found")
+                    candidate.setdefault("explanation", "")
+                    candidate.setdefault("missing_information", "")
+                    before = facts.get(key, {})
+                    if fact_rank(key, candidate) > fact_rank(key, before):
+                        facts[key] = candidate
+                        methods[key] = "provider_batched_wide"
+                    verdict = validate_one(key, facts.get(key, {}))
+                    diagnostics[key].update({
+                        "method": methods[key],
+                        "wide_context_pages": page_map.get(key, []),
+                        "second_validation": verdict.reason,
+                        "retried": True,
+                    })
+            except ProviderUnavailable as exc:
+                # The initial batch still contains a grounded result for every
+                # requested key. Preserve it and make the failed retry explicit.
+                warning = f"{type(exc).__name__}: {str(exc)[:400]}"
+                provider_failures.append(f"{slug} wide retry: {warning}")
+                for key in wide_keys:
+                    diagnostics[key].update({
+                        "wide_context_pages": page_map.get(key, []),
+                        "second_error": warning,
+                        "retried": True,
+                    })
+
+    # If a new batch did not establish a field, reuse a prior verified fact
+    # only when its quote is still present on the same physical page of these
+    # exact PDF bytes and it passes the current evidence gate.
+    for key in FIELD_KEYS:
+        fact = facts.get(key) or {}
+        verdict = validate_one(key, fact)
+        if verdict.passed and fact.get("answer_status") == "answered":
+            continue
+        prior = active_state(fields[key]["id"])
+        if not prior or prior.get("verification_status") != "verified":
+            continue
+        if prior.get("document_checksum") != checksum:
+            continue
+        prior_fact = {
+            "value": prior.get("value"),
+            "exact_quote": prior.get("quote"),
+            "page": prior.get("page"),
+            "section": prior.get("section"),
+            "answer_status": "answered",
+            "explanation": "Сохранено ранее проверенное значение: цитата найдена в PDF с тем же SHA-256.",
+            "missing_information": "",
+        }
+        prior_verdict = validate_one(key, prior_fact)
+        if prior_verdict.passed:
+            facts[key] = prior_fact
+            methods[key] = "reused_verified_same_checksum"
+            diagnostics[key] = {
+                **diagnostics.get(key, {}),
+                "method": methods[key],
+                "prior_evidence_validation": prior_verdict.reason,
+                "prior_evidence_reused": True,
+            }
 
     candidates = []
     rows_by_key = {}
@@ -380,6 +482,7 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
         rows_by_key[key] = {
             "field": key,
             "value": fact.get("value"),
+            "rechecked_value": fact.get("value"),
             "answer_status": fact.get("answer_status"),
             "method": methods.get(key),
             "explanation": fact.get("explanation"),
@@ -414,6 +517,11 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
         state = active_state(field_id)
         row = dict(rows_by_key[key])
         row["active"] = state
+        # The report's value is the effective table value after publication,
+        # not an empty first-pass model response when a verified same-checksum
+        # fact was retained.
+        if state and state.get("value"):
+            row["value"] = state["value"]
         if state and state["verification_status"] == "verified":
             counts["verified"] += 1
         elif state and state["verification_status"] == "needs_review":
@@ -508,6 +616,7 @@ def main() -> int:
         "not_found": sum(item["counts"]["not_found"] for item in results),
         "failed_validation": sum(item["counts"]["failed_validation"] for item in results),
         "provider_calls": sum(item["provider_calls"] for item in results),
+        "wide_retry_failures": sum(len(item.get("provider_failures", [])) for item in results),
         "errors": len(errors),
     }
     report = {
