@@ -367,7 +367,7 @@ class SalesInsightsService:
         for item in advantages:
             label = str(item.get("label") or item.get("title") or "условию").strip()
             phrase = str(item.get("client_phrase") or item.get("reason") or "").strip()
-            phrase = phrase.replace("первой страховой", company).replace("конкурента", competitor)
+            phrase = phrase.replace("первой страховой", f"компании «{company}»").replace("конкурента", f"компании «{competitor}»")
             if item.get("conditional"):
                 phrase = (
                     f"По параметру «{label}» есть возможное преимущество {company}: "
