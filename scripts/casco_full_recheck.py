@@ -253,6 +253,97 @@ def _recheck_field(
     }
 
 
+
+def _extract_in_batches(
+    provider,
+    document,
+    *,
+    company: str,
+    source_url: str,
+    field_keys: tuple[str, ...],
+    phase: str,
+    batch_size: int = 3,
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], int, dict[str, str]]:
+    """Extract small batches, falling back to a single-field request on batch failure.
+
+    Provider errors are kept separate from a genuine not_found model result.
+    """
+    results: dict[str, dict[str, Any]] = {}
+    diagnostics: dict[str, dict[str, Any]] = {}
+    failures: dict[str, str] = {}
+    calls = 0
+
+    def normalize_fact(key: str, raw: dict[str, Any]) -> dict[str, Any]:
+        fact = dict(raw)
+        fact.setdefault("answer_status", "answered" if fact.get("value") else "not_found")
+        fact.setdefault("explanation", "")
+        fact.setdefault("missing_information", "")
+        return fact
+
+    def record(key: str, fact: dict[str, Any], method: str, batch_error: str | None = None) -> None:
+        results[key] = normalize_fact(key, fact)
+        provider_diag = getattr(provider, "diagnostics", {})
+        per_key = provider_diag.get(key, {}) if isinstance(provider_diag, dict) else {}
+        diagnostics[key] = {
+            "method": method,
+            "context_pages": per_key.get("selected_pages", []),
+            "provider": getattr(provider, "name", "provider"),
+            "answer_status": results[key].get("answer_status"),
+        }
+        if batch_error:
+            diagnostics[key]["batch_error"] = batch_error
+
+    for start in range(0, len(field_keys), batch_size):
+        batch = field_keys[start:start + batch_size]
+        try:
+            calls += 1
+            extracted = provider.extract(
+                document=document,
+                company=company,
+                source_url=source_url,
+                field_keys=tuple(batch),
+            )
+            if not isinstance(extracted, dict) or any(key not in extracted for key in batch):
+                raise ProviderUnavailable("provider response omitted requested field keys")
+            if any(not isinstance(extracted[key], dict) for key in batch):
+                raise ProviderUnavailable("provider field response is not an object")
+            for key in batch:
+                record(key, extracted[key], f"{phase}_batch")
+        except ProviderUnavailable as exc:
+            batch_error = f"{type(exc).__name__}: {str(exc)[:300]}"
+            if len(batch) == 1:
+                key = batch[0]
+                failures[key] = batch_error
+                diagnostics[key] = {
+                    "method": "provider_error",
+                    "provider": getattr(provider, "name", "provider"),
+                    "batch_error": batch_error,
+                }
+                continue
+
+            for key in batch:
+                try:
+                    calls += 1
+                    extracted = provider.extract(
+                        document=document,
+                        company=company,
+                        source_url=source_url,
+                        field_keys=(key,),
+                    )
+                    if not isinstance(extracted, dict) or key not in extracted or not isinstance(extracted[key], dict):
+                        raise ProviderUnavailable("provider response omitted requested field")
+                    record(key, extracted[key], f"{phase}_single_fallback", batch_error)
+                except ProviderUnavailable as single_exc:
+                    failures[key] = f"{type(single_exc).__name__}: {str(single_exc)[:300]}"
+                    diagnostics[key] = {
+                        "method": "provider_error",
+                        "provider": getattr(provider, "name", "provider"),
+                        "batch_error": batch_error,
+                        "single_error": failures[key],
+                    }
+    return results, diagnostics, calls, failures
+
+
 def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> dict[str, Any]:
     insurer = get_insurer(slug)
     pdf_path = DATA_ROOT / slug / "technical.pdf"
@@ -334,98 +425,110 @@ def recheck_insurer(slug: str, provider, pipeline: CascoCollectionPipeline) -> d
         verdict = validate_one(key, fact)
         return _fact_rank(fact, verdict)
 
-    # One initial batch uses the provider's per-field page selection and
-    # evidence-passage ranking. If all providers are unavailable, fail this
-    # insurer rather than converting a quota/network failure to not_found.
-    first_facts: dict[str, dict[str, Any]] = {}
-    if tasks:
-        try:
-            first_facts = provider.extract(
-                document=parsed_doc,
-                company=insurer.name,
-                source_url=source_pin.url,
-                field_keys=tuple(tasks),
-            )
-            provider_calls += 1
-        except ProviderUnavailable as exc:
-            raise RuntimeError(
-                f"{slug}: provider batch failed; no recheck results published: "
-                f"{str(exc)[:500]}"
-            ) from None
+    # Keep every provider request small enough for large technical rulebooks.
+    # If a batch fails (e.g. HTTP 413 or a malformed multi-field response), retry
+    # its fields individually before declaring a provider failure.
+    first_facts, first_diagnostics, first_calls, first_failures = _extract_in_batches(
+        provider,
+        parsed_doc,
+        company=insurer.name,
+        source_url=source_pin.url,
+        field_keys=tuple(tasks),
+        phase="provider_targeted",
+        batch_size=3,
+    ) if tasks else ({}, {}, 0, {})
+    provider_calls += first_calls
+    facts.update(first_facts)
+    diagnostics.update(first_diagnostics)
+    for key, diagnostic in first_diagnostics.items():
+        methods[key] = diagnostic["method"]
 
-        for key in tasks:
-            fact = dict(first_facts.get(key) or {})
-            fact.setdefault("answer_status", "answered" if fact.get("value") else "not_found")
-            fact.setdefault("explanation", "")
-            fact.setdefault("missing_information", "")
-            facts[key] = fact
-            methods[key] = "provider_batched"
-            verdict = validate_one(key, fact)
-            diag = getattr(provider, "diagnostics", {})
-            per_key_diag = diag.get(key, {}) if isinstance(diag, dict) else {}
-            diagnostics[key] = {
-                "method": methods[key],
-                "context_pages": per_key_diag.get("selected_pages", []),
-                "first_validation": verdict.reason,
-                "provider": getattr(provider, "name", "provider"),
-                "answer_status": fact.get("answer_status"),
-            }
+    unresolved_provider_failures = dict(first_failures)
+    for key, error in first_failures.items():
+        facts[key] = {
+            "value": None,
+            "exact_quote": None,
+            "page": None,
+            "section": None,
+            "answer_status": "partial",
+            "explanation": "Извлечение не завершилось из-за ошибки AI-провайдера; отсутствие условия не подтверждено.",
+            "missing_information": "Повторить проверку поля по этому PDF.",
+        }
+        methods[key] = "provider_error"
+        diagnostics[key] = {
+            **diagnostics.get(key, {}),
+            "method": "provider_error",
+            "first_error": error,
+        }
 
-        # Only fields which are missing, partial, conflicting or fail the
-        # evidence gate get a second, wider batch request.
-        wide_keys = [
-            key for key in tasks
-            if fact_rank(key, facts.get(key, {})) < 3
-            or facts.get(key, {}).get("answer_status") in {"not_found", "partial", "conflicting"}
-        ]
-        if wide_keys:
-            wide_pages: dict[int, str] = {}
-            page_map: dict[str, list[int]] = {}
-            for key in wide_keys:
-                context, pages = _field_context(parsed_doc, key, wide=True)
-                page_map[key] = pages
-                if context is not None:
-                    wide_pages.update(context.pages)
-            wider_doc = type(parsed_doc)(
-                pages=dict(sorted(wide_pages.items())) if wide_pages else parsed_doc.pages,
-                parser=parsed_doc.parser,
-                structure=parsed_doc.structure,
-            )
-            try:
-                second_facts = provider.extract(
-                    document=wider_doc,
-                    company=insurer.name,
-                    source_url=source_pin.url,
-                    field_keys=tuple(wide_keys),
-                )
-                provider_calls += 1
-                for key in wide_keys:
-                    candidate = dict(second_facts.get(key) or {})
-                    candidate.setdefault("answer_status", "answered" if candidate.get("value") else "not_found")
-                    candidate.setdefault("explanation", "")
-                    candidate.setdefault("missing_information", "")
-                    before = facts.get(key, {})
-                    if fact_rank(key, candidate) > fact_rank(key, before):
-                        facts[key] = candidate
-                        methods[key] = "provider_batched_wide"
-                    verdict = validate_one(key, facts.get(key, {}))
-                    diagnostics[key].update({
-                        "method": methods[key],
-                        "wide_context_pages": page_map.get(key, []),
-                        "second_validation": verdict.reason,
-                        "retried": True,
-                    })
-            except ProviderUnavailable as exc:
-                # The initial batch still contains a grounded result for every
-                # requested key. Preserve it and make the failed retry explicit.
-                warning = f"{type(exc).__name__}: {str(exc)[:400]}"
-                provider_failures.append(f"{slug} wide retry: {warning}")
-                for key in wide_keys:
-                    diagnostics[key].update({
-                        "wide_context_pages": page_map.get(key, []),
-                        "second_error": warning,
-                        "retried": True,
-                    })
+    # Only fields that remain uncertain get a wider page context. Keep batches
+    # small here too; a single failed wide batch must not erase first-pass answers.
+    wide_keys = [
+        key for key in tasks
+        if fact_rank(key, facts.get(key, {})) < 3
+        or facts.get(key, {}).get("answer_status") in {"not_found", "partial", "conflicting"}
+    ]
+    if wide_keys:
+        wide_pages: dict[int, str] = {}
+        page_map: dict[str, list[int]] = {}
+        for key in wide_keys:
+            context, pages = _field_context(parsed_doc, key, wide=True)
+            page_map[key] = pages
+            if context is not None:
+                wide_pages.update(context.pages)
+        wider_doc = type(parsed_doc)(
+            pages=dict(sorted(wide_pages.items())) if wide_pages else parsed_doc.pages,
+            parser=parsed_doc.parser,
+            structure=parsed_doc.structure,
+        )
+        wide_facts, wide_diagnostics, wide_calls, wide_failures = _extract_in_batches(
+            provider,
+            wider_doc,
+            company=insurer.name,
+            source_url=source_pin.url,
+            field_keys=tuple(wide_keys),
+            phase="provider_wide",
+            batch_size=3,
+        )
+        provider_calls += wide_calls
+
+        for key in wide_keys:
+            if key in wide_facts:
+                candidate = wide_facts[key]
+                before = facts.get(key, {})
+                if methods.get(key) == "provider_error" or fact_rank(key, candidate) > fact_rank(key, before):
+                    facts[key] = candidate
+                    methods[key] = wide_diagnostics.get(key, {}).get("method", "provider_wide_batch")
+                diagnostics[key] = {
+                    **diagnostics.get(key, {}),
+                    "wide_context_pages": page_map.get(key, []),
+                    "second_validation": validate_one(key, facts[key]).reason,
+                    "retried": True,
+                    "wide_method": wide_diagnostics.get(key, {}).get("method"),
+                }
+                unresolved_provider_failures.pop(key, None)
+            elif key in wide_failures:
+                diagnostics[key].update({
+                    "wide_context_pages": page_map.get(key, []),
+                    "second_error": wide_failures[key],
+                    "retried": True,
+                })
+                if key in first_facts:
+                    provider_failures.append(f"{slug} wide retry {key}: {wide_failures[key]}")
+                else:
+                    unresolved_provider_failures[key] = wide_failures[key]
+
+    # Do not publish a completed revision when both the targeted and wider
+    # extraction failed. This prevents provider outages from being stored as
+    # not_found or marking the unchanged PDF as fully analyzed.
+    if unresolved_provider_failures:
+        details = "; ".join(
+            f"{key}: {error}" for key, error in unresolved_provider_failures.items()
+        )
+        raise RuntimeError(
+            f"{slug}: provider extraction failed for {len(unresolved_provider_failures)} fields; "
+            f"no recheck results published: {details[:900]}"
+        )
 
     # If a new batch did not establish a field, reuse a prior verified fact
     # only when its quote is still present on the same physical page of these
