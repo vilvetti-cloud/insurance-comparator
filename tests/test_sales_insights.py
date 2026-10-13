@@ -246,7 +246,7 @@ class SalesInsightsTests(unittest.TestCase):
             "terrorism",
             field_data(
                 "terrorism",
-                "Риск можно включить отдельным дополнительным соглашением.",
+                "Терроризм можно включить отдельным дополнительным соглашением.",
             ),
             field_data("terrorism", "Терроризм входит в покрытие."),
         )
