@@ -35,19 +35,19 @@
           <div class="eyebrow">Подготовка к разговору</div>
           <h1>{{ company1 }} <span class="vs">vs</span> {{ company2 }}</h1>
           <p class="result-hero__lead">
-            Сначала — аргументы для клиента. Полные условия и источники спрятаны ниже, чтобы не перегружать экран.
+            Сравнение по 10 условиям. Короткий вывод — в таблице; полные формулировки и источники раскрываются по каждому параметру.
           </p>
         </div>
 
         <div class="coverage-strip" aria-label="Покрытие данных">
           <div class="coverage-strip__item">
             <strong>{{ found1 }}/10</strong>
-            <span>{{ company1 }}</span>
+            <span>{{ company1 }} · условия</span>
           </div>
           <div class="coverage-strip__divider"></div>
           <div class="coverage-strip__item">
             <strong>{{ found2 }}/10</strong>
-            <span>{{ company2 }}</span>
+            <span>{{ company2 }} · условия</span>
           </div>
         </div>
       </section>
@@ -122,19 +122,18 @@
       {% else %}
       <section class="comparison-not-ready">
         <span class="section-kicker">Сравнение пока не готово</span>
-        <h2>Недостаточно данных по {{ company2 }}</h2>
+        <h2>Пока недостаточно подтверждённых условий для аргументов продажи</h2>
         <p>
-          У компаний пока нет ни одного подтверждённого параметра, который можно корректно сопоставить.
-          Все 10 полей и причины незаполненных значений доступны в таблице ниже.
+          Сейчас система не может доказательно выделить преимущество первой компании. Это не означает, что у неё нет преимуществ: часть условий ещё не подтверждена или не сопоставима. Проверьте пояснения в строках таблицы.
         </p>
       </section>
       {% endif %}
 
-      <details class="details-panel">
+      <details class="details-panel" open>
         <summary class="details-panel__summary">
           <div>
-            <strong>Подробное сравнение условий</strong>
-            <span>Все 10 параметров · {{ comparable_count }} подтверждённых сопоставимых</span>
+            <strong>Сравнение условий — главное</strong>
+            <span>10 параметров · краткие ответы, пояснения и источники по раскрытию</span>
           </div>
           <span class="details-panel__chevron" aria-hidden="true">⌄</span>
         </summary>
@@ -170,8 +169,9 @@
                     <td class="primary-cell">
                       <div class="value-block">
                         <div class="value-block__text {% if value1 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value1 }}
+                          {{ value1 | truncate(190, True, "…") }}
                         </div>
+                        {% if value1 != "Не найдено" and value1|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value1 }}</p></details>{% endif %}
                         {% if data1.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
@@ -200,8 +200,9 @@
                     <td>
                       <div class="value-block">
                         <div class="value-block__text {% if value2 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value2 }}
+                          {{ value2 | truncate(190, True, "…") }}
                         </div>
+                        {% if value2 != "Не найдено" and value2|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value2 }}</p></details>{% endif %}
                         {% if data2.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
@@ -230,16 +231,21 @@
                     <td>
                       {% set comparison = comparison_by_field.get(key) %}
                       {% if comparison and comparison.get('outcome') == 'first_advantage' %}
-                        <div class="value-block">
-                          <div class="value-block__text">{{ comparison.get('title') }}</div>
-                          <div class="value-block__contextual">
-                            <strong>{{ comparison.get('own_value') }}</strong>
-                            <span>vs</span>
-                            <strong>{{ comparison.get('competitor_value') }}</strong>
-                          </div>
+                        <div class="comparison-outcome comparison-outcome--first">
+                          <strong>{{ comparison.get('title') or 'Преимущество ' ~ company1 }}</strong>
+                          <span>{{ comparison.get('reason') or 'Подтверждённое отличие в пользу первой компании.' }}</span>
                         </div>
+                      {% elif comparison and comparison.get('outcome') == 'competitor_advantage' %}
+                        <div class="comparison-outcome comparison-outcome--other">
+                          <strong>Сильнее условие {{ company2 }}</strong>
+                          <span>{{ comparison.get('reason') or 'По этому параметру преимущество у конкурента.' }}</span>
+                        </div>
+                      {% elif comparison and comparison.get('outcome') == 'equal' %}
+                        <div class="comparison-outcome"><strong>Сопоставимые условия</strong><span>{{ comparison.get('reason') or 'Значения совпадают по проверенному критерию.' }}</span></div>
+                      {% elif comparison %}
+                        <div class="comparison-outcome comparison-outcome--unknown"><strong>Нельзя уверенно сравнить</strong><span>{{ comparison.get('reason') or 'Значения требуют уточнения по условиям программы или договора.' }}</span></div>
                       {% else %}
-                        <span class="value-block__text value-block__text--empty">—</span>
+                        <div class="comparison-outcome comparison-outcome--unknown"><strong>Нет подтверждённого вывода</strong><span>Одно или оба значения пока не допущены к сравнению. Причина проверки указана рядом с условием.</span></div>
                       {% endif %}
                     </td>
                   </tr>
