@@ -121,7 +121,12 @@ def compare():
     comparable_fields = [
         field
         for field in FIELD_KEYS
-        if data1.get(f"{field}_sales_eligible") and data2.get(f"{field}_sales_eligible")
+        if data1.get(field) not in (None, "", "Не найдено")
+        and data2.get(field) not in (None, "", "Не найдено")
+        and data1.get(f"{field}_quality_status") in {"confirmed", "conditional"}
+        and data2.get(f"{field}_quality_status") in {"confirmed", "conditional"}
+        and data1.get(f"{field}_source_level") in {1, 2}
+        and data2.get(f"{field}_source_level") in {1, 2}
     ]
     comparison_ready = len(comparable_fields) > 0
 
