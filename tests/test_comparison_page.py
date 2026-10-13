@@ -109,5 +109,16 @@ class ComparisonPageTests(unittest.TestCase):
         analyze.assert_not_called()
 
 
+    def test_data_report_publishes_links_to_the_110_field_audit(self):
+        with patch("web_app.data_quality_report_service.load", return_value={}):
+            response = app.test_client().get("/data-report")
+        page = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Эталонное заполнение 110 полей КАСКО", page)
+        self.assertIn("casco-110-fields-first-pass.md", page)
+        self.assertIn("casco-110-fields-first-pass.csv", page)
+        self.assertIn("casco-comparison-rules.md", page)
+
+
 if __name__ == "__main__":
     unittest.main()
