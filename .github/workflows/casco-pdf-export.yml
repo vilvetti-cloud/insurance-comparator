@@ -18,8 +18,9 @@ jobs:
           mkdir -p /tmp/casco-pdfs
           find data/sources -type f -iname '*.pdf' -print0 | xargs -0 zip -q -9 /tmp/casco-pdfs/casco-official-pdfs.zip
           unzip -l /tmp/casco-pdfs/casco-official-pdfs.zip
+          cp reports/local-casco-analysis/analysis.json /tmp/casco-pdfs/analysis.json
       - uses: actions/upload-artifact@v4
         with:
           name: casco-official-pdfs
-          path: /tmp/casco-pdfs/casco-official-pdfs.zip
+          path: /tmp/casco-pdfs/
           retention-days: 2
