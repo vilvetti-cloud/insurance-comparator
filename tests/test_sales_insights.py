@@ -314,6 +314,8 @@ class SalesInsightsTests(unittest.TestCase):
         result = self.analyze("gap", own, other)
         self.assertEqual(len(result["conditional_advantages"]), 1)
         self.assertIn("только после включения опции", result["conditional_advantages"][0]["client_phrase"])
+        self.assertEqual(result["conditional_advantages"][0]["title"], "GAP — отдельная опция")
+        self.assertNotIn("включён в покрытие", result["conditional_advantages"][0]["title"])
 
 
     def test_optional_terrorism_advantage_does_not_claim_it_is_included(self):
