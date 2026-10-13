@@ -42,21 +42,40 @@ class SalesInsightsService:
         for key, label in field_labels.items():
             own = self._value(data, key)
             other = self._value(competitor_data, key)
-            if (
-                own is None
-                or other is None
-                or not self._comparison_eligible(data, key)
-                or not self._comparison_eligible(competitor_data, key)
-            ):
-                continue
+            if key == "total_loss" and (own is None or other is None):
+                known_data = data if own is not None else competitor_data
+                if own is None and other is None:
+                    continue
+                if not self._comparison_eligible(known_data, key):
+                    continue
+                own_for_compare = own or "Порог/база расчёта не установлены в проверенных источниках"
+                other_for_compare = other or "Порог/база расчёта не установлены в проверенных источниках"
+            elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"} and (own is None or other is None):
+                known_data = data if own is not None else competitor_data
+                if own is None and other is None:
+                    continue
+                if not self._comparison_eligible(known_data, key):
+                    continue
+                own_for_compare = own or "В проверенных источниках не установлено"
+                other_for_compare = other or "В проверенных источниках не установлено"
+            else:
+                if (
+                    own is None
+                    or other is None
+                    or not self._comparison_eligible(data, key)
+                    or not self._comparison_eligible(competitor_data, key)
+                ):
+                    continue
+                own_for_compare = own
+                other_for_compare = other
 
             comparison = self._compare(
                 key=key,
                 label=label,
                 company=company,
                 competitor=competitor,
-                own=own,
-                other=other,
+                own=own_for_compare,
+                other=other_for_compare,
             )
             if comparison is None:
                 continue
@@ -715,6 +734,23 @@ class SalesInsightsService:
     def _compare_coverage(self, key, label, own, other, own_l, other_l):
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
+        if own_level == 1 and other_level is None:
+            advantage = self._advantage(
+                key=key, label=label, title=self._coverage_title(key, own_level),
+                own=own, other=other,
+                basis=f"{key}_optional_availability_vs_unestablished",
+                reason="У первой страховой официально подтверждена возможность подключить отдельное покрытие; по проверенным данным конкурента сопоставимая возможность не установлена.",
+                client_phrase=f"У первой страховой можно подключить { {'gap':'GAP-защиту','self_ignition':'покрытие самовозгорания','terrorism':'террористический риск','drone':'ущерб от БПЛА','tow_truck':'эвакуацию'}.get(key, 'это условие') } как отдельную опцию или по дополнительному условию. По проверенным источникам возможность у конкурента не установлена — это не означает, что она точно отсутствует. Преимущество действует только после включения опции в договор.",
+            )
+            advantage["conditional"] = True
+            return advantage
+        if own_level is None and other_level == 1:
+            return self._comparison(
+                key, label, "competitor_advantage",
+                f"{key}_optional_availability_vs_unestablished",
+                own, other,
+                "У конкурента официально подтверждена возможность подключить отдельное покрытие; по проверенным данным первой страховой сопоставимая возможность не установлена.",
+            )
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 title = self._coverage_title(key, own_level)
@@ -775,18 +811,35 @@ class SalesInsightsService:
     def _compare_total_loss(self, label, own, other, own_l, other_l):
         own_threshold = self._total_loss_threshold(own_l)
         other_threshold = self._total_loss_threshold(other_l)
+        own_basis = self._total_loss_basis(own_l)
+        other_basis = self._total_loss_basis(other_l)
+
+        # If only one insurer publishes an identifiable threshold and its
+        # calculation basis, count that as a transparency advantage. This
+        # does not claim that the other insurer has no such rule.
+        if own_threshold and own_basis and (not other_threshold or not other_basis):
+            return self._advantage(
+                key="total_loss", label=label, title="Порог полной гибели и база расчёта указаны",
+                own=own, other=other, basis="total_loss_basis_confirmed_vs_unestablished",
+                reason="У первой страховой в проверенном источнике установлены порог полной гибели и база расчёта; у конкурента эти параметры не удалось установить. Это преимущество прозрачности условий, а не доказательство отсутствия правила у конкурента.",
+                client_phrase="У первой страховой в проверенных условиях указан порог полной гибели и база его расчёта. В доступных проверенных материалах конкурента эти параметры не установлены; это не означает, что соответствующее условие отсутствует.",
+            )
+        if other_threshold and other_basis and (not own_threshold or not own_basis):
+            return self._comparison(
+                "total_loss", label, "competitor_advantage",
+                "total_loss_basis_confirmed_vs_unestablished", own, other,
+                "У конкурента указан порог полной гибели и база расчёта; у первой страховой эти параметры не удалось установить. Это преимущество прозрачности условий, а не доказательство отсутствия правила у первой страховой.",
+            )
         if not own_threshold or not other_threshold:
             return self._comparison(
                 "total_loss", label, "incomparable", "total_loss_threshold_missing",
                 own, other, "Нельзя сопоставить процентный порог полной гибели.",
             )
-        own_basis = self._total_loss_basis(own_l)
-        other_basis = self._total_loss_basis(other_l)
         if not own_basis or not other_basis or own_basis != other_basis:
             return self._comparison(
                 "total_loss", label, "incomparable", "total_loss_basis_differs_or_missing",
                 own, other,
-                "База расчёта полной гибели отсутствует хотя бы в одном ответе или отличается; сравнивать только проценты небезопасно.",
+                "Базы расчёта отличаются или не установлены; проценты нельзя напрямую сопоставлять. Преимущество прозрачности отмечается отдельно, если оно подтверждено.",
             )
         if own_threshold.amount > other_threshold.amount:
             return self._advantage(
