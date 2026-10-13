@@ -263,5 +263,15 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
 
 
+    def test_total_loss_missing_calculation_basis_is_incomparable(self):
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Полная гибель — 75%."),
+            field_data("total_loss", "Полная гибель — 70% от страховой суммы."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+
+
 if __name__ == "__main__":
     unittest.main()
