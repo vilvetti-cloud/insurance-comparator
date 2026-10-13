@@ -717,8 +717,14 @@ class SalesInsightsService:
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 title = self._coverage_title(key, own_level)
-                if key == "terrorism" and re.search(r"только при наличии отдельного дополнительного соглашения", own_l):
-                    title = "Терроризм — только по допсоглашению"
+                if own_level == 1:
+                    title = {
+                        "gap": "GAP — отдельная опция",
+                        "self_ignition": "Самовозгорание — по допусловию",
+                        "terrorism": "Терроризм — по допсоглашению",
+                        "drone": "БПЛА — по допусловию",
+                        "tow_truck": "Эвакуация — дополнительная опция",
+                    }.get(key, title)
                 return self._advantage(
                     key=key, label=label, title=title,
                     own=own, other=other,
@@ -1031,10 +1037,11 @@ class SalesInsightsService:
     @staticmethod
     def _coverage_title(key: str, level: int) -> str:
         return {
-            "gap": "GAP доступен",
+            "gap": "GAP включён в покрытие",
             "self_ignition": "Самовозгорание покрывается",
-            "terrorism": "Терроризм доступен в покрытии",
-            "drone": "БПЛА доступен в покрытии",
+            "terrorism": "Терроризм включён в покрытие",
+            "drone": "БПЛА включён в покрытие",
+            "tow_truck": "Эвакуация предусмотрена",
         }.get(key, "Покрытие доступно")
 
     @staticmethod
