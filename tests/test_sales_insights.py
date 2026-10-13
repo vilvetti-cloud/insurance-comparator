@@ -294,8 +294,12 @@ class SalesInsightsTests(unittest.TestCase):
             "total_loss_source_level": 1,
         }
         result = self.analyze("total_loss", own, other)
-        self.assertEqual(result["advantages"][0]["comparison_basis"], "total_loss_basis_confirmed_vs_unestablished")
-        self.assertIn("не означает", result["advantages"][0]["client_phrase"])
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(
+            result["conditional_advantages"][0]["comparison_basis"],
+            "total_loss_basis_confirmed_vs_unestablished",
+        )
+        self.assertIn("не означает", result["conditional_advantages"][0]["client_phrase"])
 
 
     def test_optional_gap_is_reported_as_conditional_advantage_when_competitor_is_unestablished(self):
