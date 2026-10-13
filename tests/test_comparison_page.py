@@ -57,8 +57,7 @@ class ComparisonPageTests(unittest.TestCase):
 
         with patch("web_app.comparison_service.load_snapshot", return_value=snapshot), \
              patch("web_app.data_quality_report_service.load", return_value=report), \
-             patch("web_app.sales_insights_service.analyze", return_value=sales), \
-             patch("web_app.sales_script_ai_service.enrich", return_value=sales):
+             patch("web_app.sales_insights_service.analyze", return_value=sales):
             response = app.test_client().get("/compare", query_string={
                 "company1": first, "company2": second,
             })
@@ -104,10 +103,21 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn("Цитата модели не совпала", page)
         self.assertIn("Требует проверки", page)
         self.assertIn("0/10", page)
-        self.assertIn("Все 10 параметров", page)
+        self.assertIn("Сравнение по 10 условиям.", page)
         for label in FIELD_LABELS.values():
             self.assertIn(label, page)
         analyze.assert_not_called()
+
+
+    def test_data_report_publishes_links_to_the_110_field_audit(self):
+        with patch("web_app.data_quality_report_service.load", return_value={}):
+            response = app.test_client().get("/data-report")
+        page = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Эталонное заполнение 110 полей КАСКО", page)
+        self.assertIn("casco-110-fields-first-pass.md", page)
+        self.assertIn("casco-110-fields-first-pass.csv", page)
+        self.assertIn("casco-comparison-rules.md", page)
 
 
 if __name__ == "__main__":

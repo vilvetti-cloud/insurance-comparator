@@ -219,5 +219,119 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
 
 
+    def test_separate_gap_risk_is_optional_not_included(self):
+        level = self.service._coverage_level_v2("gap", "GAP предусмотрен как отдельный риск.")
+        self.assertEqual(level, 1)
+
+    def test_terrorism_by_additional_agreement_is_optional(self):
+        level = self.service._coverage_level_v2(
+            "terrorism",
+            "Террористический риск можно включить отдельным дополнительным соглашением.",
+        )
+        self.assertEqual(level, 1)
+
+    def test_explicitly_included_gap_is_higher_level_than_optional_gap(self):
+        result = self.analyze(
+            "gap",
+            field_data("gap", "GAP включен в покрытие."),
+            field_data("gap", "GAP доступен за дополнительную плату."),
+        )
+        self.assertEqual(
+            result["advantages"][0]["comparison_basis"],
+            "gap_coverage_level_2_vs_1",
+        )
+
+    def test_optional_cover_does_not_beat_included_cover(self):
+        result = self.analyze(
+            "terrorism",
+            field_data(
+                "terrorism",
+                "Терроризм можно включить отдельным дополнительным соглашением.",
+            ),
+            field_data("terrorism", "Терроризм входит в покрытие."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+
+    def test_unmentioned_gap_is_not_treated_as_excluded(self):
+        result = self.analyze(
+            "gap",
+            field_data("gap", "GAP предусмотрен как отдельный риск."),
+            field_data("gap", "В проверенном фрагменте GAP не упоминается."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(len(result["conditional_advantages"]), 1)
+        self.assertEqual(
+            result["conditional_advantages"][0]["comparison_basis"],
+            "gap_optional_availability_vs_unestablished",
+        )
+        self.assertIn("не означает, что она точно отсутствует", result["conditional_advantages"][0]["client_phrase"])
+
+
+    def test_total_loss_missing_calculation_basis_is_incomparable(self):
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Полная гибель — 75%."),
+            field_data("total_loss", "Полная гибель — 70% от страховой суммы."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "total_loss_basis_confirmed_vs_unestablished",
+        )
+
+
+    def test_total_loss_known_basis_beats_missing_competitor_value(self):
+        own = field_data(
+            "total_loss",
+            "Полная гибель — 75% от страховой суммы.",
+        )
+        other = {
+            "total_loss": "Не найдено",
+            "total_loss_quality_status": "not_found",
+            "total_loss_sales_eligible": False,
+            "total_loss_source_level": 1,
+        }
+        result = self.analyze("total_loss", own, other)
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(
+            result["conditional_advantages"][0]["comparison_basis"],
+            "total_loss_basis_confirmed_vs_unestablished",
+        )
+        self.assertIn("не означает", result["conditional_advantages"][0]["client_phrase"])
+
+
+    def test_optional_gap_is_reported_as_conditional_advantage_when_competitor_is_unestablished(self):
+        own = field_data("gap", "GAP предусмотрен как отдельный риск.", quality="conditional", eligible=False)
+        own["gap_source_level"] = 1
+        other = {
+            "gap": "Не найдено",
+            "gap_quality_status": "not_found",
+            "gap_sales_eligible": False,
+            "gap_source_level": 1,
+        }
+        result = self.analyze("gap", own, other)
+        self.assertEqual(len(result["conditional_advantages"]), 1)
+        self.assertIn("только после включения опции", result["conditional_advantages"][0]["client_phrase"])
+
+
+    def test_optional_terrorism_advantage_does_not_claim_it_is_included(self):
+        result = self.analyze(
+            "terrorism",
+            field_data(
+                "terrorism",
+                "Терроризм можно включить отдельным дополнительным соглашением.",
+            ),
+            field_data("terrorism", "Терроризм исключен из страховых случаев."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(len(result["conditional_advantages"]), 1)
+        phrase = result["conditional_advantages"][0]["client_phrase"]
+        self.assertIn("можно включить", phrase)
+        self.assertIn("только если риск явно включён в договор", phrase)
+        self.assertNotIn("входит в покрытие", phrase)
+
+
 if __name__ == "__main__":
     unittest.main()

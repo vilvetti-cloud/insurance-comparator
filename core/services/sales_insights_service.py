@@ -42,21 +42,40 @@ class SalesInsightsService:
         for key, label in field_labels.items():
             own = self._value(data, key)
             other = self._value(competitor_data, key)
-            if (
-                own is None
-                or other is None
-                or not self._comparison_eligible(data, key)
-                or not self._comparison_eligible(competitor_data, key)
-            ):
-                continue
+            if key == "total_loss" and (own is None or other is None):
+                known_data = data if own is not None else competitor_data
+                if own is None and other is None:
+                    continue
+                if not self._comparison_eligible(known_data, key):
+                    continue
+                own_for_compare = own or "Порог/база расчёта не установлены в проверенных источниках"
+                other_for_compare = other or "Порог/база расчёта не установлены в проверенных источниках"
+            elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"} and (own is None or other is None):
+                known_data = data if own is not None else competitor_data
+                if own is None and other is None:
+                    continue
+                if not self._comparison_eligible(known_data, key):
+                    continue
+                own_for_compare = own or "В проверенных источниках не установлено"
+                other_for_compare = other or "В проверенных источниках не установлено"
+            else:
+                if (
+                    own is None
+                    or other is None
+                    or not self._comparison_eligible(data, key)
+                    or not self._comparison_eligible(competitor_data, key)
+                ):
+                    continue
+                own_for_compare = own
+                other_for_compare = other
 
             comparison = self._compare(
                 key=key,
                 label=label,
                 company=company,
                 competitor=competitor,
-                own=own,
-                other=other,
+                own=own_for_compare,
+                other=other_for_compare,
             )
             if comparison is None:
                 continue
@@ -64,6 +83,7 @@ class SalesInsightsService:
             is_conditional = (
                 data.get(f"{key}_quality_status") != "confirmed"
                 or competitor_data.get(f"{key}_quality_status") != "confirmed"
+                or bool(comparison.get("conditional"))
             )
             if is_conditional:
                 comparison["conditional"] = True
@@ -714,18 +734,46 @@ class SalesInsightsService:
     def _compare_coverage(self, key, label, own, other, own_l, other_l):
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
+        if own_level == 1 and other_level is None:
+            advantage = self._advantage(
+                key=key, label=label, title=self._coverage_title(key, own_level),
+                own=own, other=other,
+                basis=f"{key}_optional_availability_vs_unestablished",
+                reason="У первой страховой официально подтверждена возможность подключить отдельное покрытие; по проверенным данным конкурента сопоставимая возможность не установлена.",
+                client_phrase=f"У первой страховой можно подключить { {'gap':'GAP-защиту','self_ignition':'покрытие самовозгорания','terrorism':'террористический риск','drone':'ущерб от БПЛА','tow_truck':'эвакуацию'}.get(key, 'это условие') } как отдельную опцию или по дополнительному условию. По проверенным источникам возможность у конкурента не установлена — это не означает, что она точно отсутствует. Преимущество действует только после включения опции в договор.",
+            )
+            advantage["conditional"] = True
+            return advantage
+        if own_level is None and other_level == 1:
+            return self._comparison(
+                key, label, "competitor_advantage",
+                f"{key}_optional_availability_vs_unestablished",
+                own, other,
+                "У конкурента официально подтверждена возможность подключить отдельное покрытие; по проверенным данным первой страховой сопоставимая возможность не установлена.",
+            )
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 title = self._coverage_title(key, own_level)
-                if key == "terrorism" and re.search(r"только при наличии отдельного дополнительного соглашения", own_l):
-                    title = "Терроризм — только по допсоглашению"
-                return self._advantage(
+                if own_level == 1:
+                    title = {
+                        "gap": "GAP — отдельная опция",
+                        "self_ignition": "Самовозгорание — по допусловию",
+                        "terrorism": "Терроризм — по допсоглашению",
+                        "drone": "БПЛА — по допусловию",
+                        "tow_truck": "Эвакуация — дополнительная опция",
+                    }.get(key, title)
+                advantage = self._advantage(
                     key=key, label=label, title=title,
                     own=own, other=other,
                     basis=f"{key}_coverage_level_{own_level}_vs_{other_level}",
                     reason="У первой страховой более высокий уровень доступности покрытия.",
-                    client_phrase=self._coverage_client_phrase(key, other_level),
+                    client_phrase=self._coverage_client_phrase(key, own_level, other_level),
                 )
+                # Add-on availability is a real distinction, but not an
+                # unconditional policy benefit until the option is selected.
+                if own_level == 1:
+                    advantage["conditional"] = True
+                return advantage
             return self._comparison(
                 key, label, "competitor_advantage",
                 f"{key}_coverage_level_{own_level}_vs_{other_level}",
@@ -763,17 +811,35 @@ class SalesInsightsService:
     def _compare_total_loss(self, label, own, other, own_l, other_l):
         own_threshold = self._total_loss_threshold(own_l)
         other_threshold = self._total_loss_threshold(other_l)
+        own_basis = self._total_loss_basis(own_l)
+        other_basis = self._total_loss_basis(other_l)
+
+        # If only one insurer publishes an identifiable threshold and its
+        # calculation basis, count that as a transparency advantage. This
+        # does not claim that the other insurer has no such rule.
+        if own_threshold and own_basis and (not other_threshold or not other_basis):
+            return self._advantage(
+                key="total_loss", label=label, title="Порог полной гибели и база расчёта указаны",
+                own=own, other=other, basis="total_loss_basis_confirmed_vs_unestablished",
+                reason="У первой страховой в проверенном источнике установлены порог полной гибели и база расчёта; у конкурента эти параметры не удалось установить. Это преимущество прозрачности условий, а не доказательство отсутствия правила у конкурента.",
+                client_phrase="У первой страховой в проверенных условиях указан порог полной гибели и база его расчёта. В доступных проверенных материалах конкурента эти параметры не установлены; это не означает, что соответствующее условие отсутствует.",
+            )
+        if other_threshold and other_basis and (not own_threshold or not own_basis):
+            return self._comparison(
+                "total_loss", label, "competitor_advantage",
+                "total_loss_basis_confirmed_vs_unestablished", own, other,
+                "У конкурента указан порог полной гибели и база расчёта; у первой страховой эти параметры не удалось установить. Это преимущество прозрачности условий, а не доказательство отсутствия правила у первой страховой.",
+            )
         if not own_threshold or not other_threshold:
             return self._comparison(
                 "total_loss", label, "incomparable", "total_loss_threshold_missing",
                 own, other, "Нельзя сопоставить процентный порог полной гибели.",
             )
-        own_basis = self._total_loss_basis(own_l)
-        other_basis = self._total_loss_basis(other_l)
-        if own_basis and other_basis and own_basis != other_basis:
+        if not own_basis or not other_basis or own_basis != other_basis:
             return self._comparison(
-                "total_loss", label, "incomparable", "total_loss_basis_differs",
-                own, other, "Порог полной гибели рассчитывается от разных баз.",
+                "total_loss", label, "incomparable", "total_loss_basis_differs_or_missing",
+                own, other,
+                "Базы расчёта отличаются или не установлены; проценты нельзя напрямую сопоставлять. Преимущество прозрачности отмечается отдельно, если оно подтверждено.",
             )
         if own_threshold.amount > other_threshold.amount:
             return self._advantage(
@@ -968,61 +1034,100 @@ class SalesInsightsService:
 
     @staticmethod
     def _coverage_level_v2(key: str, text: str) -> int | None:
-        negative_patterns = {
-            "gap": r"(?:\bgap\b|гэп)[^.;]{0,80}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|"
-                   r"(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,80}(?:\bgap\b|гэп)",
-            "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,80}(?:не\s+покрыв|исключ)|"
-                             r"(?:не\s+покрыв|исключ)[^.;]{0,80}(?:самовозгор|возгоран)",
-            "terrorism": r"террор[^.;]{0,80}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|"
-                         r"(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,80}террор",
-            "drone": r"(?:бпла|дрон|беспилот)[^.;]{0,80}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|"
-                     r"(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,80}(?:бпла|дрон|беспилот)",
-            "tow_truck": r"эвакуац\w*[^.;]{0,80}(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)|"
-                         r"(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)[^.;]{0,80}эвакуац",
+        """Return a conservative availability level for a specific coverage.
+
+        0 = explicitly excluded; 1 = optional/add-on/extra agreement; 2 = included
+        in the described cover. Mere mention of a separate product/risk is not
+        evidence that it is included in the base policy.
+        """
+        terms = {
+            "gap": r"\bgap\b|гэп|сохран\w*\s+стоим",
+            "self_ignition": r"самовозгор|возгоран",
+            "terrorism": r"террор",
+            "drone": r"бпла|дрон|беспилот",
+            "tow_truck": r"эвакуац|эвакуатор",
         }
+        text = text.lower()
+        term = terms.get(key)
+        if not term or not re.search(term, text):
+            return None
+
+        negative_patterns = {
+            "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
+            "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",
+            "terrorism": r"террор[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,100}террор",
+            "drone": r"(?:бпла|дрон|беспилот)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,100}(?:бпла|дрон|беспилот)",
+            "tow_truck": r"эвакуац\w*[^.;]{0,100}(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)|(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)[^.;]{0,100}эвакуац",
+        }
+        # Do not let "can be included by addendum" be mistaken for a blanket
+        # exclusion just because the sentence also contains "not included".
+        optional = bool(re.search(
+            r"только\s+(?:при\s+)?(?:наличии|оформлении|включении)\s+(?:отдельн\w*\s+)?(?:дополнительн\w*\s+)?(?:соглашени\w*|опци\w*|услови\w*)|"
+            r"может\s+быть\s+включен\w*[^.;]{0,80}(?:договор|соглашени|опци)|"
+            r"можно\s+включить[^.;]{0,80}(?:договор|соглашени|опци)|"
+            r"за\s+доп(?:олнительн\w*)?\s+плат|доплат[ау]|платн\w*|"
+            r"отдельн\w*\s+(?:дополнительн\w*\s+)?риск|"
+            r"дополнительн\w*\s+(?:страхов\w*\s+)?опци\w*",
+            text,
+        ))
+        # A specific opt-in exception takes precedence over broad exclusion
+        # wording; all other explicit exclusions remain level 0.
+        if optional and re.search(r"кроме[^.;]{0,100}(?:соглашени|договор)|может\s+быть\s+включен|можно\s+включить|только\s+(?:при\s+)?(?:наличии|оформлении|включении)", text):
+            return 1
         pattern = negative_patterns.get(key)
         if pattern and re.search(pattern, text):
             return 0
-
-        paid = bool(re.search(r"за\s+доп(?:олнительн\w*)?\s+плат|доплат[ау]|платн\w*", text))
-        positive = bool(
-            re.search(
-                r"входит|включен|включён|предусмотрен|предусмотрено|"
-                r"покрыва\w*|возмеща\w*|предоставля\w*|застрахова\w*|"
-                r"отдельн\w+\s+риск",
-                text,
-            )
-        )
-        if paid:
+        if optional:
             return 1
-        if positive:
+
+        included = bool(re.search(
+            r"входит\s+в\s+(?:страхов\w*\s+)?покрыти|"
+            r"включен\w*\s+в\s+(?:страхов\w*\s+)?покрыти|"
+            r"(?<!не\s)включен\w*\b|"
+            r"покрыти\w*\s+распространяется|"
+            r"прямо\s+предусмотрен\w*\s+(?:договор\w*\s+)?(?:страхов\w*\s+)?покрыти|"
+            r"страхов\w*\s+случа\w*[^.;]{0,80}(?:является|признается|признаётся)",
+            text,
+        ))
+        if included:
             return 2
+
+        # General "covered/compensated" wording is weaker than an explicit
+        # inclusion and can be ambiguous when the same paragraph lists options.
         return None
 
     @staticmethod
     def _coverage_title(key: str, level: int) -> str:
         return {
-            "gap": "GAP доступен",
+            "gap": "GAP включён в покрытие",
             "self_ignition": "Самовозгорание покрывается",
-            "terrorism": "Терроризм доступен в покрытии",
-            "drone": "БПЛА доступен в покрытии",
+            "terrorism": "Терроризм включён в покрытие",
+            "drone": "БПЛА включён в покрытие",
+            "tow_truck": "Эвакуация предусмотрена",
         }.get(key, "Покрытие доступно")
 
     @staticmethod
-    def _coverage_client_phrase(key: str, competitor_level: int | None) -> str:
+    def _coverage_client_phrase(
+        key: str,
+        own_level: int,
+        competitor_level: int | None,
+    ) -> str:
         label = {
-            "gap": "GAP-защита",
-            "self_ignition": "самовозгорание",
+            "gap": "GAP-защиту",
+            "self_ignition": "покрытие самовозгорания",
             "terrorism": "террористический риск",
             "drone": "ущерб от БПЛА",
-        }.get(key, "условие")
-        if competitor_level == 0 and key == "terrorism":
-            return "У первой страховой террористический риск можно включить отдельным дополнительным соглашением; у конкурента он исключён из страховых случаев. Это преимущество работает только если риск явно включён в договор."
-        if competitor_level == 0:
-            return f"У первой страховой {label} входит в покрытие, а у конкурента это условие исключено."
-        if competitor_level == 1:
-            return f"У первой страховой {label} входит в подтверждённые условия без отдельной доплаты, а у конкурента требуется дополнительная оплата."
-        return f"У первой страховой {label} доступно на более высоком уровне."
+            "tow_truck": "эвакуацию",
+        }.get(key, "это условие")
+        if own_level == 1 and competitor_level == 0:
+            if key == "terrorism":
+                return "У первой страховой террористический риск можно включить отдельным дополнительным соглашением; у конкурента он исключён из страховых случаев. Это преимущество работает только если риск явно включён в договор."
+            return f"У первой страховой можно подключить {label} как отдельную опцию или по дополнительному условию, тогда как у конкурента это условие прямо исключено. Преимущество действует только после подтверждения и включения опции в договор."
+        if own_level == 2 and competitor_level == 0:
+            return f"У первой страховой {label} прямо включено в описанное покрытие, а у конкурента условие исключено."
+        if own_level == 2 and competitor_level == 1:
+            return f"У первой страховой {label} прямо включено в описанное покрытие; у конкурента оно доступно только как дополнительная опция или за доплату."
+        return f"У первой страховой {label} доступно на более высоком уровне; нужно сверить точный вариант с договором."
 
     @staticmethod
     def _total_loss_threshold(text: str):
