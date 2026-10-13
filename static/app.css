@@ -1899,3 +1899,40 @@ select:focus {
 .report-row--conditional td {
   background: #fffdf7;
 }
+
+
+/* Result comparison: keep the full conditions accessible without overwhelming the table. */
+.condition-more {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.condition-more summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 750;
+}
+.condition-more p {
+  margin: 8px 0 2px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  white-space: normal;
+}
+.comparison-outcome {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.comparison-outcome strong {
+  color: var(--text);
+  font-size: 12px;
+}
+.comparison-outcome span {
+  color: var(--text-secondary);
+}
+.comparison-outcome--first strong { color: #176d35; }
+.comparison-outcome--other strong { color: #8a4c12; }
+.comparison-outcome--unknown strong { color: var(--text-tertiary); }
+.details-panel[open] > .details-panel__summary .details-panel__chevron {
+  transform: rotate(180deg);
+}
