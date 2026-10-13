@@ -988,6 +988,7 @@ class SalesInsightsService:
             "drone": r"бпла|дрон|беспилот",
             "tow_truck": r"эвакуац|эвакуатор",
         }
+        text = text.lower()
         term = terms.get(key)
         if not term or not re.search(term, text):
             return None
