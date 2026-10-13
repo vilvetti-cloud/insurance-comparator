@@ -60,10 +60,13 @@
               <span class="section-kicker">Главное для продажи</span>
               <h2>Что подчеркнуть в {{ company1 }}</h2>
             </div>
-            {% if sales.advantages %}
-              <span class="sales-status sales-status--advantage">Преимуществ первой компании: {{ sales.advantages|length }}</span>
+            {% if sales.advantages or sales.conditional_advantages %}
+              <span class="sales-status sales-status--advantage">
+                {% if sales.advantages %}Подтверждённых преимуществ: {{ sales.advantages|length }}{% endif %}
+                {% if sales.conditional_advantages %}{% if sales.advantages %} · {% endif %}Условных отличий: {{ sales.conditional_advantages|length }}{% endif %}
+              </span>
             {% else %}
-              <span class="sales-status">Доказанных преимуществ нет</span>
+              <span class="sales-status">Подтверждённых преимуществ пока нет</span>
             {% endif %}
           </div>
 
@@ -74,7 +77,7 @@
                   <div class="benefit-card__top">
                     <span class="benefit-card__index">0{{ loop.index }}</span>
                     <span class="benefit-card__kind {% if item.kind == 'advantage' %}benefit-card__kind--advantage{% endif %}">
-                      {% if item.kind == 'advantage' %}Преимущество{% else %}Сильная сторона{% endif %}
+                      {% if item.kind == 'conditional_advantage' %}Возможное преимущество · проверить договор{% elif item.kind == 'advantage' %}Подтверждённое преимущество{% else %}Сильная сторона{% endif %}
                     </span>
                   </div>
                   <h3>{{ item.title }}</h3>
@@ -230,14 +233,14 @@
 
                     <td>
                       {% set comparison = comparison_by_field.get(key) %}
-                      {% if comparison and comparison.get('outcome') == 'first_advantage' %}
+                      {% if comparison and comparison.get('outcome') in ['first_advantage', 'conditional_first_advantage'] %}
                         <div class="comparison-outcome comparison-outcome--first">
                           <strong>{{ comparison.get('title') or 'Преимущество ' ~ company1 }}</strong>
                           <span>{{ comparison.get('reason') or 'Подтверждённое отличие в пользу первой компании.' }}</span>
                         </div>
-                      {% elif comparison and comparison.get('outcome') == 'competitor_advantage' %}
+                      {% elif comparison and comparison.get('outcome') in ['competitor_advantage', 'conditional_competitor_advantage'] %}
                         <div class="comparison-outcome comparison-outcome--other">
-                          <strong>Сильнее условие {{ company2 }}</strong>
+                          <strong>{% if comparison.get('outcome') == 'conditional_competitor_advantage' %}Возможное преимущество {{ company2 }} · проверить договор{% else %}Сильнее условие {{ company2 }}{% endif %}</strong>
                           <span>{{ comparison.get('reason') or 'По этому параметру преимущество у конкурента.' }}</span>
                         </div>
                       {% elif comparison and comparison.get('outcome') == 'equal' %}
