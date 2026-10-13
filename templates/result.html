@@ -84,7 +84,7 @@
                   <p>{{ company1 }}: {{ item.own_value | truncate(115, True, '…') }}<br>{{ company2 }}: {{ item.competitor_value | truncate(115, True, '…') }}</p>
                   <div class="benefit-card__why">
                     <strong>Почему это важно клиенту</strong>
-                    <span>{{ item.get('why', item.client_phrase) }}</span>
+                    <span>{{ item.get('why', item.client_phrase) | replace('первой страховой', 'компании «' ~ company1 ~ '»') | replace('конкурента', 'компании «' ~ company2 ~ '»') }}</span>
                   </div>
                   <span class="benefit-card__label">{{ item.label }}</span>
                 </article>
