@@ -273,5 +273,20 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
 
 
+    def test_optional_terrorism_advantage_does_not_claim_it_is_included(self):
+        result = self.analyze(
+            "terrorism",
+            field_data(
+                "terrorism",
+                "Терроризм можно включить отдельным дополнительным соглашением.",
+            ),
+            field_data("terrorism", "Терроризм исключен из страховых случаев."),
+        )
+        phrase = result["advantages"][0]["client_phrase"]
+        self.assertIn("можно включить", phrase)
+        self.assertIn("только если риск явно включён в договор", phrase)
+        self.assertNotIn("входит в покрытие", phrase)
+
+
 if __name__ == "__main__":
     unittest.main()
