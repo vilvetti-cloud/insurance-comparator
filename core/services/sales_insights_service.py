@@ -776,10 +776,11 @@ class SalesInsightsService:
             )
         own_basis = self._total_loss_basis(own_l)
         other_basis = self._total_loss_basis(other_l)
-        if own_basis and other_basis and own_basis != other_basis:
+        if not own_basis or not other_basis or own_basis != other_basis:
             return self._comparison(
-                "total_loss", label, "incomparable", "total_loss_basis_differs",
-                own, other, "Порог полной гибели рассчитывается от разных баз.",
+                "total_loss", label, "incomparable", "total_loss_basis_differs_or_missing",
+                own, other,
+                "База расчёта полной гибели отсутствует хотя бы в одном ответе или отличается; сравнивать только проценты небезопасно.",
             )
         if own_threshold.amount > other_threshold.amount:
             return self._advantage(
