@@ -968,35 +968,64 @@ class SalesInsightsService:
 
     @staticmethod
     def _coverage_level_v2(key: str, text: str) -> int | None:
-        negative_patterns = {
-            "gap": r"(?:\bgap\b|гэп)[^.;]{0,80}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|"
-                   r"(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,80}(?:\bgap\b|гэп)",
-            "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,80}(?:не\s+покрыв|исключ)|"
-                             r"(?:не\s+покрыв|исключ)[^.;]{0,80}(?:самовозгор|возгоран)",
-            "terrorism": r"террор[^.;]{0,80}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|"
-                         r"(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,80}террор",
-            "drone": r"(?:бпла|дрон|беспилот)[^.;]{0,80}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|"
-                     r"(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,80}(?:бпла|дрон|беспилот)",
-            "tow_truck": r"эвакуац\w*[^.;]{0,80}(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)|"
-                         r"(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)[^.;]{0,80}эвакуац",
+        """Return a conservative availability level for a specific coverage.
+
+        0 = explicitly excluded; 1 = optional/add-on/extra agreement; 2 = included
+        in the described cover. Mere mention of a separate product/risk is not
+        evidence that it is included in the base policy.
+        """
+        terms = {
+            "gap": r"\\bgap\\b|гэп|сохран\\w*\\s+стоим",
+            "self_ignition": r"самовозгор|возгоран",
+            "terrorism": r"террор",
+            "drone": r"бпла|дрон|беспилот",
+            "tow_truck": r"эвакуац|эвакуатор",
         }
+        term = terms.get(key)
+        if not term or not re.search(term, text):
+            return None
+
+        negative_patterns = {
+            "gap": r"(?:\\bgap\\b|гэп)[^.;]{0,100}(?:отсутств|не\\s+предусмотр|не\\s+включ|исключ)|(?:отсутств|не\\s+предусмотр|не\\s+включ|исключ)[^.;]{0,100}(?:\\bgap\\b|гэп)",
+            "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\\s+покрыв|не\\s+включ|исключ)|(?:не\\s+покрыв|не\\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",
+            "terrorism": r"террор[^.;]{0,100}(?:не\\s+покрыв|не\\s+включ|исключ|отсутств)|(?:не\\s+покрыв|не\\s+включ|исключ|отсутств)[^.;]{0,100}террор",
+            "drone": r"(?:бпла|дрон|беспилот)[^.;]{0,100}(?:не\\s+покрыв|не\\s+включ|исключ|отсутств)|(?:не\\s+покрыв|не\\s+включ|исключ|отсутств)[^.;]{0,100}(?:бпла|дрон|беспилот)",
+            "tow_truck": r"эвакуац\\w*[^.;]{0,100}(?:не\\s+предусмотр|не\\s+предостав|исключ|отсутств)|(?:не\\s+предусмотр|не\\s+предостав|исключ|отсутств)[^.;]{0,100}эвакуац",
+        }
+        # Do not let "can be included by addendum" be mistaken for a blanket
+        # exclusion just because the sentence also contains "not included".
+        optional = bool(re.search(
+            r"только\\s+(?:при\\s+)?(?:наличии|оформлении|включении)\\s+(?:отдельн\\w*\\s+)?(?:дополнительн\\w*\\s+)?(?:соглашени\\w*|опци\\w*|услови\\w*)|"
+            r"может\\s+быть\\s+включен\\w*[^.;]{0,80}(?:договор|соглашени|опци)|"
+            r"можно\\s+включить[^.;]{0,80}(?:договор|соглашени|опци)|"
+            r"за\\s+доп(?:олнительн\\w*)?\\s+плат|доплат[ау]|платн\\w*|"
+            r"отдельн\\w*\\s+(?:дополнительн\\w*\\s+)?риск|"
+            r"дополнительн\\w*\\s+(?:страхов\\w*\\s+)?опци\\w*",
+            text,
+        ))
+        # A specific opt-in exception takes precedence over broad exclusion
+        # wording; all other explicit exclusions remain level 0.
+        if optional and re.search(r"кроме[^.;]{0,100}(?:соглашени|договор)|может\\s+быть\\s+включен|можно\\s+включить|только\\s+(?:при\\s+)?(?:наличии|оформлении|включении)", text):
+            return 1
         pattern = negative_patterns.get(key)
         if pattern and re.search(pattern, text):
             return 0
-
-        paid = bool(re.search(r"за\s+доп(?:олнительн\w*)?\s+плат|доплат[ау]|платн\w*", text))
-        positive = bool(
-            re.search(
-                r"входит|включен|включён|предусмотрен|предусмотрено|"
-                r"покрыва\w*|возмеща\w*|предоставля\w*|застрахова\w*|"
-                r"отдельн\w+\s+риск",
-                text,
-            )
-        )
-        if paid:
+        if optional:
             return 1
-        if positive:
+
+        included = bool(re.search(
+            r"входит\\s+в\\s+(?:страхов\\w*\\s+)?покрыти|"
+            r"включен\\w*\\s+в\\s+(?:страхов\\w*\\s+)?покрыти|"
+            r"покрыти\\w*\\s+распространяется|"
+            r"прямо\\s+предусмотрен\\w*\\s+(?:договор\\w*\\s+)?(?:страхов\\w*\\s+)?покрыти|"
+            r"страхов\\w*\\s+случа\\w*[^.;]{0,80}(?:является|признается|признаётся)",
+            text,
+        ))
+        if included:
             return 2
+
+        # General "covered/compensated" wording is weaker than an explicit
+        # inclusion and can be ambiguous when the same paragraph lists options.
         return None
 
     @staticmethod
