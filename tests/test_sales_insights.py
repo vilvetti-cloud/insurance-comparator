@@ -219,5 +219,49 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
 
 
+    def test_separate_gap_risk_is_optional_not_included(self):
+        level = self.service._coverage_level_v2("gap", "GAP предусмотрен как отдельный риск.")
+        self.assertEqual(level, 1)
+
+    def test_terrorism_by_additional_agreement_is_optional(self):
+        level = self.service._coverage_level_v2(
+            "terrorism",
+            "Террористический риск можно включить отдельным дополнительным соглашением.",
+        )
+        self.assertEqual(level, 1)
+
+    def test_explicitly_included_gap_is_higher_level_than_optional_gap(self):
+        result = self.analyze(
+            "gap",
+            field_data("gap", "GAP включен в покрытие."),
+            field_data("gap", "GAP доступен за дополнительную плату."),
+        )
+        self.assertEqual(
+            result["advantages"][0]["comparison_basis"],
+            "gap_coverage_level_2_vs_1",
+        )
+
+    def test_optional_cover_does_not_beat_included_cover(self):
+        result = self.analyze(
+            "terrorism",
+            field_data(
+                "terrorism",
+                "Риск можно включить отдельным дополнительным соглашением.",
+            ),
+            field_data("terrorism", "Терроризм входит в покрытие."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+
+    def test_unmentioned_gap_is_not_treated_as_excluded(self):
+        result = self.analyze(
+            "gap",
+            field_data("gap", "GAP предусмотрен как отдельный риск."),
+            field_data("gap", "В проверенном фрагменте GAP не упоминается."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+
+
 if __name__ == "__main__":
     unittest.main()
