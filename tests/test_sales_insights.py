@@ -282,7 +282,9 @@ class SalesInsightsTests(unittest.TestCase):
             ),
             field_data("terrorism", "Терроризм исключен из страховых случаев."),
         )
-        phrase = result["advantages"][0]["client_phrase"]
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(len(result["conditional_advantages"]), 1)
+        phrase = result["conditional_advantages"][0]["client_phrase"]
         self.assertIn("можно включить", phrase)
         self.assertIn("только если риск явно включён в договор", phrase)
         self.assertNotIn("входит в покрытие", phrase)
