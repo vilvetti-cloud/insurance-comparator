@@ -64,6 +64,7 @@ class SalesInsightsService:
             is_conditional = (
                 data.get(f"{key}_quality_status") != "confirmed"
                 or competitor_data.get(f"{key}_quality_status") != "confirmed"
+                or bool(comparison.get("conditional"))
             )
             if is_conditional:
                 comparison["conditional"] = True
@@ -725,13 +726,18 @@ class SalesInsightsService:
                         "drone": "БПЛА — по допусловию",
                         "tow_truck": "Эвакуация — дополнительная опция",
                     }.get(key, title)
-                return self._advantage(
+                advantage = self._advantage(
                     key=key, label=label, title=title,
                     own=own, other=other,
                     basis=f"{key}_coverage_level_{own_level}_vs_{other_level}",
                     reason="У первой страховой более высокий уровень доступности покрытия.",
                     client_phrase=self._coverage_client_phrase(key, own_level, other_level),
                 )
+                # Add-on availability is a real distinction, but not an
+                # unconditional policy benefit until the option is selected.
+                if own_level == 1:
+                    advantage["conditional"] = True
+                return advantage
             return self._comparison(
                 key, label, "competitor_advantage",
                 f"{key}_coverage_level_{own_level}_vs_{other_level}",
