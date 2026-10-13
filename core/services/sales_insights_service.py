@@ -36,6 +36,7 @@ class SalesInsightsService:
         field_labels: dict[str, str],
     ) -> dict[str, Any]:
         advantages: list[dict[str, Any]] = []
+        conditional_advantages: list[dict[str, Any]] = []
         comparisons: list[dict[str, Any]] = []
 
         for key, label in field_labels.items():
@@ -44,8 +45,8 @@ class SalesInsightsService:
             if (
                 own is None
                 or other is None
-                or not self._trusted(data, key)
-                or not self._trusted(competitor_data, key)
+                or not self._comparison_eligible(data, key)
+                or not self._comparison_eligible(competitor_data, key)
             ):
                 continue
 
@@ -57,31 +58,75 @@ class SalesInsightsService:
                 own=own,
                 other=other,
             )
-            comparisons.append(comparison)
-            if comparison.get("outcome") == "first_advantage":
+            if comparison is None:
+                continue
+
+            is_conditional = (
+                data.get(f"{key}_quality_status") != "confirmed"
+                or competitor_data.get(f"{key}_quality_status") != "confirmed"
+            )
+            if is_conditional:
+                comparison["conditional"] = True
+                comparison["reason"] = (
+                    str(comparison.get("reason") or "")
+                    + " Как минимум одно условие зависит от программы или договора: перед обещанием клиенту проверьте конкретный полис."
+                ).strip()
+                if comparison.get("outcome") == "first_advantage":
+                    comparison["outcome"] = "conditional_first_advantage"
+                    comparison["kind"] = "conditional_advantage"
+                    comparison["title"] = "Возможное преимущество: " + str(comparison.get("title") or label)
+                    conditional_advantages.append(comparison)
+                elif comparison.get("outcome") == "competitor_advantage":
+                    comparison["outcome"] = "conditional_competitor_advantage"
+            elif comparison.get("outcome") == "first_advantage":
                 advantages.append(comparison)
 
-        cards = advantages
+            comparisons.append(comparison)
+
+        cards = advantages + conditional_advantages
         cautions: list[str] = []
-        if not advantages:
+        if not cards:
             cautions.append(
-                f"По подтверждённым сопоставимым условиям пока нет различия, "
-                f"которое корректно называть преимуществом {company} перед {competitor}."
+                f"По подтверждённым и условным официальным условиям пока не найдено различий, "
+                f"которые можно доказательно использовать как преимущество {company} перед {competitor}."
             )
 
         return {
             "advantages": advantages,
+            "conditional_advantages": conditional_advantages,
             "cards": cards,
             "comparisons": comparisons,
             "cautions": cautions,
             "client_message": self._client_message(
                 company=company,
                 competitor=competitor,
-                advantages=advantages,
+                advantages=cards,
             ),
         }
 
     @staticmethod
+    @classmethod
+    def _comparison_eligible(cls, data: dict[str, Any], key: str) -> bool:
+        if cls._trusted(data, key):
+            return True
+        # Contract-dependent facts from official insurer documents can be
+        # compared only with a visible caveat; web/fallback/unverified values
+        # remain excluded from sales arguments.
+        if data.get(f"{key}_quality_status") != "conditional":
+            return False
+        if data.get(f"{key}_source_level") not in {1, 2}:
+            return False
+        value = cls._value(data, key)
+        if value is None:
+            return False
+        confidence = data.get(f"{key}_confidence")
+        if confidence is None:
+            return True
+        try:
+            return float(confidence) >= 0.75
+        except (TypeError, ValueError):
+            return False
+
     def _value(data: dict[str, Any], key: str) -> str | None:
         value = data.get(key)
         if not value or value == "Не найдено":
@@ -321,22 +366,24 @@ class SalesInsightsService:
         phrases: list[str] = []
         for item in advantages:
             label = str(item.get("label") or item.get("title") or "условию").strip()
-            own = str(item.get("own_value") or "").strip()
-            other = str(item.get("competitor_value") or "").strip()
-            reason = str(item.get("reason") or "").strip()
-            phrase = (
-                f"По параметру «{label}»: у {company} — {own}; у {competitor} — {other}. "
-                f"{reason}"
-            ).strip()
-            if phrase not in phrases:
+            phrase = str(item.get("client_phrase") or item.get("reason") or "").strip()
+            phrase = phrase.replace("первой страховой", company).replace("конкурента", competitor)
+            if item.get("conditional"):
+                phrase = (
+                    f"По параметру «{label}» есть возможное преимущество {company}: "
+                    f"{phrase} Важно проверить, включено ли это условие в конкретный договор."
+                )
+            else:
+                phrase = f"По параметру «{label}»: {phrase}"
+            if phrase and phrase not in phrases:
                 phrases.append(phrase)
 
         return (
-            f"Если выбирать между {company} и {competitor}, предлагаю смотреть не только на название полиса, "
-            "но и на условия при реальном страховом случае. "
+            f"При сравнении {company} и {competitor} стоит обратить внимание на конкретные условия, "
+            "которые влияют на выплату и урегулирование. "
             + " ".join(phrases)
-            + f" Поэтому {company} стоит рассмотреть в первую очередь по перечисленным условиям; "
-              "окончательный выбор зависит от того, какие риски и ограничения важны именно вам."
+            + f" Если эти условия важны для вас, {company} стоит рассмотреть в первую очередь; "
+              "перед оформлением сверим их с выбранной программой и полисом."
         )
 
     @staticmethod
@@ -960,6 +1007,8 @@ class SalesInsightsService:
             "terrorism": "террористический риск",
             "drone": "ущерб от БПЛА",
         }.get(key, "условие")
+        if competitor_level == 0 and key == "terrorism":
+            return "У первой страховой террористический риск можно включить отдельным дополнительным соглашением; у конкурента он исключён из страховых случаев. Это преимущество работает только если риск явно включён в договор."
         if competitor_level == 0:
             return f"У первой страховой {label} входит в покрытие, а у конкурента это условие исключено."
         if competitor_level == 1:
