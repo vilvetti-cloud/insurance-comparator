@@ -18,6 +18,7 @@ jobs:
           mkdir -p /tmp/casco-pdfs
           find data/sources -type f -iname '*.pdf' -print0 | xargs -0 zip -q -9 /tmp/casco-pdfs/casco-official-pdfs.zip
           unzip -l /tmp/casco-pdfs/casco-official-pdfs.zip
+          zip -q /tmp/casco-pdfs/casco-official-pdfs.zip reports/local-casco-analysis/analysis.json data/sources/technical-manifest.json
           cp reports/local-casco-analysis/analysis.json /tmp/casco-pdfs/analysis.json
       - uses: actions/upload-artifact@v4
         with:
