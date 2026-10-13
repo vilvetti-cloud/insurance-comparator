@@ -52,13 +52,3 @@ jobs:
           python -m pip install -r requirements-casco.txt
       - name: Run Docling smoke test
         run: python -m unittest tests.test_docling_smoke
-      - name: Temporary extract RESO PDF text for review
-        run: |
-          python - <<'PY'
-          import fitz
-          doc = fitz.open("data/sources/reso/technical.pdf")
-          print(f"PDF_PAGE_COUNT={doc.page_count}")
-          for i, page in enumerate(doc):
-              print(f"\\n===== PDF PAGE {i+1} =====\\n")
-              print(page.get_text("text"))
-          PY
