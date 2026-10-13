@@ -57,8 +57,10 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             failure = diagnostic.get("analysis_validation")
             prepared[f"{field}_review_note"] = (
                 diagnostic.get("analysis_missing")
+                or REVIEW_REASONS.get(failure)
+                or field_data.get("quality_reason")
                 or diagnostic.get("analysis_explanation")
-                or REVIEW_REASONS.get(failure, field_data.get("quality_reason") or "Не удалось подтвердить условие по сохранённым данным.")
+                or "Не удалось подтвердить условие по сохранённым данным."
             ) if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
         else:
             prepared[field] = "Не найдено"
@@ -75,8 +77,9 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             failure = diagnostic.get("analysis_validation")
             prepared[f"{field}_review_note"] = (
                 diagnostic.get("analysis_missing")
+                or REVIEW_REASONS.get(failure)
                 or diagnostic.get("analysis_explanation")
-                or REVIEW_REASONS.get(failure, "Ответ не сохранён или не подтверждён. Нужна сверка с официальным документом.")
+                or "Ответ не сохранён или не подтверждён. Нужна сверка с официальным документом."
                 if diagnostic.get("analysis_answer") else "В базе нет пригодного для сравнения ответа. Это не означает, что покрытие отсутствует."
             )
 
