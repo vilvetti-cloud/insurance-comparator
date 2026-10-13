@@ -6,7 +6,6 @@ from collector.registry import INSURERS
 from core.catalog import KASKO_FIELDS
 from core.services.comparison_service import ComparisonService
 from core.services.sales_insights_service import SalesInsightsService
-from core.services.sales_script_ai_service import SalesScriptAIService
 from core.services.data_quality_report_service import DataQualityReportService
 
 
@@ -14,7 +13,6 @@ app = Flask(__name__)
 
 comparison_service = ComparisonService()
 sales_insights_service = SalesInsightsService()
-sales_script_ai_service = SalesScriptAIService()
 data_quality_report_service = DataQualityReportService()
 COMPANIES = [insurer.name for insurer in INSURERS]
 FIELD_KEYS = [field["key"] for field in KASKO_FIELDS]
@@ -134,11 +132,6 @@ def compare():
             data=data1,
             competitor_data=data2,
             field_labels=FIELD_LABELS,
-        )
-        sales = sales_script_ai_service.enrich(
-            company=company1,
-            competitor=company2,
-            sales=sales,
         )
     else:
         sales = {
