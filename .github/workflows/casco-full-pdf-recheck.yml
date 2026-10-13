@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/casco-evidence-golden-benchmark
+      - fix/casco-comparison-all-insurers
   workflow_dispatch:
 
 concurrency:
