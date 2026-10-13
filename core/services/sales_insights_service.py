@@ -61,7 +61,7 @@ class SalesInsightsService:
             if comparison.get("outcome") == "first_advantage":
                 advantages.append(comparison)
 
-        cards = advantages[:3]
+        cards = advantages
         cautions: list[str] = []
         if not advantages:
             cautions.append(
@@ -319,15 +319,24 @@ class SalesInsightsService:
             )
 
         phrases: list[str] = []
-        for item in advantages[:3]:
-            phrase = str(item["client_phrase"]).strip()
-            if phrase and phrase not in phrases:
+        for item in advantages:
+            label = str(item.get("label") or item.get("title") or "условию").strip()
+            own = str(item.get("own_value") or "").strip()
+            other = str(item.get("competitor_value") or "").strip()
+            reason = str(item.get("reason") or "").strip()
+            phrase = (
+                f"По параметру «{label}»: у {company} — {own}; у {competitor} — {other}. "
+                f"{reason}"
+            ).strip()
+            if phrase not in phrases:
                 phrases.append(phrase)
 
         return (
-            f"При сравнении {company} и {competitor} есть подтверждённые "
-            "различия, на которые можно обратить внимание. "
+            f"Если выбирать между {company} и {competitor}, предлагаю смотреть не только на название полиса, "
+            "но и на условия при реальном страховом случае. "
             + " ".join(phrases)
+            + f" Поэтому {company} стоит рассмотреть в первую очередь по перечисленным условиям; "
+              "окончательный выбор зависит от того, какие риски и ограничения важны именно вам."
         )
 
     @staticmethod
