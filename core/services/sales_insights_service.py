@@ -730,7 +730,7 @@ class SalesInsightsService:
                     own=own, other=other,
                     basis=f"{key}_coverage_level_{own_level}_vs_{other_level}",
                     reason="У первой страховой более высокий уровень доступности покрытия.",
-                    client_phrase=self._coverage_client_phrase(key, other_level),
+                    client_phrase=self._coverage_client_phrase(key, own_level, other_level),
                 )
             return self._comparison(
                 key, label, "competitor_advantage",
@@ -1047,20 +1047,27 @@ class SalesInsightsService:
         }.get(key, "Покрытие доступно")
 
     @staticmethod
-    def _coverage_client_phrase(key: str, competitor_level: int | None) -> str:
+    def _coverage_client_phrase(
+        key: str,
+        own_level: int,
+        competitor_level: int | None,
+    ) -> str:
         label = {
-            "gap": "GAP-защита",
-            "self_ignition": "самовозгорание",
+            "gap": "GAP-защиту",
+            "self_ignition": "покрытие самовозгорания",
             "terrorism": "террористический риск",
             "drone": "ущерб от БПЛА",
-        }.get(key, "условие")
-        if competitor_level == 0 and key == "terrorism":
-            return "У первой страховой террористический риск можно включить отдельным дополнительным соглашением; у конкурента он исключён из страховых случаев. Это преимущество работает только если риск явно включён в договор."
-        if competitor_level == 0:
-            return f"У первой страховой {label} входит в покрытие, а у конкурента это условие исключено."
-        if competitor_level == 1:
-            return f"У первой страховой {label} входит в подтверждённые условия без отдельной доплаты, а у конкурента требуется дополнительная оплата."
-        return f"У первой страховой {label} доступно на более высоком уровне."
+            "tow_truck": "эвакуацию",
+        }.get(key, "это условие")
+        if own_level == 1 and competitor_level == 0:
+            if key == "terrorism":
+                return "У первой страховой террористический риск можно включить отдельным дополнительным соглашением; у конкурента он исключён из страховых случаев. Это преимущество работает только если риск явно включён в договор."
+            return f"У первой страховой можно подключить {label} как отдельную опцию или по дополнительному условию, тогда как у конкурента это условие прямо исключено. Преимущество действует только после подтверждения и включения опции в договор."
+        if own_level == 2 and competitor_level == 0:
+            return f"У первой страховой {label} прямо включено в описанное покрытие, а у конкурента условие исключено."
+        if own_level == 2 and competitor_level == 1:
+            return f"У первой страховой {label} прямо включено в описанное покрытие; у конкурента оно доступно только как дополнительная опция или за доплату."
+        return f"У первой страховой {label} доступно на более высоком уровне; нужно сверить точный вариант с договором."
 
     @staticmethod
     def _total_loss_threshold(text: str):
