@@ -10,12 +10,12 @@ OUT = ROOT / "data"
 
 def normalize_status(raw: str) -> tuple[str, str]:
     value = (raw or "").strip().lower()
-    if "прямое условие найдено" in value or "прямое покрытие" in value:
-        return "direct_evidence", "Условие найдено в источнике; проверить применимость к договору"
-    if "условный вывод" in value or "условн" in value or "может изменяться" in value:
-        return "conditional", "Условие зависит от договора или требует оговорки"
-    if "не установлено" in value or "нужна сверка" in value or "требует проверки" in value:
+    if "не установлено" in value or "не доказано" in value or "не установлены" in value or "нужна сверка" in value:
         return "not_established", "Не считать ни покрытием, ни исключением без дополнительной проверки"
+    if "дополнительному соглашению" in value or "только при включении" in value or "отдельный официальный продукт" in value or "опция" in value or "зависит от договора" in value or "может изменяться" in value:
+        return "conditional", "Доступно только при условиях, указанных в ответе/договоре"
+    if "прямое условие найдено" in value or "прямое покрытие" in value or "прямое упоминание найдено" in value or "отдельное покрытие найдено" in value or "прямое определение" in value or "прямое падение" in value:
+        return "direct_evidence", "Условие найдено в источнике; проверить применимость к договору"
     if "кандидат найден" in value or "полный контекст" in value or "частич" in value:
         return "review_required", "Есть фрагмент источника; полный контекст ещё проверить"
     return "review_required", "Требуется сверка доказательства и условий"
