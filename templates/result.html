@@ -42,12 +42,12 @@
         <div class="coverage-strip" aria-label="Покрытие данных">
           <div class="coverage-strip__item">
             <strong>{{ found1 }}/10</strong>
-            <span>{{ company1 }} · условия</span>
+            <span>Условия с ответом · {{ company1 }}</span>
           </div>
           <div class="coverage-strip__divider"></div>
           <div class="coverage-strip__item">
             <strong>{{ found2 }}/10</strong>
-            <span>{{ company2 }} · условия</span>
+            <span>Условия с ответом · {{ company2 }}</span>
           </div>
         </div>
       </section>
@@ -78,7 +78,7 @@
                     </span>
                   </div>
                   <h3>{{ item.title }}</h3>
-                  <p>{{ item.evidence }}</p>
+                  <p>{{ company1 }}: {{ item.own_value | truncate(115, True, '…') }}<br>{{ company2 }}: {{ item.competitor_value | truncate(115, True, '…') }}</p>
                   <div class="benefit-card__why">
                     <strong>Почему это важно клиенту</strong>
                     <span>{{ item.get('why', item.client_phrase) }}</span>
