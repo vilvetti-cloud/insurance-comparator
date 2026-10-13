@@ -25,6 +25,44 @@ REVIEW_REASONS = {
 }
 
 
+def _review_note(diagnostic: dict, failure: str | None, field_data: dict, value: str) -> str:
+    missing = diagnostic.get("analysis_missing")
+    if missing:
+        return str(missing)
+
+    mapped_reason = REVIEW_REASONS.get(failure)
+    if mapped_reason:
+        return mapped_reason
+
+    reason = str(field_data.get("quality_reason") or "").strip()
+    generic_reasons = (
+        "Ответ сформирован AI по официальному документу/сайту страховщика.",
+        "Ответ сформирован по выбранным фрагментам официального документа.",
+    )
+    if reason and not any(reason.startswith(item) for item in generic_reasons):
+        return reason
+
+    explanation = str(diagnostic.get("analysis_explanation") or "").strip()
+    if explanation and not any(explanation.startswith(item) for item in generic_reasons):
+        return explanation
+
+    if value == "Не найдено":
+        if diagnostic.get("analysis_answer"):
+            return (
+                "Ответ модели найден, но проверка не подтвердила его полноту или соответствие этому параметру. "
+                "Нужно сверить ответ с конкретным разделом PDF. До проверки он не используется как аргумент продажи."
+            )
+        return (
+            "Подтверждённое значение не найдено в текущей базе. Это не означает, что страхового покрытия нет; "
+            "нужно проверить официальный документ и условия выбранной программы."
+        )
+
+    return (
+        "Ответ извлечён из источника, но проверка не подтвердила, что он полный и относится именно к этому параметру. "
+        "Сверьте его с указанным разделом официального документа; до проверки не используйте как преимущество."
+    )
+
+
 def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None = None) -> dict:
     raw = snapshot.get(company, {})
     contextual = contextual or {}
@@ -56,12 +94,9 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             diagnostic = contextual.get(field, {})
             failure = diagnostic.get("analysis_validation")
             prepared[f"{field}_review_note"] = (
-                diagnostic.get("analysis_missing")
-                or REVIEW_REASONS.get(failure)
-                or field_data.get("quality_reason")
-                or diagnostic.get("analysis_explanation")
-                or "Не удалось подтвердить условие по сохранённым данным."
-            ) if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
+                _review_note(diagnostic, failure, field_data, prepared[field])
+                if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
+            )
         else:
             prepared[field] = "Не найдено"
             prepared[f"{field}_source"] = "none"
@@ -75,12 +110,8 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             prepared[f"{field}_sales_eligible"] = False
             diagnostic = contextual.get(field, {})
             failure = diagnostic.get("analysis_validation")
-            prepared[f"{field}_review_note"] = (
-                diagnostic.get("analysis_missing")
-                or REVIEW_REASONS.get(failure)
-                or diagnostic.get("analysis_explanation")
-                or "Ответ не сохранён или не подтверждён. Нужна сверка с официальным документом."
-                if diagnostic.get("analysis_answer") else "В базе нет пригодного для сравнения ответа. Это не означает, что покрытие отсутствует."
+            prepared[f"{field}_review_note"] = _review_note(
+                diagnostic, failure, {}, prepared[field]
             )
 
     return prepared
