@@ -716,8 +716,11 @@ class SalesInsightsService:
         other_level = self._coverage_level_v2(key, other_l)
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
+                title = self._coverage_title(key, own_level)
+                if key == "terrorism" and re.search(r"только при наличии отдельного дополнительного соглашения", own_l):
+                    title = "Терроризм — только по допсоглашению"
                 return self._advantage(
-                    key=key, label=label, title=self._coverage_title(key, own_level),
+                    key=key, label=label, title=title,
                     own=own, other=other,
                     basis=f"{key}_coverage_level_{own_level}_vs_{other_level}",
                     reason="У первой страховой более высокий уровень доступности покрытия.",
