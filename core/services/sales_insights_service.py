@@ -104,7 +104,6 @@ class SalesInsightsService:
             ),
         }
 
-    @staticmethod
     @classmethod
     def _comparison_eligible(cls, data: dict[str, Any], key: str) -> bool:
         if cls._trusted(data, key):
@@ -127,6 +126,7 @@ class SalesInsightsService:
         except (TypeError, ValueError):
             return False
 
+    @staticmethod
     def _value(data: dict[str, Any], key: str) -> str | None:
         value = data.get(key)
         if not value or value == "Не найдено":
