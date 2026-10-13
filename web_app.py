@@ -22,8 +22,8 @@ FIELD_LABELS = {field["key"]: field["label"] for field in KASKO_FIELDS}
 REVIEW_REASONS = {
     "quote_not_on_claimed_page": "Цитата модели не совпала с текстом указанной страницы PDF.",
     "section_not_on_claimed_page": "Раздел модели не совпал с текстом указанной страницы PDF.",
-    "incomplete_answer": "Ответ из документа неполный.",
-    "missing_value_quote_section": "Не хватает точной цитаты или раздела документа.",
+    "incomplete_answer": "В сохранённом ответе не хватает деталей для сравнения; нужно сверить его с указанным разделом официального документа.",
+    "missing_value_quote_section": "Не сохранена точная цитата или номер раздела, поэтому условие пока нельзя подтвердить для продажи.",
 }
 
 
@@ -58,8 +58,9 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             diagnostic = contextual.get(field, {})
             failure = diagnostic.get("analysis_validation")
             prepared[f"{field}_review_note"] = (
-                REVIEW_REASONS.get(failure, "Ответ модели требует проверки по документу.")
-                if diagnostic.get("analysis_answer") else field_data.get("quality_reason")
+                diagnostic.get("analysis_missing")
+                or diagnostic.get("analysis_explanation")
+                or REVIEW_REASONS.get(failure, field_data.get("quality_reason") or "Не удалось подтвердить условие по сохранённым данным.")
             ) if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
         else:
             prepared[field] = "Не найдено"
@@ -75,8 +76,10 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             diagnostic = contextual.get(field, {})
             failure = diagnostic.get("analysis_validation")
             prepared[f"{field}_review_note"] = (
-                REVIEW_REASONS.get(failure, "Ответ модели требует проверки по документу.")
-                if diagnostic.get("analysis_answer") else None
+                diagnostic.get("analysis_missing")
+                or diagnostic.get("analysis_explanation")
+                or REVIEW_REASONS.get(failure, "Ответ не сохранён или не подтверждён. Нужна сверка с официальным документом.")
+                if diagnostic.get("analysis_answer") else "В базе нет пригодного для сравнения ответа. Это не означает, что покрытие отсутствует."
             )
 
     return prepared
