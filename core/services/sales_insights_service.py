@@ -1098,6 +1098,14 @@ class SalesInsightsService:
 
     @staticmethod
     def _coverage_title(key: str, level: int) -> str:
+        if level == 1:
+            return {
+                "gap": "GAP — отдельная опция",
+                "self_ignition": "Самовозгорание — по допусловию",
+                "terrorism": "Терроризм — по допсоглашению",
+                "drone": "БПЛА — по допусловию",
+                "tow_truck": "Эвакуация — дополнительная опция",
+            }.get(key, "Доступно как дополнительная опция")
         return {
             "gap": "GAP включён в покрытие",
             "self_ignition": "Самовозгорание покрывается",
