@@ -260,6 +260,13 @@ class SalesInsightsTests(unittest.TestCase):
         level = self.service._coverage_level_v2("gap", "GAP предусмотрен как отдельный риск.")
         self.assertEqual(level, 1)
 
+    def test_optional_terrorism_with_yo_spelling_is_detected(self):
+        level = self.service._coverage_level_v2(
+            "terrorism",
+            "Террористический акт — отдельный дополнительный риск, который может быть включён только в рамках действующего договора по риску «Ущерб».",
+        )
+        self.assertEqual(level, 1)
+
     def test_terrorism_by_additional_agreement_is_optional(self):
         level = self.service._coverage_level_v2(
             "terrorism",
