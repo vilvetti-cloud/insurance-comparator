@@ -28,7 +28,7 @@ class ComparisonServiceTests(unittest.TestCase):
         field = snapshot["Ингосстрах"]["without_certificates"]
         self.assertIn(field["quality_status"], {"confirmed", "conditional"})
         self.assertTrue(field["sales_eligible"])
-        self.assertIn("одно обращение", field["value"])
+        self.assertIn("один раз в течение срока договора", field["value"])
         self.assertIn("антенны", field["value"])
         self.assertEqual(field["source_analysis_status"] if "source_analysis_status" in field else
                          field["raw_field"]["source_analysis_status"], "found")
