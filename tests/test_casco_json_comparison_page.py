@@ -21,7 +21,7 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("Недостаточно подтверждённых данных", page)
         self.assertIn("GAP-страхование", page)
         self.assertIn("Без справок", page)
-        self.assertIn("Сроки выплат", page)
+        self.assertIn("Срок выплат", page)
 
 
 if __name__ == "__main__":
