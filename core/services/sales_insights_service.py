@@ -432,22 +432,22 @@ class SalesInsightsService:
             key = str(item.get("field_key") or "")
             value = str(item.get("own_value") or "").strip()
             label = str(item.get("label") or item.get("title") or key).strip()
-            if not value or self._value({"v": value}, "v") is None:
+            if not value or SalesInsightsService._value({"v": value}, "v") is None:
                 continue
             value_l = value.lower().replace("ё", "е")
             if re.search(r"не предусмотрен|не покрывается|исключен|отсутствует|нет\b|не входит", value_l):
                 continue
             positive = False
             if key == "franchise":
-                positive = self._franchise_none(value_l)
+                positive = SalesInsightsService._franchise_none(value_l)
             elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"}:
-                positive = self._coverage_level_v2(key, value_l) in {1, 2}
+                positive = SalesInsightsService._coverage_level_v2(key, value_l) in {1, 2}
             elif key == "without_certificates":
-                positive = self._without_documents_state_v2(value_l) == "positive"
+                positive = SalesInsightsService._without_documents_state_v2(value_l) == "positive"
             elif key == "repair_type":
-                positive = bool(self._repair_options_v2(value_l))
+                positive = bool(SalesInsightsService._repair_options_v2(value_l))
             elif key == "payment_terms":
-                positive = bool(self._payment_term(value_l))
+                positive = bool(SalesInsightsService._payment_term(value_l))
             if positive:
                 feature = f"Также у {company} предусмотрено полезное условие по параметру «{label}»: {value}."
                 if feature not in shared_features:
