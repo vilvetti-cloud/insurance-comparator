@@ -9,6 +9,7 @@ from typing import Any
 from psycopg.rows import dict_row
 
 from db import _connect
+from core.catalog import KASKO_FIELDS
 from core.condition_audit import audit_condition
 
 
