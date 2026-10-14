@@ -99,7 +99,7 @@ class ComparisonService:
                 source_type = item.get("source_type") or ("pdf" if has_pdf_evidence or company_url else "fallback")
                 if has_pdf_evidence:
                     verified = analysis_status in {"found", "partial"}
-                    verification_status = "verified"
+                    verification_status = "verified" if analysis_status in {"found", "partial"} else "needs_review"
                     audit = audit_condition(
                         field_key,
                         value,
@@ -107,7 +107,7 @@ class ComparisonService:
                         source_level=source_level,
                         source_type=source_type,
                         confidence=0.9,
-                        verification_status="verified",
+                        verification_status=verification_status,
                         trust_official_context=True,
                     )
                     if analysis_status == "partial":
@@ -153,7 +153,11 @@ class ComparisonService:
                     "quality_status": quality_status,
                     "quality_label": quality_label,
                     "quality_reason": quality_reason,
-                    "sales_eligible": bool(has_pdf_evidence and analysis_status in {"found", "partial"}) or audit.sales_eligible,
+                    "sales_eligible": (
+                        bool(analysis_status in {"found", "partial"})
+                        if has_pdf_evidence
+                        else audit.sales_eligible
+                    ),
                     "raw_field": item,
                 }
             snapshot[name] = company_data
