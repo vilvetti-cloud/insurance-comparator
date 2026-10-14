@@ -269,6 +269,8 @@ def health():
             "companies_configured": len(COMPANIES),
             "companies_with_data": companies_with_data,
             "last_updated": snapshot.get("_last_updated"),
+            "data_source": snapshot.get("_data_source", "database"),
+            "dataset_version": snapshot.get("_dataset_version"),
         }
     )
 
