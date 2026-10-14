@@ -818,13 +818,13 @@ def _risk_signal(field, key):
     text = answer + " " + (field.get("key_conditions") or "").casefold()
     unknown = _answer_unknown(answer)
     if key == "gap":
-        positive = any(x in text for x in ("предусмотрен как отдельный риск",
+        positive = not unknown and any(x in text for x in ("предусмотрен как отдельный риск",
             "предусмотрен отдельным приложением", "указан как отдельный риск",
             "предусмотрен отдельными правилами", "gap оформляется как отдельный риск",
             "gap предусмотрен как отдельный риск", "gap-страхование предусмотрено как отдельный риск"))
         negative = not unknown and any(x in answer for x in ("исключён", "исключен", "не покрывается"))
     elif key == "terrorism":
-        positive = any(x in text for x in ("предусмотрен как дополнительный риск",
+        positive = not unknown and any(x in text for x in ("предусмотрен как дополнительный риск",
             "может быть застрахован дополнительно", "терроризм описан как страховой риск",
             "покрытие терроризма предусмотрено"))
         negative = not unknown and any(x in answer for x in ("исключён по общему правилу",
@@ -832,7 +832,7 @@ def _risk_signal(field, key):
             "исключён, если специально не предусмотрен", "исключен, если специально не предусмотрен",
             "не покрывается"))
     elif key == "self_ignition":
-        positive = any(x in text for x in ("включено в определение пожара",
+        positive = not unknown and any(x in text for x in ("включено в определение пожара",
             "предусмотрено как отдельный описанный риск", "самовозгорание включено", "риск «самовозгорание» определён", "риск самовозгорание определён", "самовозгорание тс прямо включено"))
         negative = not unknown and any(x in answer for x in ("исключено из стандартного покрытия",
             "исключено по умолчанию", "внутренний пожар исключён", "внутренний пожар исключен",
