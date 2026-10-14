@@ -69,6 +69,58 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(result["conditional_advantages"][0]["outcome"], "conditional_first_advantage")
         self.assertTrue(result["comparisons"][0]["conditional"])
 
+    def test_competitor_with_better_gap_level_wins_even_when_reso_is_first(self):
+        reso = {
+            "gap": "GAP доступен как отдельная опция по дополнительному соглашению",
+            "gap_quality_status": "confirmed",
+            "gap_sales_eligible": True,
+            "gap_source_level": 1,
+            "gap_confidence": 1.0,
+        }
+        tinkoff = {
+            "gap": "GAP включён в базовое покрытие",
+            "gap_quality_status": "confirmed",
+            "gap_sales_eligible": True,
+            "gap_source_level": 1,
+            "gap_confidence": 1.0,
+        }
+        result = self.service.analyze(
+            company="РЕСО-Гарантия",
+            competitor="Тинькофф",
+            data=reso,
+            competitor_data=tinkoff,
+            field_labels={"gap": "GAP-страхование"},
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+
+    def test_first_company_wins_when_its_gap_level_is_better(self):
+        reso = {
+            "gap": "GAP включён в базовое покрытие",
+            "gap_quality_status": "confirmed",
+            "gap_sales_eligible": True,
+            "gap_source_level": 1,
+            "gap_confidence": 1.0,
+        }
+        competitor = {
+            "gap": "GAP доступен как отдельная опция по дополнительному соглашению",
+            "gap_quality_status": "confirmed",
+            "gap_sales_eligible": True,
+            "gap_source_level": 1,
+            "gap_confidence": 1.0,
+        }
+        result = self.service.analyze(
+            company="Первая страховая",
+            competitor="Конкурент",
+            data=reso,
+            competitor_data=competitor,
+            field_labels={"gap": "GAP-страхование"},
+        )
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
+        self.assertEqual(result["conditional_advantages"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
