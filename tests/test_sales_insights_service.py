@@ -47,7 +47,7 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(len(result["comparisons"]), 1)
         self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
         self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
-        self.assertIn("РЕСО-Гарантия", result["comparisons"][0]["evidence"])
+        self.assertIn("РЕСО-Гарантия", result["comparisons"][0]["client_phrase"])
         self.assertEqual(result["advantages"], [])
 
     def test_unreviewed_missing_gap_does_not_count_as_absence(self):
