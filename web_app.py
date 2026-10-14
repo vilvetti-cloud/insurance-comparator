@@ -218,7 +218,12 @@ def _json_data_report(snapshot: dict) -> dict:
                 "analysis_missing": "" if raw_found else "Ответ отсутствует в JSON.",
                 "analysis_validation": raw.get("source_quote_check", "") or (item.get("quality_reason", "") if isinstance(item, dict) else ""),
                 "analysis_source_url": source_url, "source_level": item.get("source_level", 4) if isinstance(item, dict) else 4,
-                "source_label": "Официальные правила PDF" if source == "pdf" else "Источник требует уточнения",
+                "source_label": {
+                    "pdf": "Официальные правила PDF",
+                    "official": "Официальный сайт",
+                    "internet": "Интернет-источник",
+                    "fallback": "Резервный источник",
+                }.get(source, "Источник требует уточнения"),
                 "page_number": ", ".join(str(p) for p in pages), "source_url": source_url,
                 "quality_status": quality,
                 "quality_label": item.get("quality_label", "Перепроверить") if isinstance(item, dict) else "Не найдено",
