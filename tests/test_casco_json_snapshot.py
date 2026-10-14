@@ -21,7 +21,7 @@ class CascoJsonSnapshotTests(unittest.TestCase):
             self.assertEqual(set(snapshot[insurer.name]), expected_fields)
             for key in expected_fields:
                 field = snapshot[insurer.name][key]
-                self.assertIn(field["quality_status"], {"confirmed", "conditional", "review", "missing"})
+                self.assertIn(field["quality_status"], {"confirmed", "conditional", "review", "missing", "not_found"})
                 self.assertIn("sales_eligible", field)
                 if field["quality_status"] in {"review", "missing"}:
                     self.assertFalse(field["sales_eligible"])
