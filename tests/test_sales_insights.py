@@ -167,6 +167,16 @@ class SalesInsightsTests(unittest.TestCase):
             field_data("repair_type", "Только денежная выплата."),
         )
         self.assertEqual(result["advantages"][0]["comparison_basis"], "repair_option_set_superset")
+        self.assertNotIn("комбинированный вариант", result["advantages"][0]["client_phrase"].lower())
+
+    def test_same_repair_option_set_is_equal_not_an_advantage(self):
+        result = self.analyze(
+            "repair_type",
+            field_data("repair_type", "Ремонт на СТОА по направлению страховщика или денежная форма."),
+            field_data("repair_type", "Денежная форма; ремонт на СТОА по направлению страховщика."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
     def test_crossed_repair_options_are_incomparable(self):
         result = self.analyze(
