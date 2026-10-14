@@ -1150,6 +1150,8 @@ class SalesInsightsService:
             return "sum_insured"
         if re.search(r"стоимост\w*\s+(?:ремонт|восстанов)", text):
             return "repair_cost"
+        if re.search(r"(?:от\s+)?действительн\w*\s+стоимост", text):
+            return "actual_value"
         if re.search(r"страхов\w*\s+стоимост", text):
             return "insured_value"
         return None
