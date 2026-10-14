@@ -10,6 +10,20 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data" / "casco-comparison-master.json"
 OUT = ROOT / "reports" / "casco-pdf-term-search-2026-10-14.md"
 
+FOLDER_BY_SLUG = {
+    "reso": "reso",
+    "vsk": "vsk",
+    "ingosstrakh": "ingos",
+    "renessans": "renins",
+    "alfastrah": "alfa",
+    "soglasie": "soglasie",
+    "rgs": "rgs",
+    "t-strakhovanie": "t-insurance",
+    "sberstrakhovanie": "sber",
+    "ugoria": "yugoria",
+    "sovkombank": "sovcom",
+}
+
 TERMS = {
     "terrorism": ["террорист", "терроризм", "диверс", "военн", "поджог", "подрыв", "противоправн"],
     "drone": ["бпла", "беспилот", "летательн аппарат", "дрон", "падение инородных", "падение предмет", "попадание инородных предмет"],
@@ -58,7 +72,8 @@ def main() -> None:
     ]
     for company, field in review_rows:
         slug = company.get("slug", "")
-        pdf_dir = ROOT / "data" / "sources" / slug
+        folder = FOLDER_BY_SLUG.get(slug, slug)
+        pdf_dir = ROOT / "data" / "sources" / folder
         pdfs = sorted(pdf_dir.rglob("*.pdf")) if pdf_dir.exists() else []
         terms = TERMS.get(field["key"], [field["parameter"]])
         lines.extend([
