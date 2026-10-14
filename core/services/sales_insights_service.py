@@ -1131,7 +1131,7 @@ class SalesInsightsService:
 
     @staticmethod
     def _total_loss_threshold(text: str):
-        if not re.search(r"тотал|полн\w*\s+гибел", text):
+        if not re.search(r"тотал|(?:полн|конструктивн)\w*\s+гибел", text):
             return None
         match = re.search(r"(\d+(?:[.,]\d+)?)\s*%", text)
         if not match:
