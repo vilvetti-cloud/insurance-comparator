@@ -263,6 +263,16 @@ def health():
         for company in COMPANIES
         if isinstance(snapshot.get(company), dict) and snapshot.get(company)
     )
+    audit_status_counts = {}
+    for company in COMPANIES:
+        company_data = snapshot.get(company)
+        if not isinstance(company_data, dict):
+            continue
+        for field in company_data.values():
+            if not isinstance(field, dict):
+                continue
+            status = field.get("source_analysis_status") or "missing"
+            audit_status_counts[status] = audit_status_counts.get(status, 0) + 1
     return jsonify(
         {
             "status": "ok",
@@ -271,6 +281,7 @@ def health():
             "last_updated": snapshot.get("_last_updated"),
             "data_source": snapshot.get("_data_source", "database"),
             "dataset_version": snapshot.get("_dataset_version"),
+            "audit_status_counts": audit_status_counts,
         }
     )
 
