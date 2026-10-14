@@ -83,6 +83,28 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
 @app.route("/")
 def index():
     snapshot = comparison_service.load_snapshot()
+    return render_template(
+        "index.html",
+        companies=COMPANIES,
+        last_updated=snapshot.get("_last_updated", "Не обновлялось"),
+    )
+
+
+@app.route("/compare", methods=["GET", "POST"])
+def compare():
+    company1 = request.values.get("company1")
+    company2 = request.values.get("company2")
+
+    if (
+        not company1
+        or company1 not in COMPANIES
+        or not company2
+        or company2 not in COMPANIES
+        or company1 == company2
+    ):
+        return redirect("/")
+
+    snapshot = comparison_service.load_snapshot()
     if snapshot.get("_data_source") == "normalized_json":
         contextual = {}
     else:
