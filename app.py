@@ -67,10 +67,10 @@ MAX_GROQ_TEXT_LENGTH = 6000
 # ФАЙЛ ДАННЫХ
 # ============================================================
 
-DATA_FILE = "insurance_data.json"
+DATA_FILE = os.environ.get("CASCO_COMPARISON_DATA_FILE", "data/casco-comparison-master.json")
 
 # Автоматический сбор при запуске
-UPDATE_ON_START = True
+UPDATE_ON_START = False
 
 # Защита от параллельных обновлений
 UPDATE_LOCK = threading.Lock()
@@ -166,7 +166,7 @@ KASKO_FIELDS = [
 
 FIELD_LABELS = {
     "franchise": "Франшиза",
-    "without_certificates": "Без справок",
+    "without_certificates": "Ремонт без справок",
     "gap": "GAP-страхование",
     "total_loss": "Порог тотала",
     "self_ignition": "Самовозгорание",
@@ -174,7 +174,7 @@ FIELD_LABELS = {
     "drone": "БПЛА / Дроны",
     "tow_truck": "Эвакуатор",
     "repair_type": "Тип ремонта",
-    "payment_terms": "Срок выплат"
+    "payment_terms": "Сроки выплаты / направления"
 }
 
 FIELD_SEARCH_QUERIES = {
@@ -643,26 +643,70 @@ def collect_company_data(company: str) -> Dict[str, Any]:
 # ============================================================
 
 def save_data(data: Dict[str, Any]) -> bool:
+    # The normalized JSON is the read-only source of truth.
+    if os.path.basename(DATA_FILE) == "casco-comparison-master.json":
+        logger.warning("Эталонный JSON нельзя перезаписывать автоматическим сбором")
+        return False
     try:
         with open(DATA_FILE + ".tmp", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(DATA_FILE + ".tmp", DATA_FILE)
         return True
     except Exception as exc:
-        logger.exception("❌ Ошибка сохранения: %s", exc)
+        logger.exception("Ошибка сохранения: %s", exc)
         return False
 
 
 def load_data() -> Dict[str, Any]:
+    """Read normalized official-PDF facts; do not scrape at startup."""
     if not os.path.exists(DATA_FILE):
-        logger.info("ℹ️ Файл данных отсутствует")
+        logger.error("Не найден эталонный JSON: %s", DATA_FILE)
         return {}
-
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            master = json.load(f)
+        if not isinstance(master, dict) or not isinstance(master.get("companies"), list):
+            logger.error("Неверная структура JSON: нужен массив companies")
+            return {}
+        result: Dict[str, Any] = {
+            "_last_updated": master.get("created_date", "Дата не указана"),
+            "_fields": KASKO_FIELDS,
+            "_structured": master,
+        }
+        for company in master["companies"]:
+            name = company.get("name")
+            if not name:
+                continue
+            row: Dict[str, Any] = {}
+            source_url = company.get("source_url") or COMPANY_SOURCES.get(name, {}).get("url")
+            for item in company.get("fields", []):
+                key = item.get("key")
+                if key not in KASKO_FIELDS:
+                    continue
+                answer = (item.get("direct_answer") or "").strip() or "Не найдено"
+                notes = []
+                for label, prop in (("Подробные условия", "key_conditions"),
+                                    ("Числовые параметры", "numeric_parameters"),
+                                    ("Ограничения", "limitations"),
+                                    ("Пункты Правил", "source_clause_refs")):
+                    if item.get(prop):
+                        notes.append(label + ": " + str(item[prop]))
+                pages = item.get("text_search_pages") or item.get("page_number")
+                if pages:
+                    if not isinstance(pages, list):
+                        pages = [pages]
+                    notes.append("Страницы PDF: " + ", ".join(str(p) for p in pages))
+                if item.get("evidence_quote"):
+                    notes.append("Цитата / доказательство: " + str(item["evidence_quote"]))
+                if item.get("audit_status"):
+                    notes.append("Статус проверки источника: " + str(item["audit_status"]))
+                row[key] = {"value": answer, "source": "pdf" if source_url else "none",
+                            "url": source_url, "source_level": 1 if source_url else 4,
+                            "review_note": " ".join(notes), "raw_field": item}
+            result[name] = row
+        return result
     except Exception as exc:
-        logger.exception("❌ Ошибка загрузки: %s", exc)
+        logger.exception("Ошибка загрузки эталонного JSON: %s", exc)
         return {}
 
 
@@ -752,266 +796,194 @@ def collect_all_data() -> Dict[str, Any]:
 
 app = Flask(__name__)
 
+
+def _master_company_map(data):
+    return {c.get("name"): c for c in data.get("_structured", {}).get("companies", [])}
+
+
+def _structured_field(data, company_name, key):
+    c = _master_company_map(data).get(company_name, {})
+    return next((f for f in c.get("fields", []) if f.get("key") == key), {})
+
+
+def _answer_unknown(answer):
+    t = (answer or "").casefold()
+    return any(x in t for x in ("прямо не упомянут", "не подтверждён", "не подтвержден",
+        "не найден", "не установлено", "не установлен", "не установлена",
+        "не установлены", "не подтверждено", "не подтверждена"))
+
+
+def _risk_signal(field, key):
+    answer = (field.get("direct_answer") or "").casefold()
+    text = answer + " " + (field.get("key_conditions") or "").casefold()
+    unknown = _answer_unknown(answer)
+    if key == "gap":
+        positive = any(x in text for x in ("предусмотрен как отдельный риск",
+            "предусмотрен отдельным приложением", "указан как отдельный риск",
+            "предусмотрен отдельными правилами"))
+        negative = not unknown and any(x in answer for x in ("исключён", "исключен", "не покрывается"))
+    elif key == "terrorism":
+        positive = any(x in text for x in ("предусмотрен как дополнительный риск",
+            "может быть застрахован дополнительно", "терроризм описан как страховой риск",
+            "покрытие терроризма предусмотрено"))
+        negative = not unknown and any(x in answer for x in ("исключён по общему правилу",
+            "исключен по общему правилу", "не покрывается по общему правилу",
+            "исключён, если специально не предусмотрен", "исключен, если специально не предусмотрен",
+            "не покрывается"))
+    elif key == "self_ignition":
+        positive = any(x in text for x in ("включено в определение пожара",
+            "предусмотрено как отдельный описанный риск", "самовозгорание включено"))
+        negative = not unknown and any(x in answer for x in ("исключено из стандартного покрытия",
+            "исключено по умолчанию", "внутренний пожар исключён", "внутренний пожар исключен",
+            "ограничено исключением"))
+    else:
+        return False, False, unknown
+    return positive, negative, unknown
+
+
+def compare_field(data, company1, company2, key):
+    a = _structured_field(data, company1, key)
+    b = _structured_field(data, company2, key)
+    x = (a.get("direct_answer") or "").strip()
+    y = (b.get("direct_answer") or "").strip()
+    if not x or not y:
+        return {"outcome": "incomparable", "title": "Недостаточно данных",
+                "reason": "Нет двух сопоставимых ответов в эталонной базе."}
+    pos1, neg1, unk1 = _risk_signal(a, key)
+    pos2, neg2, unk2 = _risk_signal(b, key)
+    # Any positive-vs-unknown/excluded signal remains conditional on the individual policy.
+    if pos1 and (neg2 or unk2):
+        return {"outcome": "conditional_first_advantage", "title": "Возможное преимущество " + company1,
+                "reason": "В правилах первой компании риск описан явно; у конкурента покрытие не подтверждено либо ограничено. Это не доказывает отсутствие покрытия у конкурента — проверьте программу и полис."}
+    if pos2 and (neg1 or unk1):
+        return {"outcome": "conditional_competitor_advantage", "title": "Возможное преимущество " + company2,
+                "reason": "В правилах конкурента риск описан явно; у первой компании покрытие не подтверждено либо ограничено. Проверьте включение риска в договор."}
+    if " ".join(x.casefold().split()) == " ".join(y.casefold().split()):
+        return {"outcome": "equal", "title": "Сопоставимые краткие ответы",
+                "reason": "Краткие ответы совпадают; индивидуальные условия и исключения договора могут отличаться."}
+    if unk1 or unk2:
+        return {"outcome": "incomparable", "title": "Нельзя уверенно сравнить",
+                "reason": "В одном из источников прямое покрытие не подтверждено или риск не упомянут. Отсутствие упоминания не считается исключением."}
+    return {"outcome": "incomparable", "title": "Нужна проверка сопоставимых условий",
+            "reason": "Формулировки различаются. Для вывода о преимуществе нужно сопоставить одинаковые лимиты, основания отсчёта и условия договора."}
+
+
+def build_sales_summary(data, company1, company2, comparison_by_field):
+    labels = {"gap": "GAP-страхование", "terrorism": "Терроризм", "self_ignition": "Самовозгорание"}
+    why = {
+        "gap": "GAP может компенсировать часть финансовой потери при тотальной гибели или хищении, но действует только при выполнении условий и включении риска в договор.",
+        "terrorism": "Отдельное включение риска может расширить защиту, однако описание риска в Правилах не заменяет проверку выбранной программы и полиса.",
+        "self_ignition": "Явное описание самовозгорания помогает понять рамки риска, но нужно учитывать исключения и обстоятельства возникновения пожара.",
+    }
+    cards = []
+    for key, comp in comparison_by_field.items():
+        if comp.get("outcome") not in ("first_advantage", "conditional_first_advantage"):
+            continue
+        a, b = _structured_field(data, company1, key), _structured_field(data, company2, key)
+        cards.append({"kind": "conditional_advantage" if comp["outcome"] == "conditional_first_advantage" else "advantage",
+            "title": labels.get(key, FIELD_LABELS.get(key, key)), "label": FIELD_LABELS.get(key, key),
+            "own_value": a.get("direct_answer", "Не найдено"), "competitor_value": b.get("direct_answer", "Не найдено"),
+            "why": why.get(key, "Отличие нужно проверить по индивидуальным условиям страхования.")})
+    confirmed = [c for c in cards if c["kind"] == "advantage"]
+    conditional = [c for c in cards if c["kind"] == "conditional_advantage"]
+    if cards:
+        client_message = " ".join(f'{c["label"]}: в правилах {company1} условие описано явно; у {company2} оно не подтверждено или требует отдельной проверки.' for c in cards[:3])
+        client_message += " Перед оформлением сверим включение риска в выбранную программу и договор."
+    else:
+        client_message = f"По проверенным материалам пока нельзя доказательно заявить, что {company1} лучше {company2} по этим параметрам. Сначала сопоставим лимиты, исключения и условия конкретных договоров."
+    return {"advantages": confirmed, "conditional_advantages": conditional, "cards": cards,
+        "cautions": ["Отсутствие упоминания риска в Правилах не означает автоматического исключения.",
+                     "Ответ по Правилам не заменяет проверку выбранной программы и индивидуального договора."],
+        "client_message": client_message}
+
+
 @app.route("/")
 def index():
     data = load_data()
-    companies = list(COMPANY_SOURCES.keys())
-    return render_template(
-        "index.html",
-        companies=companies,
-        data=data,
-        last_updated=data.get("_last_updated", "Не обновлялось"),
-        fields=KASKO_FIELDS,
-        field_labels=FIELD_LABELS
-    )
+    companies = [c.get("name") for c in data.get("_structured", {}).get("companies", []) if c.get("name")]
+    return render_template("index.html", companies=companies, data=data,
+        last_updated=data.get("_last_updated", "Не загружено"), fields=KASKO_FIELDS, field_labels=FIELD_LABELS)
 
 
 @app.route("/compare", methods=["GET", "POST"])
 def compare():
-    c1 = request.values.get("company1")
-    c2 = request.values.get("company2")
-    companies = list(COMPANY_SOURCES.keys())
-
-    if not c1 or c1 not in companies or not c2 or c2 not in companies or c1 == c2:
-        return redirect("/")
-
+    company1, company2 = request.values.get("company1"), request.values.get("company2")
     data = load_data()
-
-    def prepare_company_data(company):
-        raw = data.get(company, {})
-        result = {}
-        for field in KASKO_FIELDS:
-            field_data = raw.get(field, {})
-            if isinstance(field_data, dict):
-                result[field] = field_data.get("value", "Не найдено")
-                result[f"{field}_source"] = field_data.get("source", "none")
-                result[f"{field}_url"] = field_data.get("url")
-            else:
-                result[field] = "Не найдено"
-                result[f"{field}_source"] = "none"
-                result[f"{field}_url"] = None
+    companies = [c.get("name") for c in data.get("_structured", {}).get("companies", []) if c.get("name")]
+    if not company1 or company1 not in companies or not company2 or company2 not in companies or company1 == company2:
+        return redirect("/")
+    def prepare(company):
+        raw, result = data.get(company, {}), {}
+        for key in KASKO_FIELDS:
+            item = raw.get(key, {})
+            result[key] = item.get("value", "Не найдено") if isinstance(item, dict) else "Не найдено"
+            result[key + "_source_level"] = item.get("source_level", 4) if isinstance(item, dict) else 4
+            result[key + "_url"] = item.get("url") if isinstance(item, dict) else None
+            result[key + "_review_note"] = item.get("review_note") if isinstance(item, dict) else None
         return result
+    data1, data2 = prepare(company1), prepare(company2)
+    comparison_by_field = {key: compare_field(data, company1, company2, key) for key in KASKO_FIELDS}
+    sales = build_sales_summary(data, company1, company2, comparison_by_field)
+    found1 = sum(data1.get(k) not in ("", None, "Не найдено") for k in KASKO_FIELDS)
+    found2 = sum(data2.get(k) not in ("", None, "Не найдено") for k in KASKO_FIELDS)
+    return render_template("result.html", company1=company1, company2=company2, data1=data1, data2=data2,
+        fields=KASKO_FIELDS, field_labels=FIELD_LABELS, last_updated=data.get("_last_updated", "Не загружено"),
+        comparison_by_field=comparison_by_field, comparison_ready=bool(sales["cards"]), sales=sales,
+        found1=found1, found2=found2)
 
-    data1 = prepare_company_data(c1)
-    data2 = prepare_company_data(c2)
 
-    return render_template(
-        "result.html",
-        company1=c1,
-        company2=c2,
-        data1=data1,
-        data2=data2,
-        fields=KASKO_FIELDS,
-        field_labels=FIELD_LABELS,
-        last_updated=data.get("_last_updated", "Не обновлялось")
-    )
+@app.route("/data-report")
+def data_report():
+    data, report_companies = load_data(), []
+    master = data.get("_structured", {})
+    total_found = total_confirmed = total_conditional = total_review = 0
+    total_possible = len(master.get("companies", [])) * len(KASKO_FIELDS)
+    for company in master.get("companies", []):
+        fields, counts = [], {"confirmed": 0, "conditional": 0, "review": 0, "missing": 0}
+        for f in company.get("fields", []):
+            answer = (f.get("direct_answer") or "").strip()
+            full = f.get("key_conditions") or answer
+            limitation = f.get("limitations") or ""
+            status = " ".join(str(f.get(k, "")) for k in ("audit_status", "source_review_status", "source_quote_check"))
+            conditional = any(w in (answer + " " + limitation).casefold() for w in ("по договор", "если включ", "при услов", "дополнительн", "зависит"))
+            confirmed = "полностью подтверждено" in status.casefold() or "без оговорок" in status.casefold()
+            missing = not answer or answer == "Не найдено"
+            if missing: counts["missing"] += 1
+            elif confirmed: counts["confirmed"] += 1
+            elif conditional: counts["conditional"] += 1
+            else: counts["review"] += 1
+            pages = f.get("text_search_pages") or []
+            quote = f.get("evidence_quote") or ""
+            fields.append({"label": f.get("parameter", f.get("key", "")), "raw_found": bool(answer), "value": full,
+                "evidence_items": ([{"page": ", ".join(str(p) for p in pages), "section": f.get("source_clause_refs", ""), "quote": quote}] if quote or pages else []),
+                "analysis_status": "available" if answer else "missing", "analysis_answer": answer,
+                "analysis_explanation": limitation, "analysis_missing": "" if answer else "Ответ отсутствует в наборе данных.",
+                "analysis_validation": status, "analysis_source_url": f.get("source_url") or company.get("source_url", ""),
+                "source_level": 1 if company.get("source_url") else 4,
+                "source_label": "Официальный PDF" if company.get("source_url") else "Источник требует уточнения",
+                "page_number": ", ".join(str(p) for p in pages), "source_url": f.get("source_url") or company.get("source_url", ""),
+                "quality_status": "confirmed" if confirmed else ("conditional" if conditional else "review"),
+                "quality_label": "Подтверждено" if confirmed else ("Зависит от договора" if conditional else "Перепроверить"),
+                "quality_reason": status + ((" " + limitation) if limitation else ""),
+                "checked_at": master.get("created_date", ""), "quarantined": False})
+        found = sum(bool(f["raw_found"]) for f in fields)
+        total_found += found
+        total_confirmed += counts["confirmed"]; total_conditional += counts["conditional"]; total_review += counts["review"]
+        report_companies.append({"name": company.get("name", ""), "found_count": found, "missing_count": counts["missing"],
+            "confirmed_count": counts["confirmed"], "conditional_count": counts["conditional"], "review_count": counts["review"],
+            "contextual_answer_count": 0, "official_pdf_count": len(fields), "official_count": 0, "web_count": 0,
+            "fallback_count": 0, "quarantined_count": 0, "last_checked": master.get("created_date", ""),
+            "latest_run": None, "fields": fields})
+    report = {"total_found": total_found, "total_possible": total_possible,
+        "coverage_percent": round(100 * total_found / total_possible) if total_possible else 0,
+        "total_confirmed": total_confirmed, "total_conditional": total_conditional,
+        "total_contextual_answers": 0, "total_review": total_review, "companies": report_companies}
+    return render_template("data_report.html", report=report)
 
 
 @app.route("/update")
 def update():
-    global UPDATE_RUNNING
-    if UPDATE_RUNNING:
-        return "⏳ Обновление уже выполняется. Попробуйте позже."
-
-    import threading
-    threading.Thread(target=lambda: collect_all_data()).start()
-    return "🔄 Обновление запущено! Страница обновится через несколько минут."
-
-
-# ============================================================
-# ШАБЛОНЫ
-# ============================================================
-
-os.makedirs("templates", exist_ok=True)
-
-with open("templates/index.html", "w", encoding="utf-8") as f:
-    f.write('''
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сравнение КАСКО</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #f0f2f5; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .container { background: #fff; padding: 40px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 520px; width: 100%; }
-        h1 { font-size: 24px; color: #1a1a2e; text-align: center; margin-bottom: 8px; }
-        .subtitle { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 30px; }
-        .update-info { text-align: center; font-size: 12px; color: #9ca3af; margin-bottom: 24px; padding: 8px; background: #f9fafb; border-radius: 8px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; font-weight: 600; font-size: 14px; color: #374151; margin-bottom: 6px; }
-        select { width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: 15px; background: #fff; transition: border-color 0.2s; appearance: none; }
-        select:focus { outline: none; border-color: #2563eb; }
-        .vs { text-align: center; font-size: 20px; color: #9ca3af; margin: 8px 0; }
-        .btn { width: 100%; padding: 14px; background: #2563eb; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 8px; }
-        .btn:hover { background: #1d4ed8; }
-        .btn-update { background: #6b7280; margin-top: 12px; }
-        .btn-update:hover { background: #4b5563; }
-        .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 16px; }
-        .badge { display: inline-block; font-size: 11px; padding: 2px 10px; border-radius: 12px; background: #e5e7eb; color: #4b5563; margin-top: 8px; }
-    </style>
-</head>
-<body>
-<div class="container">
-    <h1>🚗 Сравнение КАСКО</h1>
-    <p class="subtitle">Выберите две компании для сравнения</p>
-    <div class="update-info">📅 Данные обновлены: {{ last_updated }}</div>
-    
-    <form action="/compare" method="POST">
-        <div class="form-group">
-            <label>🏢 Первая компания</label>
-            <select name="company1" required>
-                <option value="">— Выберите —</option>
-                {% for c in companies %}
-                <option value="{{ c }}">{{ c }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        
-        <div class="vs">⚔️</div>
-        
-        <div class="form-group">
-            <label>🏢 Вторая компания</label>
-            <select name="company2" required>
-                <option value="">— Выберите —</option>
-                {% for c in companies %}
-                <option value="{{ c }}">{{ c }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        
-        <button type="submit" class="btn">📊 Сравнить</button>
-    </form>
-    
-    <a href="/update"><button class="btn btn-update">🔄 Обновить данные сейчас</button></a>
-    
-    <div class="footer">
-        <span class="badge">11 компаний</span>
-        <span class="badge">10 параметров</span>
-        <span class="badge">🤖 Groq + Интернет</span>
-    </div>
-</div>
-</body>
-</html>
-''')
-
-
-with open("templates/result.html", "w", encoding="utf-8") as f:
-    f.write('''
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сравнение КАСКО</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #f0f2f5; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
-        h1 { font-size: 22px; color: #1a1a2e; text-align: center; margin-bottom: 6px; }
-        .subtitle { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 24px; }
-        .vs-title { text-align: center; font-size: 16px; padding: 12px; background: #f8fafc; border-radius: 10px; margin-bottom: 24px; }
-        .main-badge { background: #2563eb; color: #fff; padding: 2px 14px; border-radius: 12px; font-size: 12px; margin-left: 8px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { background: #1a1a2e; color: #fff; padding: 10px 12px; text-align: left; }
-        td { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
-        .param { font-weight: 600; color: #374151; background: #f8fafc; width: 16%; }
-        .value { word-break: break-word; }
-        .source-icon { font-size: 14px; margin-right: 4px; }
-        .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 16px; padding: 14px; background: #f8fafc; border-radius: 10px; font-size: 13px; }
-        .legend-item { display: flex; align-items: center; gap: 4px; }
-        .btn { display: inline-block; padding: 10px 24px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; }
-        .btn:hover { background: #1d4ed8; }
-        .btn-secondary { background: #6b7280; }
-        .btn-secondary:hover { background: #4b5563; }
-        .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
-        .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #f3f4f6; padding-top: 16px; }
-        .not-found { color: #e74c3c; font-style: italic; }
-        .source-url { font-size: 11px; color: #6b7280; word-break: break-all; }
-        .source-url a { color: #2563eb; text-decoration: none; }
-        .source-url a:hover { text-decoration: underline; }
-        @media (max-width: 768px) {
-            .container { padding: 16px; }
-            table { font-size: 12px; }
-            td, th { padding: 6px 8px; }
-            .param { width: 20%; }
-        }
-    </style>
-</head>
-<body>
-<div class="container">
-    <h1>📊 Сравнение КАСКО</h1>
-    <div class="subtitle">Сравнительный анализ условий страхования</div>
-    
-    <div class="vs-title">
-        🏆 {{ company1 }} <span class="main-badge">ОСНОВНАЯ</span>
-        &nbsp;⚔️&nbsp; {{ company2 }}
-    </div>
-    
-    <div class="legend">
-        <span class="legend-item">📄 PDF правила</span>
-        <span class="legend-item">🌐 Интернет-поиск</span>
-        <span class="legend-item">❌ Не найдено</span>
-    </div>
-    
-    <table>
-        <thead>
-            <tr>
-                <th class="param">Параметр</th>
-                <th>{{ company1 }}</th>
-                <th>{{ company2 }}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for field in fields %}
-            <tr>
-                <td class="param">{{ field_labels.get(field, field) }}</td>
-                <td class="value">
-                    {% set val = data1.get(field, 'Не найдено') %}
-                    {% set src = data1.get(field + '_source', 'none') %}
-                    {% set url = data1.get(field + '_url') %}
-                    {% if val == 'Не найдено' or not val %}
-                        <span class="not-found">Не найдено</span>
-                    {% else %}
-                        {% if src == 'pdf' %}📄{% elif src == 'internet' %}🌐{% else %}❌{% endif %}
-                        {{ val }}
-                        {% if url %}
-                            <div class="source-url"><a href="{{ url }}" target="_blank">🔗 источник</a></div>
-                        {% endif %}
-                    {% endif %}
-                </td>
-                <td class="value">
-                    {% set val = data2.get(field, 'Не найдено') %}
-                    {% set src = data2.get(field + '_source', 'none') %}
-                    {% set url = data2.get(field + '_url') %}
-                    {% if val == 'Не найдено' or not val %}
-                        <span class="not-found">Не найдено</span>
-                    {% else %}
-                        {% if src == 'pdf' %}📄{% elif src == 'internet' %}🌐{% else %}❌{% endif %}
-                        {{ val }}
-                        {% if url %}
-                            <div class="source-url"><a href="{{ url }}" target="_blank">🔗 источник</a></div>
-                        {% endif %}
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    
-    <div class="actions">
-        <a href="/" class="btn">← Новое сравнение</a>
-        <a href="/update" class="btn btn-secondary">🔄 Обновить данные</a>
-    </div>
-    
-    <div class="footer">
-        Обновлено: {{ last_updated }}
-    </div>
-</div>
-</body>
-</html>
-''')
+    return "Автоматический сбор отключён: сайт использует эталонный JSON. Обновите JSON после проверки изменений официальных документов.", 200
 
 
 # ============================================================
