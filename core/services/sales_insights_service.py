@@ -152,10 +152,22 @@ class SalesInsightsService:
     def _comparison_eligible(cls, data: dict[str, Any], key: str) -> bool:
         if cls._trusted(data, key):
             return True
-        # Contract-dependent facts from official insurer documents can be
-        # compared only with a visible caveat; web/fallback/unverified values
-        # remain excluded from sales arguments.
-        return cls._value(data, key) is not None
+        # Keep genuinely unestablished values unknown; audit status must not
+        # downgrade a populated approved answer, but cannot create a value.
+        if data.get(f"{key}_quality_status") != "conditional":
+            return False
+        if data.get(f"{key}_source_level") not in {1, 2}:
+            return False
+        value = cls._value(data, key)
+        if value is None:
+            return False
+        confidence = data.get(f"{key}_confidence")
+        if confidence is None:
+            return True
+        try:
+            return float(confidence) >= 0.75
+        except (TypeError, ValueError):
+            return False
 
     @staticmethod
     def _value(data: dict[str, Any], key: str) -> str | None:
