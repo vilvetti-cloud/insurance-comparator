@@ -93,10 +93,24 @@ class SalesInsightsService:
             if comparison is None:
                 continue
 
-            is_conditional = (
-                data.get(f"{key}_quality_status") != "confirmed"
-                or competitor_data.get(f"{key}_quality_status") != "confirmed"
-                or bool(comparison.get("conditional"))
+            approved_gap_absence = key == "gap" and (
+                (
+                    own is None
+                    and data.get(f"{key}_quality_status") == "not_found"
+                    and data.get(f"{key}_source_level") in {1, 2}
+                )
+                or (
+                    other is None
+                    and competitor_data.get(f"{key}_quality_status") == "not_found"
+                    and competitor_data.get(f"{key}_source_level") in {1, 2}
+                )
+            )
+            is_conditional = bool(comparison.get("conditional")) or (
+                not approved_gap_absence
+                and (
+                    data.get(f"{key}_quality_status") != "confirmed"
+                    or competitor_data.get(f"{key}_quality_status") != "confirmed"
+                )
             )
             if is_conditional:
                 comparison["conditional"] = True
