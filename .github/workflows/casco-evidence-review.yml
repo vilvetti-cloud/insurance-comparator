@@ -1,0 +1,35 @@
+name: CASCO full-PDF evidence search
+
+on:
+  pull_request:
+    paths:
+      - "data/casco-comparison-master.json"
+      - "data/sources/**/*.pdf"
+      - "scripts/search_casco_review_terms.py"
+      - ".github/workflows/casco-evidence-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-pdf-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PDF text extraction
+        run: python -m pip install "PyMuPDF>=1.24.0"
+      - name: Search full text of insurer PDFs
+        run: python scripts/search_casco_review_terms.py
+      - name: Upload review report
+        uses: actions/upload-artifact@v4
+        with:
+          name: casco-full-pdf-evidence-search
+          path: reports/casco-pdf-term-search-2026-10-14.md
+          if-no-files-found: error
