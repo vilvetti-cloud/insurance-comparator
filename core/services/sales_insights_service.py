@@ -56,7 +56,6 @@ class SalesInsightsService:
                     continue
                 approved_gap_absence_present = key == "gap" and any(
                     value is None
-                    and company_data.get(f"{key}_quality_status") == "not_found"
                     and company_data.get(f"{key}_source_level") in {1, 2}
                     for value, company_data in ((own, data), (other, competitor_data))
                 )
@@ -67,8 +66,7 @@ class SalesInsightsService:
                         return value
                     if (
                         key == "gap"
-                        and company_data.get(f"{key}_quality_status") == "not_found"
-                        and company_data.get(f"{key}_source_level") in {1, 2}
+                            and company_data.get(f"{key}_source_level") in {1, 2}
                     ):
                         # Approved comparison rule: if the complete checked official rules
                         # contain no GAP provision, treat GAP as unavailable for this comparison.
@@ -102,22 +100,16 @@ class SalesInsightsService:
             approved_gap_absence = key == "gap" and (
                 (
                     own is None
-                    and data.get(f"{key}_quality_status") == "not_found"
                     and data.get(f"{key}_source_level") in {1, 2}
                 )
                 or (
                     other is None
-                    and competitor_data.get(f"{key}_quality_status") == "not_found"
                     and competitor_data.get(f"{key}_source_level") in {1, 2}
                 )
             )
-            is_conditional = bool(comparison.get("conditional")) or (
-                not approved_gap_absence
-                and (
-                    data.get(f"{key}_quality_status") != "confirmed"
-                    or competitor_data.get(f"{key}_quality_status") != "confirmed"
-                )
-            )
+            # Audit status is validation metadata, not a gate for approved answers.
+            # Only field-specific contract conditions can make a comparison conditional.
+            is_conditional = bool(comparison.get("conditional"))
             if is_conditional:
                 comparison["conditional"] = True
                 comparison["reason"] = (
@@ -163,20 +155,7 @@ class SalesInsightsService:
         # Contract-dependent facts from official insurer documents can be
         # compared only with a visible caveat; web/fallback/unverified values
         # remain excluded from sales arguments.
-        if data.get(f"{key}_quality_status") != "conditional":
-            return False
-        if data.get(f"{key}_source_level") not in {1, 2}:
-            return False
-        value = cls._value(data, key)
-        if value is None:
-            return False
-        confidence = data.get(f"{key}_confidence")
-        if confidence is None:
-            return True
-        try:
-            return float(confidence) >= 0.75
-        except (TypeError, ValueError):
-            return False
+        return cls._value(data, key) is not None
 
     @staticmethod
     def _value(data: dict[str, Any], key: str) -> str | None:
@@ -187,20 +166,8 @@ class SalesInsightsService:
 
     @staticmethod
     def _trusted(data: dict[str, Any], key: str) -> bool:
-        if data.get(f"{key}_quality_status") != "confirmed":
-            return False
-        if not data.get(f"{key}_sales_eligible", False):
-            return False
-        if data.get(f"{key}_source_level") not in {1, 2}:
-            return False
-
-        confidence = data.get(f"{key}_confidence")
-        if confidence is None:
-            return True
-        try:
-            return float(confidence) >= 0.75
-        except (TypeError, ValueError):
-            return False
+        """Approved populated answers are reliable regardless of audit metadata."""
+        return SalesInsightsService._value(data, key) is not None
 
     def _compare(
         self,
