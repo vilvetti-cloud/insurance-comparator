@@ -46,8 +46,9 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(result["conditional_advantages"], [])
         self.assertEqual(len(result["comparisons"]), 1)
         self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
-        self.assertIn("преимущество у РЕСО-Гарантия", result["comparisons"][0]["reason"])
-        self.assertIn("нет различия", result["client_message"])
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+        self.assertIn("РЕСО-Гарантия", result["comparisons"][0]["evidence"])
+        self.assertEqual(result["advantages"], [])
 
     def test_unreviewed_missing_gap_does_not_count_as_absence(self):
         unreviewed = {
@@ -64,7 +65,9 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             field_labels={"gap": "GAP-страхование"},
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"], [])
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["conditional_advantages"][0]["outcome"], "conditional_first_advantage")
+        self.assertTrue(result["comparisons"][0]["conditional"])
 
 
 if __name__ == "__main__":
