@@ -195,7 +195,7 @@ def _json_data_report(snapshot: dict) -> dict:
             item = company_data.get(key, {})
             raw = item.get("raw_field", {}) if isinstance(item, dict) else {}
             value = item.get("value", "Не найдено") if isinstance(item, dict) else "Не найдено"
-            raw_found = value not in (None, "", "Не найдено")
+            raw_found = value not in (None, "", "Не найдено") and not str(value).startswith("Не найдено в тексте правил")
             quality = item.get("quality_status", "missing") if isinstance(item, dict) else "missing"
             if quality not in counts:
                 quality = "review"
