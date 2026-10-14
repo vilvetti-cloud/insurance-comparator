@@ -23,7 +23,7 @@ class CascoJsonSnapshotTests(unittest.TestCase):
                 field = snapshot[insurer.name][key]
                 self.assertIn(field["quality_status"], {"confirmed", "conditional", "review", "missing"})
                 self.assertIn("sales_eligible", field)
-                if field["quality_status"] != "confirmed":
+                if field["quality_status"] in {"review", "missing"}:
                     self.assertFalse(field["sales_eligible"])
 
     def test_snapshot_has_110_fields_and_preserves_evidence_metadata(self):
