@@ -13,6 +13,23 @@ class ComparisonServiceTests(unittest.TestCase):
         self.assertEqual(gap["source"], "official")
         self.assertIn("sovcomins.ru/product/articles-car/gap-strakhovanie-v-kasko", gap["url"])
 
+    def test_official_pdf_facts_are_eligible_without_secondary_audit_gate(self):
+        snapshot = ComparisonService()._load_json_snapshot()
+        franchise = snapshot["РЕСО-Гарантия"]["franchise"]
+        self.assertEqual(franchise["source_type"], "pdf")
+        self.assertEqual(franchise["verification_status"], "verified")
+        self.assertIn(franchise["quality_status"], {"confirmed", "conditional"})
+        self.assertTrue(franchise["sales_eligible"])
+        self.assertTrue(franchise["evidence_quote"])
+        self.assertEqual(franchise["source"], "pdf")
+
+    def test_pdf_not_found_is_not_misrepresented_as_no_coverage(self):
+        snapshot = ComparisonService()._load_json_snapshot()
+        field = snapshot["Ингосстрах"]["without_certificates"]
+        self.assertEqual(field["quality_status"], "not_found")
+        self.assertFalse(field["sales_eligible"])
+        self.assertEqual(field["value"], "Не найдено в тексте правил")
+
     def test_review_value_is_visible_but_not_sales_eligible(self):
         quote = "6.8. В договоре страхования может быть установлена безусловная франшиза."
         rows = [
