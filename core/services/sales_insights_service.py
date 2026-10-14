@@ -145,6 +145,7 @@ class SalesInsightsService:
                 company=company,
                 competitor=competitor,
                 advantages=cards,
+                comparisons=comparisons,
             ),
         }
 
@@ -404,15 +405,8 @@ class SalesInsightsService:
         company: str,
         competitor: str,
         advantages: list[dict[str, Any]],
+        comparisons: list[dict[str, Any]] | None = None,
     ) -> str:
-        if not advantages:
-            return (
-                f"По подтверждённым сопоставимым условиям сейчас нет различия, "
-                f"которое корректно называть преимуществом {company} перед "
-                f"{competitor}. Для решения лучше смотреть конкретные условия "
-                "предложения и цену."
-            )
-
         phrases: list[str] = []
         for item in advantages:
             label = str(item.get("label") or item.get("title") or "условию").strip()
@@ -428,10 +422,49 @@ class SalesInsightsService:
             if phrase and phrase not in phrases:
                 phrases.append(phrase)
 
+        # Include independently useful first-insurer terms even when both
+        # insurers offer them. Phrase these as positive features, never as a
+        # comparative or unique advantage.
+        shared_features: list[str] = []
+        for item in comparisons or []:
+            if item.get("outcome") != "equal":
+                continue
+            key = str(item.get("field_key") or "")
+            value = str(item.get("own_value") or "").strip()
+            label = str(item.get("label") or item.get("title") or key).strip()
+            if not value or self._value({"v": value}, "v") is None:
+                continue
+            value_l = value.lower().replace("ё", "е")
+            if re.search(r"не предусмотрен|не покрывается|исключен|отсутствует|нет\b|не входит", value_l):
+                continue
+            positive = False
+            if key == "franchise":
+                positive = self._franchise_none(value_l)
+            elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"}:
+                positive = self._coverage_level_v2(key, value_l) in {1, 2}
+            elif key == "without_certificates":
+                positive = self._without_documents_state_v2(value_l) == "positive"
+            elif key == "repair_type":
+                positive = bool(self._repair_options_v2(value_l))
+            elif key == "payment_terms":
+                positive = bool(self._payment_term(value_l))
+            if positive:
+                feature = f"Также у {company} предусмотрено полезное условие по параметру «{label}»: {value}."
+                if feature not in shared_features:
+                    shared_features.append(feature)
+
+        all_phrases = phrases + shared_features
+        if not all_phrases:
+            return (
+                f"В подтверждённых данных пока нет доказанного сравнительного преимущества {company} перед "
+                f"{competitor}. При этом окончательный выбор стоит делать по конкретной программе, "
+                "составу покрытия и цене."
+            )
+
         return (
-            f"При сравнении {company} и {competitor} стоит обратить внимание на конкретные условия, "
+            f"При сравнении {company} и {competitor} стоит обратить внимание на условия, "
             "которые влияют на выплату и урегулирование. "
-            + " ".join(phrases)
+            + " ".join(all_phrases)
             + f" Если эти условия важны для вас, {company} стоит рассмотреть в первую очередь; "
               "перед оформлением сверим их с выбранной программой и полисом."
         )
@@ -1102,6 +1135,8 @@ class SalesInsightsService:
         included = bool(re.search(
             r"входит\s+в\s+(?:страхов\w*\s+)?покрыти|"
             r"включен\w*\s+в\s+(?:страхов\w*\s+)?покрыти|"
+            r"включен\w*\s+в\s+базов\w*\s+покрыти|"
+            r"включен\w*\s+в\s+базов\w*\s+программ|"
             r"(?<!не\s)включен\w*\b|"
             r"покрыти\w*\s+распространяется|"
             r"прямо\s+предусмотрен\w*\s+(?:договор\w*\s+)?(?:страхов\w*\s+)?покрыти|"
