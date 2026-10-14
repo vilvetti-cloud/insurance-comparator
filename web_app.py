@@ -6,7 +6,6 @@ from collector.registry import INSURERS
 from core.catalog import KASKO_FIELDS
 from core.services.comparison_service import ComparisonService
 from core.services.sales_insights_service import SalesInsightsService
-from core.services.sales_script_ai_service import SalesScriptAIService
 from core.services.data_quality_report_service import DataQualityReportService
 
 
@@ -14,7 +13,6 @@ app = Flask(__name__)
 
 comparison_service = ComparisonService()
 sales_insights_service = SalesInsightsService()
-sales_script_ai_service = SalesScriptAIService()
 data_quality_report_service = DataQualityReportService()
 COMPANIES = [insurer.name for insurer in INSURERS]
 FIELD_KEYS = [field["key"] for field in KASKO_FIELDS]
@@ -132,11 +130,7 @@ def compare():
             competitor_data=data2,
             field_labels=FIELD_LABELS,
         )
-        sales = sales_script_ai_service.enrich(
-            company=company1,
-            competitor=company2,
-            sales=sales,
-        )
+        # Sales conclusions remain deterministic and are derived from audited facts only.
     else:
         sales = {
             "advantages": [],
@@ -162,9 +156,78 @@ def compare():
     )
 
 
+def _json_data_report(snapshot: dict) -> dict:
+    companies = []
+    total_found = total_confirmed = total_conditional = total_review = total_contextual = 0
+    total_possible = len(INSURERS) * len(FIELD_KEYS)
+    for insurer in INSURERS:
+        name = insurer.name
+        company_data = snapshot.get(name, {})
+        fields = []
+        counts = {"confirmed": 0, "conditional": 0, "review": 0, "missing": 0}
+        source_counts = {"pdf": 0, "official": 0, "internet": 0, "fallback": 0}
+        for meta in KASKO_FIELDS:
+            key, label = meta["key"], meta["label"]
+            item = company_data.get(key, {})
+            raw = item.get("raw_field", {}) if isinstance(item, dict) else {}
+            value = item.get("value", "Не найдено") if isinstance(item, dict) else "Не найдено"
+            raw_found = value not in (None, "", "Не найдено")
+            quality = item.get("quality_status", "missing") if isinstance(item, dict) else "missing"
+            if quality not in counts:
+                quality = "review"
+            counts[quality] += 1
+            total_contextual += int(bool(item.get("diagnostic_value"))) if isinstance(item, dict) else 0
+            source = item.get("source", "none") if isinstance(item, dict) else "none"
+            if source == "pdf": source_counts["pdf"] += 1
+            elif source == "official": source_counts["official"] += 1
+            elif source == "internet": source_counts["internet"] += 1
+            elif source == "fallback": source_counts["fallback"] += 1
+            pages = raw.get("text_search_pages") or []
+            quote = item.get("evidence_quote") if isinstance(item, dict) else ""
+            source_url = item.get("url") if isinstance(item, dict) else None
+            fields.append({
+                "label": label, "raw_found": raw_found, "value": value,
+                "evidence_items": ([{"page": ", ".join(str(p) for p in pages), "section": raw.get("source_clause_refs", ""), "quote": quote}] if quote or pages else []),
+                "analysis_status": raw.get("source_analysis_status", ""),
+                "analysis_answer": item.get("diagnostic_value") or value if isinstance(item, dict) else value,
+                "analysis_explanation": item.get("quality_reason", "") if isinstance(item, dict) else "",
+                "analysis_missing": "" if raw_found else "Ответ отсутствует в JSON.",
+                "analysis_validation": raw.get("source_quote_check", "") or (item.get("quality_reason", "") if isinstance(item, dict) else ""),
+                "analysis_source_url": source_url, "source_level": item.get("source_level", 4) if isinstance(item, dict) else 4,
+                "source_label": "Официальные правила PDF" if source == "pdf" else "Источник требует уточнения",
+                "page_number": ", ".join(str(p) for p in pages), "source_url": source_url,
+                "quality_status": quality,
+                "quality_label": item.get("quality_label", "Перепроверить") if isinstance(item, dict) else "Не найдено",
+                "quality_reason": item.get("quality_reason", "") if isinstance(item, dict) else "",
+                "checked_at": snapshot.get("_last_updated", ""), "quarantined": raw_found and quality not in {"confirmed", "conditional"},
+            })
+        found = counts["confirmed"] + counts["conditional"]
+        total_found += found
+        total_confirmed += counts["confirmed"]
+        total_conditional += counts["conditional"]
+        total_review += counts["review"]
+        companies.append({
+            "name": name, "found_count": found, "missing_count": len(FIELD_KEYS) - found,
+            "confirmed_count": counts["confirmed"], "conditional_count": counts["conditional"],
+            "review_count": counts["review"], "contextual_answer_count": sum(bool(company_data.get(k, {}).get("diagnostic_value")) for k in FIELD_KEYS),
+            "official_pdf_count": source_counts["pdf"], "official_count": source_counts["official"],
+            "web_count": source_counts["internet"], "fallback_count": source_counts["fallback"],
+            "quarantined_count": sum(bool(f["quarantined"]) for f in fields),
+            "last_checked": snapshot.get("_last_updated"), "latest_run": None, "fields": fields,
+        })
+    return {
+        "total_found": total_found, "total_possible": total_possible,
+        "coverage_percent": round(100 * total_found / total_possible) if total_possible else 0,
+        "total_confirmed": total_confirmed, "total_conditional": total_conditional,
+        "total_contextual_answers": total_contextual, "total_review": total_review, "companies": companies,
+    }
+
+
 @app.route("/data-report")
 def data_report():
-    report = data_quality_report_service.load()
+    snapshot = comparison_service.load_snapshot()
+    report = (_json_data_report(snapshot) if snapshot.get("_data_source") == "normalized_json"
+              else data_quality_report_service.load())
     return render_template("data_report.html", report=report)
 
 
