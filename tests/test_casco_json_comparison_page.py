@@ -10,6 +10,11 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertEqual(health.status_code, 200)
         self.assertEqual(health.get_json()["data_source"], "normalized_json")
         self.assertEqual(health.get_json()["dataset_version"], "1.1")
+        audit_counts = health.get_json()["audit_status_counts"]
+        self.assertEqual(sum(audit_counts.values()), 110)
+        self.assertEqual(audit_counts["found"], 81)
+        self.assertEqual(audit_counts["partial"], 24)
+        self.assertEqual(audit_counts["not_found"], 5)
         response = client.get(
             "/compare",
             query_string={
