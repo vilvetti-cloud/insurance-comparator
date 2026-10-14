@@ -5,6 +5,14 @@ from core.services.comparison_service import ComparisonService
 
 
 class ComparisonServiceTests(unittest.TestCase):
+    def test_json_snapshot_respects_field_level_official_site_source(self):
+        snapshot = ComparisonService()._load_json_snapshot()
+        gap = snapshot["Совкомбанк Страхование"]["gap"]
+        self.assertEqual(gap["source_type"], "official_website")
+        self.assertEqual(gap["source_level"], 2)
+        self.assertEqual(gap["source"], "official")
+        self.assertIn("sovcomins.ru/product/articles-car/gap-strakhovanie-v-kasko", gap["url"])
+
     def test_review_value_is_visible_but_not_sales_eligible(self):
         quote = "6.8. В договоре страхования может быть установлена безусловная франшиза."
         rows = [
