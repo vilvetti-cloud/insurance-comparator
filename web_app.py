@@ -271,7 +271,10 @@ def health():
         for field in company_data.values():
             if not isinstance(field, dict):
                 continue
-            status = field.get("source_analysis_status") or "missing"
+            raw_field = field.get("raw_field")
+            if not isinstance(raw_field, dict):
+                raw_field = field
+            status = raw_field.get("source_analysis_status") or "missing"
             audit_status_counts[status] = audit_status_counts.get(status, 0) + 1
     return jsonify(
         {
