@@ -134,7 +134,7 @@ class GeminiProvider:
             raise ValueError('Invalid extraction field selection')
         # Large technical PDFs can exceed provider input limits. Keep physical
         # page numbers, but send only relevant pages for the requested fields.
-        if len(keys) > 2 and len(document.text) > 60000:
+        if len(document.text) > 60000:
             from collector.casco_pilot import select_pages
             selected_pages = {}
             for key in keys:
@@ -356,7 +356,7 @@ class GroqFieldProvider:
                     "model": self.model,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0,
-                    "max_tokens": 6000,
+                    "max_tokens": min(6000, 500 + 850 * len(keys)),
                     "response_format": ({"type": "json_object"} if self.name == "openrouter"
                         else {"type": "json_schema", "json_schema": {
                             "name": "casco_document", "strict": False, "schema": response_schema}}),

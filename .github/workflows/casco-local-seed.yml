@@ -1,0 +1,48 @@
+name: CASCO local initial seed
+
+on:
+  push:
+    branches:
+      - ops/casco-initial-seed
+    paths:
+      - "scripts/casco_seed_from_local_analysis.py"
+      - "reports/local-casco-analysis/analysis.json"
+      - "data/sources/**"
+      - "database/schema.sql"
+      - "collector/**"
+      - "core/**"
+  workflow_dispatch:
+
+concurrency:
+  group: casco-local-initial-seed
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    if: github.ref == 'refs/heads/ops/casco-initial-seed' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Seed CASCO from checked-in local analysis
+        run: python scripts/casco_seed_from_local_analysis.py
+      - name: Upload seed report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casco-local-seed-report
+          path: work/casco-seed/seed-report.json
+          retention-days: 30

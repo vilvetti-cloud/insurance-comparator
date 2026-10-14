@@ -57,16 +57,24 @@ class ComparisonService:
                         cond.verification_status,
                         cond.checked_at,
                         cond.updated_at,
+                        cond.value_json AS value_meta,
                         s.url AS source_url,
                         s.source_type,
-                        ev.text_fragment AS evidence_quote
+                        ev.text_fragment AS evidence_quote,
+                        ev.page_number AS evidence_page,
+                        ev.section AS evidence_section,
+                        ev.document_checksum AS evidence_document_checksum
                     FROM conditions cond
                     JOIN comparison_fields f ON f.id = cond.field_id
                     JOIN products p ON p.id = f.product_id
                     JOIN companies c ON c.id = p.company_id
                     LEFT JOIN sources s ON s.id = cond.source_id
                     LEFT JOIN LATERAL (
-                        SELECT string_agg(e.text_fragment, E'\n\n' ORDER BY e.id DESC) AS text_fragment
+                        SELECT
+                            string_agg(e.text_fragment, E'\n\n' ORDER BY e.id DESC) AS text_fragment,
+                            (array_agg(e.page_number ORDER BY e.id DESC))[1] AS page_number,
+                            (array_agg(e.section ORDER BY e.id DESC))[1] AS section,
+                            (array_agg(e.document_checksum ORDER BY e.id DESC))[1] AS document_checksum
                         FROM evidence e
                         WHERE e.condition_id = cond.id
                     ) ev ON TRUE
@@ -126,8 +134,13 @@ class ComparisonService:
             # is not sales-eligible until the evidence audit passes, but hiding
             # it behind "Не подтверждено" loses the answer the user asked for.
             display_value = row["value"] if has_value else "Не найдено"
+            meta = row.get("value_meta") if isinstance(row.get("value_meta"), dict) else {}
+            answer_status = meta.get("answer_status")
             company_data[field_key] = {
                 "value": display_value,
+                "answer_status": answer_status,
+                "explanation": meta.get("explanation"),
+                "missing_information": meta.get("missing_information"),
                 "diagnostic_value": row["value"] if has_value and not reportable else None,
                 "source": _ui_source(row["source_level"], row["source_type"]),
                 "url": row["source_url"],
@@ -136,6 +149,9 @@ class ComparisonService:
                 "verification_status": row["verification_status"],
                 "source_type": row["source_type"],
                 "evidence_quote": row["evidence_quote"],
+                "evidence_page": row.get("evidence_page"),
+                "evidence_section": row.get("evidence_section"),
+                "evidence_document_checksum": row.get("evidence_document_checksum"),
                 "quality_status": audit.status,
                 "quality_label": audit.label,
                 "quality_reason": audit.reason,

@@ -43,7 +43,7 @@ def validate_fact(key: str, fact: dict, document, *, insurer: str, source_url: s
     if (not require_evidence and source_level in {1, 2}
             and source_type in {"pdf", "official_site"}
             and isinstance(value, str) and value.strip()
-            and fact.get("answer_status") in (None, "answered", "partial")):
+            and fact.get("answer_status") in (None, "answered")):
         return Verdict(True, "OFFICIAL_SOURCE_AI_ANSWER")
     if (not require_evidence and source_level >= 3
             and source_type in {"web_search", "fallback"}

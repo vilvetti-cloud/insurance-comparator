@@ -17,7 +17,14 @@ class ComparisonServiceTests(unittest.TestCase):
              "value": "БПЛА покрываются по всем программам.",
              "source_level": 1, "confidence": 1.0, "verification_status": "needs_review",
              "checked_at": None, "updated_at": None, "source_url": "https://cdn.tinsurance.ru/rules.pdf",
-             "source_type": "pdf", "evidence_quote": "БПЛА покрываются по всем программам."},
+             "source_type": "pdf", "evidence_quote": "БПЛА покрываются по всем программам.",
+             "evidence_page": 7, "evidence_section": "4.2",
+             "evidence_document_checksum": "sha256-demo",
+             "value_meta": {
+                 "answer_status": "partial",
+                 "explanation": "В найденном фрагменте недостаточно условий.",
+                 "missing_information": "Проверить исключения и лимиты.",
+             }},
             {"company_name": "Т-Страхование", "field_key": "terrorism",
              "value": None, "source_level": None, "confidence": None,
              "verification_status": None, "checked_at": None, "updated_at": None,
@@ -34,6 +41,14 @@ class ComparisonServiceTests(unittest.TestCase):
                          "БПЛА покрываются по всем программам.")
         self.assertEqual(snapshot["Т-Страхование"]["drone"]["diagnostic_value"],
                          "БПЛА покрываются по всем программам.")
+        self.assertEqual(snapshot["Т-Страхование"]["drone"]["answer_status"],
+                         "partial")
+        self.assertEqual(snapshot["Т-Страхование"]["drone"]["evidence_page"], 7)
+        self.assertEqual(snapshot["Т-Страхование"]["drone"]["evidence_section"], "4.2")
+        self.assertEqual(
+            snapshot["Т-Страхование"]["drone"]["missing_information"],
+            "Проверить исключения и лимиты.",
+        )
         self.assertEqual(snapshot["Т-Страхование"]["terrorism"]["value"],
                          "Не найдено")
 
