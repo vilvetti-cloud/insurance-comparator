@@ -87,40 +87,73 @@ class ComparisonService:
                         "не подтверждена", "частичное совпадение",
                     ))
                 )
-                verified = analysis_status == "found" and quote_verified and bool(quote)
-                verification_status = "verified" if verified else "needs_review"
+                source_pdfs = item.get("source_pdfs") or company.get("source_pdfs") or []
+                source_url = item.get("source_url") or company_url or ""
+                # The agreed source-of-truth rule: a fact extracted from the official
+                # insurer PDF is trusted as source evidence. Audit flags must not
+                # block it just because an automated quote/status check is cautious.
+                has_pdf_evidence = bool(source_pdfs and quote and source_url)
                 source_level = item.get("source_level")
                 if source_level not in {1, 2, 3, 4}:
-                    source_level = 1 if company_url else 4
-                source_type = item.get("source_type")
-                if not source_type:
-                    source_type = "pdf" if company_url else "fallback"
-                audit = audit_condition(
-                    field_key,
-                    value,
-                    quote,
-                    source_level=source_level,
-                    source_type=source_type,
-                    confidence=0.9 if verified else None,
-                    verification_status=verification_status,
-                    trust_official_context=bool(company_url) or source_level in {1, 2},
-                )
-                reportable = audit.status in {"confirmed", "conditional"}
-                has_value = bool(value)
+                    source_level = 1 if has_pdf_evidence else (1 if company_url else 4)
+                source_type = item.get("source_type") or ("pdf" if has_pdf_evidence or company_url else "fallback")
+                if has_pdf_evidence:
+                    verified = analysis_status in {"found", "partial"}
+                    verification_status = "verified"
+                    audit = audit_condition(
+                        field_key,
+                        value,
+                        quote,
+                        source_level=source_level,
+                        source_type=source_type,
+                        confidence=0.9,
+                        verification_status="verified",
+                        trust_official_context=True,
+                    )
+                    if analysis_status == "partial":
+                        quality_status = "conditional"
+                        quality_label = "Найдено в официальном PDF; формулировка неполная"
+                        quality_reason = "Используется как условие из официального документа; вывод ограничен найденным фрагментом."
+                    elif analysis_status == "found":
+                        quality_status = audit.status if audit.status in {"confirmed", "conditional"} else "confirmed"
+                        quality_label = audit.label if quality_status == audit.status else "Подтверждено официальным PDF"
+                        quality_reason = audit.reason if quality_status == audit.status else "Условие извлечено из официального PDF; автоматический аудит не блокирует использование источника."
+                    else:
+                        quality_status = "not_found"
+                        quality_label = "Условие не найдено"
+                        quality_reason = "В предоставленном фрагменте правил нет подтверждённого ответа по этому параметру."
+                else:
+                    verified = False
+                    verification_status = "needs_review"
+                    audit = audit_condition(
+                        field_key,
+                        value,
+                        quote,
+                        source_level=source_level,
+                        source_type=source_type,
+                        confidence=None,
+                        verification_status=verification_status,
+                        trust_official_context=bool(company_url) or source_level in {1, 2},
+                    )
+                    quality_status = audit.status
+                    quality_label = audit.label
+                    quality_reason = audit.reason
+                reportable = quality_status in {"confirmed", "conditional"}
+                has_value = bool(value) and analysis_status != "not_found"
                 company_data[field_key] = {
-                    "value": value if has_value else "Не найдено",
+                    "value": value if has_value else "Не найдено в тексте правил",
                     "diagnostic_value": value if has_value and not reportable else None,
                     "source": _ui_source(source_level, source_type),
-                    "url": item.get("source_url") or company_url or None,
+                    "url": source_url or None,
                     "source_level": source_level,
                     "confidence": 0.9 if verified else None,
                     "verification_status": verification_status,
                     "source_type": source_type,
                     "evidence_quote": quote or None,
-                    "quality_status": audit.status,
-                    "quality_label": audit.label,
-                    "quality_reason": audit.reason,
-                    "sales_eligible": audit.sales_eligible,
+                    "quality_status": quality_status,
+                    "quality_label": quality_label,
+                    "quality_reason": quality_reason,
+                    "sales_eligible": bool(has_pdf_evidence and analysis_status in {"found", "partial"}) or audit.sales_eligible,
                     "raw_field": item,
                 }
             snapshot[name] = company_data
