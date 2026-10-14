@@ -96,6 +96,11 @@ class SalesInsightsService:
             )
             if comparison is None:
                 continue
+            if comparison.get("outcome") in {"competitor_advantage", "conditional_competitor_advantage"}:
+                phrase = str(comparison.get("client_phrase") or comparison.get("reason") or "").strip()
+                if competitor not in phrase:
+                    phrase = f"{phrase} Преимущество по этому параметру у {competitor}.".strip()
+                comparison["client_phrase"] = phrase
 
             approved_gap_absence = key == "gap" and (
                 (
