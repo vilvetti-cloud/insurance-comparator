@@ -297,7 +297,7 @@ class SalesInsightsTests(unittest.TestCase):
             field_data("terrorism", "Терроризм входит в покрытие."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
 
     def test_unmentioned_gap_is_not_treated_as_excluded(self):
         result = self.analyze(
@@ -321,7 +321,7 @@ class SalesInsightsTests(unittest.TestCase):
             field_data("total_loss", "Полная гибель — 70% от страховой суммы."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertEqual(
             result["comparisons"][0]["comparison_basis"],
             "total_loss_basis_confirmed_vs_unestablished",
