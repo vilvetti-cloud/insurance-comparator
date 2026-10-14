@@ -108,6 +108,14 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(result["advantages"][0]["comparison_basis"], "total_loss_higher_threshold")
 
+    def test_total_loss_actual_value_thresholds_are_comparable(self):
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Полная гибель — 75% действительной стоимости ТС."),
+            field_data("total_loss", "Полная гибель — 70% действительной стоимости ТС."),
+        )
+        self.assertEqual(result["advantages"][0]["comparison_basis"], "total_loss_higher_threshold")
+
     def test_total_loss_different_basis_is_incomparable(self):
         result = self.analyze(
             "total_loss",
