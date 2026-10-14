@@ -5,6 +5,7 @@ on:
     branches:
       - fix/casco-evidence-golden-benchmark
       - fix/casco-comparison-all-insurers
+      - feat/casco-nightly-change-watch
   workflow_dispatch:
 
 concurrency:

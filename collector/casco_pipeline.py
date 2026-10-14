@@ -85,7 +85,7 @@ class CascoCollectionPipeline:
                     # Direct bytes are required for checksum/page provenance.
                     local_copy = (Path(__file__).resolve().parents[1] / "data" / "sources"
                                   / insurer.slug / "technical.pdf")
-                    if (isinstance(self.fetcher, CascoFetcher)
+                    if (not watch and isinstance(self.fetcher, CascoFetcher)
                             and pin.url == insurer.rules_url and local_copy.is_file()):
                         body = local_copy.read_bytes()
                         fetched = FetchResult(
