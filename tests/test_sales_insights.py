@@ -248,6 +248,15 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(level, 1)
 
+    def test_same_optional_gap_level_is_equal_not_an_advantage(self):
+        result = self.analyze(
+            "gap",
+            field_data("gap", "GAP предусмотрен как отдельный дополнительный риск и действует только при включении в договор."),
+            field_data("gap", "GAP — отдельный дополнительный финансовый риск, доступный только по отдельному договору."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
+
     def test_explicitly_included_gap_is_higher_level_than_optional_gap(self):
         result = self.analyze(
             "gap",
