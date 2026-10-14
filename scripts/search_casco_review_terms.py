@@ -47,8 +47,8 @@ def snippets(text: str, term: str, limit: int = 1) -> list[str]:
         idx = normalized.find(needle, start)
         if idx < 0:
             break
-        lo, hi = max(0, idx - 180), min(len(text), idx + len(term) + 260)
-        found.append(re.sub(r"\s+", " ", text[lo:hi]).strip())
+        lo, hi = max(0, idx - 1000), min(len(normalized), idx + len(term) + 1400)
+        found.append(normalized[lo:hi].strip())
         start = idx + len(needle)
     return found
 
