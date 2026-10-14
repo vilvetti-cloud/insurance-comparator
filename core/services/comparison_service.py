@@ -89,8 +89,12 @@ class ComparisonService:
                 )
                 verified = analysis_status == "found" and quote_verified and bool(quote)
                 verification_status = "verified" if verified else "needs_review"
-                source_level = 1 if company_url else 4
-                source_type = "pdf" if company_url else "fallback"
+                source_level = item.get("source_level")
+                if source_level not in {1, 2, 3, 4}:
+                    source_level = 1 if company_url else 4
+                source_type = item.get("source_type")
+                if not source_type:
+                    source_type = "pdf" if company_url else "fallback"
                 audit = audit_condition(
                     field_key,
                     value,
@@ -99,7 +103,7 @@ class ComparisonService:
                     source_type=source_type,
                     confidence=0.9 if verified else None,
                     verification_status=verification_status,
-                    trust_official_context=bool(company_url),
+                    trust_official_context=bool(company_url) or source_level in {1, 2},
                 )
                 reportable = audit.status in {"confirmed", "conditional"}
                 has_value = bool(value)
