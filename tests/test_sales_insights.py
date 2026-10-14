@@ -120,6 +120,21 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
 
+    def test_total_loss_actual_value_basis_is_not_confused_with_repair_cost(self):
+        basis = self.service._total_loss_basis(
+            "Стоимость восстановительного ремонта равна или превышает 70% действительной стоимости ТС."
+        )
+        self.assertEqual(basis, "actual_value")
+
+    def test_total_loss_mixed_basis_is_incomparable(self):
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Порог 75% страховой суммы или 75% полной страховой стоимости при неполном страховании."),
+            field_data("total_loss", "Полная гибель — 75% страховой суммы."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+
     def test_total_loss_different_basis_is_incomparable(self):
         result = self.analyze(
             "total_loss",
