@@ -89,14 +89,21 @@ class ComparisonService:
                 )
                 source_pdfs = item.get("source_pdfs") or company.get("source_pdfs") or []
                 source_url = item.get("source_url") or company_url or ""
+                declared_source_type = item.get("source_type")
                 # The agreed source-of-truth rule: a fact extracted from the official
                 # insurer PDF is trusted as source evidence. Audit flags must not
                 # block it just because an automated quote/status check is cautious.
-                has_pdf_evidence = bool(source_pdfs and quote and source_url)
+                # An explicitly declared official website remains a website source.
+                has_pdf_evidence = bool(
+                    quote and source_url and (
+                        declared_source_type == "pdf"
+                        or (not declared_source_type and source_pdfs)
+                    )
+                )
                 source_level = item.get("source_level")
                 if source_level not in {1, 2, 3, 4}:
                     source_level = 1 if has_pdf_evidence else (1 if company_url else 4)
-                source_type = item.get("source_type") or ("pdf" if has_pdf_evidence or company_url else "fallback")
+                source_type = declared_source_type or ("pdf" if has_pdf_evidence else ("official_website" if company_url else "fallback"))
                 if has_pdf_evidence:
                     verified = analysis_status in {"found", "partial"}
                     verification_status = "verified" if analysis_status in {"found", "partial"} else "needs_review"
