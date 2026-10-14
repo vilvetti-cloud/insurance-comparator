@@ -813,21 +813,17 @@ class SalesInsightsService:
         own_basis = self._total_loss_basis(own_l)
         other_basis = self._total_loss_basis(other_l)
 
-        # If only one insurer publishes an identifiable threshold and its
-        # calculation basis, count that as a transparency advantage. This
-        # does not claim that the other insurer has no such rule.
         if own_threshold and own_basis and (not other_threshold or not other_basis):
-            return self._advantage(
-                key="total_loss", label=label, title="Порог полной гибели и база расчёта указаны",
-                own=own, other=other, basis="total_loss_basis_confirmed_vs_unestablished",
-                reason="У первой страховой в проверенном источнике установлены порог полной гибели и база расчёта; у конкурента эти параметры не удалось установить. Это преимущество прозрачности условий, а не доказательство отсутствия правила у конкурента.",
-                client_phrase="У первой страховой в проверенных условиях указан порог полной гибели и база его расчёта. В доступных проверенных материалах конкурента эти параметры не установлены; это не означает, что соответствующее условие отсутствует.",
+            return self._comparison(
+                "total_loss", label, "incomparable",
+                "total_loss_basis_confirmed_vs_unestablished", own, other,
+                "В одном источнике указан числовой порог и база расчёта, а в другом числовой порог не установлен. Это различие в формулировке правил, а не доказанное преимущество по выплате; нужно сопоставить определение полной гибели, порядок ремонта, выплату и стоимость годных остатков.",
             )
         if other_threshold and other_basis and (not own_threshold or not own_basis):
             return self._comparison(
-                "total_loss", label, "competitor_advantage",
+                "total_loss", label, "incomparable",
                 "total_loss_basis_confirmed_vs_unestablished", own, other,
-                "У конкурента указан порог полной гибели и база расчёта; у первой страховой эти параметры не удалось установить. Это преимущество прозрачности условий, а не доказательство отсутствия правила у первой страховой.",
+                "У конкурента указан числовой порог и база расчёта, а в правилах первой страховой числовой порог не установлен. Это различие в формулировке правил, а не доказанное преимущество конкурента; нужно сопоставить определение полной гибели, порядок ремонта, выплату и стоимость годных остатков.",
             )
         if not own_threshold or not other_threshold:
             return self._comparison(
