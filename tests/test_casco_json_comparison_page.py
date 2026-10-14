@@ -6,6 +6,10 @@ from web_app import app
 class CascoJsonComparisonPageTests(unittest.TestCase):
     def test_comparison_page_uses_json_and_renders_per_field_outcomes(self):
         client = app.test_client()
+        health = client.get("/health")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.get_json()["data_source"], "normalized_json")
+        self.assertEqual(health.get_json()["dataset_version"], "1.1")
         response = client.get(
             "/compare",
             query_string={
