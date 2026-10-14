@@ -297,7 +297,7 @@ class SalesInsightsTests(unittest.TestCase):
             field_data("terrorism", "Терроризм входит в покрытие."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
 
     def test_unmentioned_gap_is_not_treated_as_excluded(self):
         result = self.analyze(
@@ -328,7 +328,7 @@ class SalesInsightsTests(unittest.TestCase):
         )
 
 
-    def test_total_loss_known_basis_beats_missing_competitor_value(self):
+    def test_total_loss_known_basis_vs_missing_competitor_value_is_incomparable(self):
         own = field_data(
             "total_loss",
             "Полная гибель — 75% от страховой суммы.",
@@ -341,11 +341,12 @@ class SalesInsightsTests(unittest.TestCase):
         }
         result = self.analyze("total_loss", own, other)
         self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertEqual(
-            result["conditional_advantages"][0]["comparison_basis"],
+            result["comparisons"][0]["comparison_basis"],
             "total_loss_basis_confirmed_vs_unestablished",
         )
-        self.assertIn("не означает", result["conditional_advantages"][0]["client_phrase"])
 
 
     def test_optional_gap_is_reported_as_conditional_advantage_when_competitor_is_unestablished(self):
