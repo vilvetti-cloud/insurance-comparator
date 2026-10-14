@@ -54,7 +54,13 @@ class SalesInsightsService:
                 known_data = data if own is not None else competitor_data
                 if own is None and other is None:
                     continue
-                if not self._comparison_eligible(known_data, key):
+                approved_gap_absence_present = key == "gap" and any(
+                    value is None
+                    and company_data.get(f"{key}_quality_status") == "not_found"
+                    and company_data.get(f"{key}_source_level") in {1, 2}
+                    for value, company_data in ((own, data), (other, competitor_data))
+                )
+                if not self._comparison_eligible(known_data, key) and not approved_gap_absence_present:
                     continue
                 def missing_value(value: str | None, company_data: dict[str, Any]) -> str:
                     if value is not None:
@@ -816,7 +822,7 @@ class SalesInsightsService:
                 )
                 # Add-on availability is a real distinction, but not an
                 # unconditional policy benefit until the option is selected.
-                if own_level == 1:
+                if own_level == 1 and not (key == "gap" and other_level == 0):
                     advantage["conditional"] = True
                 return advantage
             return self._comparison(
