@@ -32,6 +32,15 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("Без справок", page)
         self.assertIn("Срок выплат", page)
 
+    def test_data_report_labels_official_website_source(self):
+        client = app.test_client()
+        response = client.get("/data-report")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Официальный сайт", page)
+        self.assertIn("sovcomins.ru/product/articles-car/gap-strakhovanie-v-kasko/", page)
+        self.assertIn("По 60 полям факт/условие подтверждён", page)
+
 
 if __name__ == "__main__":
     unittest.main()
