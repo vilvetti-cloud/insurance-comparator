@@ -94,7 +94,6 @@ class SalesInsightsService:
                 if comparison.get("outcome") == "first_advantage":
                     comparison["outcome"] = "conditional_first_advantage"
                     comparison["kind"] = "conditional_advantage"
-                    comparison["title"] = "Возможное преимущество: " + str(comparison.get("title") or label)
                     conditional_advantages.append(comparison)
                 elif comparison.get("outcome") == "competitor_advantage":
                     comparison["outcome"] = "conditional_competitor_advantage"
