@@ -23,12 +23,16 @@ class ComparisonServiceTests(unittest.TestCase):
         self.assertTrue(franchise["evidence_quote"])
         self.assertEqual(franchise["source"], "pdf")
 
-    def test_pdf_not_found_is_not_misrepresented_as_no_coverage(self):
+    def test_corrected_full_pdf_finding_is_visible_and_not_treated_as_missing(self):
         snapshot = ComparisonService()._load_json_snapshot()
         field = snapshot["Ингосстрах"]["without_certificates"]
-        self.assertEqual(field["quality_status"], "not_found")
-        self.assertFalse(field["sales_eligible"])
-        self.assertEqual(field["value"], "Не найдено в тексте правил")
+        self.assertIn(field["quality_status"], {"confirmed", "conditional"})
+        self.assertTrue(field["sales_eligible"])
+        self.assertIn("одно обращение", field["value"])
+        self.assertIn("антенны", field["value"])
+        self.assertEqual(field["source_analysis_status"] if "source_analysis_status" in field else
+                         field["raw_field"]["source_analysis_status"], "found")
+        self.assertIn("ingos/technical.pdf", field["raw_field"]["source_pdfs"][0])
 
     def test_review_value_is_visible_but_not_sales_eligible(self):
         quote = "6.8. В договоре страхования может быть установлена безусловная франшиза."
@@ -50,7 +54,7 @@ class ComparisonServiceTests(unittest.TestCase):
         ]
         conn = MagicMock()
         conn.cursor.return_value.__enter__.return_value.fetchall.return_value = rows
-        with patch("core.services.comparison_service.ComparisonService._load_json_snapshot", return_value=None), \
+        with patch("core.services.comparison_service.ComparisonService._load_json_snapshot", return_value=None), \\
              patch("core.services.comparison_service._connect", return_value=conn):
             snapshot = ComparisonService().load_snapshot()
         self.assertEqual(snapshot["Т-Страхование"]["franchise"]["quality_status"],
