@@ -635,7 +635,7 @@ class SalesInsightsService:
             "comparison_basis": basis,
             "evidence": f"Первая: {own}. Конкурент: {other}.",
             "reason": reason,
-            "client_phrase": "",
+            "client_phrase": reason,
         }
 
     @staticmethod
