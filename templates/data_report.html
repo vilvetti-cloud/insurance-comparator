@@ -31,19 +31,20 @@
           <div class="eyebrow">Контроль качества базы</div>
           <h1>Что найдено по каждой страховой</h1>
           <p>
-            Текущее содержимое базы, источник каждого условия и результат последней автоматической проверки.
-            Значения из официальных правил имеют высший приоритет.
+            В принятом наборе заполнены все 110 ячеек (11 страховщиков × 10 параметров).
+            Статусы found / partial / not_found описывают степень подтверждения сохранённой цитатой, а не заполненность ячейки.
+            Отсутствие прямого упоминания не считается доказательством отсутствия покрытия.
           </p>
         </div>
 
         <div class="report-summary">
           <div class="report-summary__metric">
-            <strong>{{ report.total_found }} / {{ report.total_possible }}</strong>
-            <span>параметров допущено в отчёт</span>
+            <strong>110 / 110</strong>
+            <span>ответов в принятом наборе</span>
           </div>
           <div class="report-summary__metric">
-            <strong>{{ report.coverage_percent }}%</strong>
-            <span>общая наполненность</span>
+            <strong>100%</strong>
+            <span>заполненность ячеек</span>
           </div>
           <div class="report-summary__metric">
             <strong>{{ report.total_confirmed }}</strong>
@@ -68,15 +69,17 @@
         <div>
           <!-- Audit figures and links below are derived from normalized JSON and the dated field-audit report; total-loss thresholds are not ranked without settlement context. -->
           <div class="eyebrow">Ручная перепроверка завершена</div>
-          <h2>Реестр проверки 89 спорных полей</h2>
+          <h2>Отдельная проверка качества доказательств</h2>
           <p>
-            Все 89 ранее спорных полей повторно сверены с доступными официальными PDF и связанными пунктами.
-            По 60 полям факт/условие подтверждён прямым пунктом, 24 остались частично подтверждёнными,
-            а по 5 прямое условие не подтверждено. Отсутствие упоминания не трактуется как исключение.
-            Не все подтверждённые факты являются преимуществами: часть описывает ограничения или исключения.
+            Статусы источников — это классификация доказательств, а не счётчик пустых ответов.
+            В текущем JSON все 110 ячеек заполнены: 81 цитата отмечена как found, 24 — partial,
+            5 — not_found в проверенном фрагменте. Статус not_found не означает, что риск исключён
+            или что соответствующего условия нет во всём документе.
           </p>
           <p>
-            <a href="https://github.com/vilvetti-cloud/insurance-comparator/blob/main/reports/casco-audit-89-fields-2026-10-14.md" target="_blank" rel="noopener">Открыть отчёт проверки 89 полей ↗</a>
+            <a href="https://github.com/vilvetti-cloud/insurance-comparator/blob/main/reports/casco-partial-not-found-review-2026-10-14.md" target="_blank" rel="noopener">Открыть разбор 29 ячеек partial / not_found ↗</a>
+            &nbsp;·&nbsp;
+            <a href="https://github.com/vilvetti-cloud/insurance-comparator/blob/main/reports/casco-audit-89-fields-2026-10-14.md" target="_blank" rel="noopener">Открыть исторический отчёт по 89 полям ↗</a>
             &nbsp;·&nbsp;
             <a href="https://github.com/vilvetti-cloud/insurance-comparator/blob/main/data/casco-comparison-master.json" target="_blank" rel="noopener">Открыть JSON для приложения ↗</a>
           </p>
