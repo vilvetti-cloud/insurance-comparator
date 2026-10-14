@@ -56,8 +56,21 @@ class SalesInsightsService:
                     continue
                 if not self._comparison_eligible(known_data, key):
                     continue
-                own_for_compare = own or "В проверенных источниках не установлено"
-                other_for_compare = other or "В проверенных источниках не установлено"
+                def missing_value(value: str | None, company_data: dict[str, Any]) -> str:
+                    if value is not None:
+                        return value
+                    if (
+                        key == "gap"
+                        and company_data.get(f"{key}_quality_status") == "not_found"
+                        and company_data.get(f"{key}_source_level") in {1, 2}
+                    ):
+                        # Approved comparison rule: if the complete checked official rules
+                        # contain no GAP provision, treat GAP as unavailable for this comparison.
+                        return "GAP не предусмотрен в проверенных официальных правилах по утверждённому правилу сравнения"
+                    return "В проверенных источниках не установлено"
+
+                own_for_compare = missing_value(own, data)
+                other_for_compare = missing_value(other, competitor_data)
             else:
                 if (
                     own is None
@@ -243,12 +256,30 @@ class SalesInsightsService:
                     basis="gap_positive_vs_negative",
                     evidence=f"{company}: {own}. {competitor}: {other}.",
                     client_phrase=(
-                        f"У {company} подтверждена GAP-защита, а в сопоставимом "
-                        f"подтверждённом условии {competitor} она не предусмотрена. "
-                        "Это даёт дополнительную защиту стоимости автомобиля при "
-                        "сценариях, на которые распространяется GAP."
+                        f"В правилах {company} GAP прямо предусмотрен, а в проверенных "
+                        f"официальных правилах {competitor} эта опция не предусмотрена. "
+                        "По утверждённым правилам сравнения это преимущество по наличию GAP."
                     ),
                 )
+            if own_state == "negative" and other_state == "positive":
+                comparison = self._advantage(
+                    key=key,
+                    label=label,
+                    title=f"GAP предусмотрен у {competitor}",
+                    own=own,
+                    other=other,
+                    basis="gap_negative_vs_positive",
+                    evidence=f"{company}: {own}. {competitor}: {other}.",
+                    client_phrase=(
+                        f"В проверенных официальных правилах {company} GAP не предусмотрен, "
+                        f"а в правилах {competitor} он прямо указан. По этому параметру "
+                        f"преимущество у {competitor}, а не у {company}."
+                    ),
+                )
+                comparison["outcome"] = "competitor_advantage"
+                comparison["kind"] = "competitor_advantage"
+                comparison["reason"] = comparison["client_phrase"]
+                return comparison
 
         if key in {"self_ignition", "terrorism", "drone", "tow_truck"}:
             own_state = self._coverage_state(key, own_l)
@@ -357,6 +388,7 @@ class SalesInsightsService:
     ) -> dict[str, Any]:
         return {
             "kind": "advantage",
+            "outcome": "first_advantage",
             "field_key": key,
             "label": label,
             "title": title,
