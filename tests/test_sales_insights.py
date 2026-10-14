@@ -252,7 +252,7 @@ class SalesInsightsTests(unittest.TestCase):
         result = self.analyze(
             "gap",
             field_data("gap", "GAP предусмотрен как отдельный дополнительный риск и действует только при включении в договор."),
-            field_data("gap", "GAP — отдельный дополнительный финансовый риск, доступный только по отдельному договору."),
+            field_data("gap", "GAP — отдельный дополнительный риск по отдельному договору."),
         )
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
