@@ -83,42 +83,25 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
 @app.route("/")
 def index():
     snapshot = comparison_service.load_snapshot()
-    return render_template(
-        "index.html",
-        companies=COMPANIES,
-        last_updated=snapshot.get("_last_updated", "Не обновлялось"),
-    )
-
-
-@app.route("/compare", methods=["GET", "POST"])
-def compare():
-    company1 = request.values.get("company1")
-    company2 = request.values.get("company2")
-
-    if (
-        not company1
-        or company1 not in COMPANIES
-        or not company2
-        or company2 not in COMPANIES
-        or company1 == company2
-    ):
-        return redirect("/")
-
-    snapshot = comparison_service.load_snapshot()
-    report = data_quality_report_service.load()
-    contextual = {
-        company["name"]: {field["key"]: field for field in company["fields"]}
-        for company in report.get("companies", [])
-    }
+    if snapshot.get("_data_source") == "normalized_json":
+        contextual = {}
+    else:
+        report = data_quality_report_service.load()
+        contextual = {
+            company["name"]: {field["key"]: field for field in company["fields"]}
+            for company in report.get("companies", [])
+        }
     data1 = _prepare_company_data(snapshot, company1, contextual.get(company1))
     data2 = _prepare_company_data(snapshot, company2, contextual.get(company2))
     reportable = {"confirmed", "conditional"}
     found1 = sum(1 for field in FIELD_KEYS if data1.get(f"{field}_quality_status") in reportable)
     found2 = sum(1 for field in FIELD_KEYS if data2.get(f"{field}_quality_status") in reportable)
     comparable_fields = [
-        field
-        for field in FIELD_KEYS
-        if data1.get(f"{field}_sales_eligible") and data2.get(f"{field}_sales_eligible")
+        field for field in FIELD_KEYS
+        if data1.get(f"{field}_quality_status") in reportable
+        and data2.get(f"{field}_quality_status") in reportable
+        and data1.get(f"{field}_source_level") in {1, 2}
+        and data2.get(f"{field}_source_level") in {1, 2}
     ]
     comparison_ready = len(comparable_fields) > 0
 
@@ -130,20 +113,32 @@ def compare():
             competitor_data=data2,
             field_labels=FIELD_LABELS,
         )
-        # Sales conclusions remain deterministic and are derived from audited facts only.
     else:
         sales = {
             "advantages": [],
+            "conditional_advantages": [],
             "cards": [],
-            "cautions": [],
-            "client_message": "",
+            "comparisons": [],
+            "cautions": [
+                "Пока нет параметров с достаточными доказательствами у обеих компаний для расчёта преимущества."
+            ],
+            "client_message": "Сначала нужно подтвердить условия по первичным документам обеих компаний.",
         }
 
     comparison_by_field = {
+        key: {
+            "field_key": key,
+            "outcome": "incomparable",
+            "title": "Недостаточно подтверждённых данных",
+            "reason": "Нет двух сопоставимых значений, прошедших проверку источника. Это не означает, что покрытия нет.",
+        }
+        for key in FIELD_KEYS
+    }
+    comparison_by_field.update({
         item["field_key"]: item
         for item in sales.get("comparisons", [])
         if isinstance(item, dict) and item.get("field_key")
-    }
+    })
 
     return render_template(
         "result.html",
