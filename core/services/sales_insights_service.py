@@ -148,7 +148,7 @@ class SalesInsightsService:
     @staticmethod
     def _value(data: dict[str, Any], key: str) -> str | None:
         value = data.get(key)
-        if not value or value == "Не найдено":
+        if not value or str(value).startswith("Не найдено"):
             return None
         return " ".join(str(value).split())
 
