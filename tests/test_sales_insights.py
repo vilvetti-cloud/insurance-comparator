@@ -129,7 +129,7 @@ class SalesInsightsTests(unittest.TestCase):
     def test_total_loss_mixed_basis_is_incomparable(self):
         result = self.analyze(
             "total_loss",
-            field_data("total_loss", "Порог 75% страховой суммы или 75% полной страховой стоимости при неполном страховании."),
+            field_data("total_loss", "Конструктивная гибель — порог 75% страховой суммы или 75% полной страховой стоимости при неполном страховании."),
             field_data("total_loss", "Полная гибель — 75% страховой суммы."),
         )
         self.assertEqual(result["advantages"], [])
