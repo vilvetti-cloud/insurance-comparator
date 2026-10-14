@@ -35,19 +35,19 @@
           <div class="eyebrow">Подготовка к разговору</div>
           <h1>{{ company1 }} <span class="vs">vs</span> {{ company2 }}</h1>
           <p class="result-hero__lead">
-            Сначала — аргументы для клиента. Полные условия и источники спрятаны ниже, чтобы не перегружать экран.
+            Сравнение по 10 условиям. Короткий вывод — в таблице; полные формулировки и источники раскрываются по каждому параметру.
           </p>
         </div>
 
         <div class="coverage-strip" aria-label="Покрытие данных">
           <div class="coverage-strip__item">
             <strong>{{ found1 }}/10</strong>
-            <span>{{ company1 }}</span>
+            <span>Условия с ответом · {{ company1 }}</span>
           </div>
           <div class="coverage-strip__divider"></div>
           <div class="coverage-strip__item">
             <strong>{{ found2 }}/10</strong>
-            <span>{{ company2 }}</span>
+            <span>Условия с ответом · {{ company2 }}</span>
           </div>
         </div>
       </section>
@@ -60,10 +60,13 @@
               <span class="section-kicker">Главное для продажи</span>
               <h2>Что подчеркнуть в {{ company1 }}</h2>
             </div>
-            {% if sales.advantages %}
-              <span class="sales-status sales-status--advantage">Подтверждено отличий: {{ sales.advantages|length }}</span>
+            {% if sales.advantages or sales.conditional_advantages %}
+              <span class="sales-status sales-status--advantage">
+                {% if sales.advantages %}Подтверждённых преимуществ: {{ sales.advantages|length }}{% endif %}
+                {% if sales.conditional_advantages %}{% if sales.advantages %} · {% endif %}Условных отличий: {{ sales.conditional_advantages|length }}{% endif %}
+              </span>
             {% else %}
-              <span class="sales-status">Доказанных преимуществ нет</span>
+              <span class="sales-status">Подтверждённых преимуществ пока нет</span>
             {% endif %}
           </div>
 
@@ -74,14 +77,14 @@
                   <div class="benefit-card__top">
                     <span class="benefit-card__index">0{{ loop.index }}</span>
                     <span class="benefit-card__kind {% if item.kind == 'advantage' %}benefit-card__kind--advantage{% endif %}">
-                      {% if item.kind == 'advantage' %}Преимущество{% else %}Сильная сторона{% endif %}
+                      {% if item.kind == 'conditional_advantage' %}Возможное преимущество · проверить договор{% elif item.kind == 'advantage' %}Подтверждённое преимущество{% else %}Сильная сторона{% endif %}
                     </span>
                   </div>
                   <h3>{{ item.title }}</h3>
-                  <p>{{ item.evidence }}</p>
+                  <p>{{ company1 }}: {{ item.own_value | truncate(115, True, '…') }}<br>{{ company2 }}: {{ item.competitor_value | truncate(115, True, '…') }}</p>
                   <div class="benefit-card__why">
                     <strong>Почему это важно клиенту</strong>
-                    <span>{{ item.get('why', item.client_phrase) }}</span>
+                    <span>{{ item.get('why', item.client_phrase) | replace('первой страховой', 'компании «' ~ company1 ~ '»') | replace('конкурента', 'компании «' ~ company2 ~ '»') }}</span>
                   </div>
                   <span class="benefit-card__label">{{ item.label }}</span>
                 </article>
@@ -122,19 +125,18 @@
       {% else %}
       <section class="comparison-not-ready">
         <span class="section-kicker">Сравнение пока не готово</span>
-        <h2>Недостаточно данных по {{ company2 }}</h2>
+        <h2>Пока недостаточно подтверждённых условий для аргументов продажи</h2>
         <p>
-          У компаний пока нет ни одного подтверждённого параметра, который можно корректно сопоставить.
-          Все 10 полей и причины незаполненных значений доступны в таблице ниже.
+          Сейчас система не может доказательно выделить преимущество первой компании. Это не означает, что у неё нет преимуществ: часть условий ещё не подтверждена или не сопоставима. Проверьте пояснения в строках таблицы.
         </p>
       </section>
       {% endif %}
 
-      <details class="details-panel">
+      <details class="details-panel" open>
         <summary class="details-panel__summary">
           <div>
-            <strong>Подробное сравнение условий</strong>
-            <span>Все 10 параметров · {{ comparable_count }} подтверждённых сопоставимых</span>
+            <strong>Сравнение условий — главное</strong>
+            <span>10 параметров · краткие ответы, пояснения и источники по раскрытию</span>
           </div>
           <span class="details-panel__chevron" aria-hidden="true">⌄</span>
         </summary>
@@ -153,6 +155,7 @@
                     </div>
                   </th>
                   <th>{{ company2 }}</th>
+                  <th>Преимущество {{ company1 }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -169,8 +172,9 @@
                     <td class="primary-cell">
                       <div class="value-block">
                         <div class="value-block__text {% if value1 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value1 }}
+                          {{ value1 | truncate(190, True, "…") }}
                         </div>
+                        {% if value1 != "Не найдено" and value1|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value1 }}</p></details>{% endif %}
                         {% if data1.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
@@ -188,9 +192,6 @@
                             {% elif data1.get(key + '_source_level') == 4 %}
                               <span class="badge badge--empty">Справочно</span>
                             {% endif %}
-                            <span class="quality-badge quality-badge--{{ data1.get(key + '_quality_status', 'review') }}" title="{{ data1.get(key + '_quality_reason', '') }}">
-                              {{ data1.get(key + '_quality_label', 'Нужно перепроверить') }}
-                            </span>
                             {% if data1.get(key + '_url') %}
                               <a class="source-link" href="{{ data1.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
                             {% endif %}
@@ -202,8 +203,9 @@
                     <td>
                       <div class="value-block">
                         <div class="value-block__text {% if value2 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value2 }}
+                          {{ value2 | truncate(190, True, "…") }}
                         </div>
+                        {% if value2 != "Не найдено" and value2|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value2 }}</p></details>{% endif %}
                         {% if data2.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
@@ -221,15 +223,33 @@
                             {% elif data2.get(key + '_source_level') == 4 %}
                               <span class="badge badge--empty">Справочно</span>
                             {% endif %}
-                            <span class="quality-badge quality-badge--{{ data2.get(key + '_quality_status', 'review') }}" title="{{ data2.get(key + '_quality_reason', '') }}">
-                              {{ data2.get(key + '_quality_label', 'Нужно перепроверить') }}
-                            </span>
                             {% if data2.get(key + '_url') %}
                               <a class="source-link" href="{{ data2.get(key + '_url') }}" target="_blank" rel="noopener">Источник ↗</a>
                             {% endif %}
                           </div>
                         {% endif %}
                       </div>
+                    </td>
+
+                    <td>
+                      {% set comparison = comparison_by_field.get(key) %}
+                      {% if comparison and comparison.get('outcome') in ['first_advantage', 'conditional_first_advantage'] %}
+                        <div class="comparison-outcome comparison-outcome--first">
+                          <strong>{{ comparison.get('title') or 'Преимущество ' ~ company1 }}</strong>
+                          <span>{{ comparison.get('reason') or 'Подтверждённое отличие в пользу первой компании.' }}</span>
+                        </div>
+                      {% elif comparison and comparison.get('outcome') in ['competitor_advantage', 'conditional_competitor_advantage'] %}
+                        <div class="comparison-outcome comparison-outcome--other">
+                          <strong>{% if comparison.get('outcome') == 'conditional_competitor_advantage' %}Возможное преимущество {{ company2 }} · проверить договор{% else %}Сильнее условие {{ company2 }}{% endif %}</strong>
+                          <span>{{ comparison.get('reason') or 'По этому параметру преимущество у конкурента.' }}</span>
+                        </div>
+                      {% elif comparison and comparison.get('outcome') == 'equal' %}
+                        <div class="comparison-outcome"><strong>Сопоставимые условия</strong><span>{{ comparison.get('reason') or 'Значения совпадают по проверенному критерию.' }}</span></div>
+                      {% elif comparison %}
+                        <div class="comparison-outcome comparison-outcome--unknown"><strong>Нельзя уверенно сравнить</strong><span>{{ comparison.get('reason') or 'Значения требуют уточнения по условиям программы или договора.' }}</span></div>
+                      {% else %}
+                        <div class="comparison-outcome comparison-outcome--unknown"><strong>Нет подтверждённого вывода</strong><span>Одно или оба значения пока не допущены к сравнению. Причина проверки указана рядом с условием.</span></div>
+                      {% endif %}
                     </td>
                   </tr>
                 {% endfor %}
@@ -250,7 +270,7 @@
 
       <footer class="page-footer">
         <a class="button button--secondary" href="/">← Другое сравнение</a>
-        <span>Скрипт строится только на данных со статусом «Подтверждено» из официальных источников.</span>
+        <span>Скрипт строится только на подтверждённых условиях из официальных источников.</span>
       </footer>
     </div>
   </main>

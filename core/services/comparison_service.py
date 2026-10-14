@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from psycopg.rows import dict_row
 
 from db import _connect
+from core.catalog import KASKO_FIELDS
 from core.condition_audit import audit_condition
 
 
@@ -38,7 +41,91 @@ class ComparisonService:
     This service is the compatibility bridge between those two layers.
     """
 
+    def _load_json_snapshot(self) -> dict[str, Any] | None:
+        """Load the checked-in normalized PDF dataset before consulting the live database."""
+        path = Path(__file__).resolve().parents[2] / "data" / "casco-comparison-master.json"
+        if not path.exists():
+            return None
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                master = json.load(handle)
+        except Exception as exc:
+            logger.exception("Could not load normalized CASCO JSON: %s", exc)
+            return None
+        if not isinstance(master, dict) or not isinstance(master.get("companies"), list):
+            logger.error("Normalized CASCO JSON has an invalid schema")
+            return None
+
+        snapshot: dict[str, Any] = {
+            "_last_updated": master.get("created_date", "Не указано"),
+            "_fields": [field["key"] for field in KASKO_FIELDS],
+            "_data_source": "normalized_json",
+            "_dataset_version": master.get("schema_version"),
+        }
+        for company in master["companies"]:
+            name = company.get("name")
+            if not name:
+                continue
+            company_data: dict[str, Any] = {}
+            company_url = company.get("source_url") or ""
+            for item in company.get("fields", []):
+                original_key = item.get("key")
+                field_key = FIELD_ALIASES.get(original_key, original_key)
+                if field_key not in {field["key"] for field in KASKO_FIELDS}:
+                    continue
+                value = (item.get("key_conditions") or item.get("direct_answer") or "").strip()
+                quote = (item.get("evidence_quote") or "").strip()
+                analysis_status = (item.get("source_analysis_status") or "").strip().lower()
+                quote_check = (item.get("source_quote_check") or "").strip().lower()
+                quote_verified = (
+                    any(marker in quote_check for marker in (
+                        "точная цитата найдена",
+                        "цитата подтверждается",
+                        "прямая цитата из локального текста pdf",
+                    ))
+                    and not any(marker in quote_check for marker in (
+                        "не подтверждена", "частичное совпадение",
+                    ))
+                )
+                verified = analysis_status == "found" and quote_verified and bool(quote)
+                verification_status = "verified" if verified else "needs_review"
+                source_level = 1 if company_url else 4
+                source_type = "pdf" if company_url else "fallback"
+                audit = audit_condition(
+                    field_key,
+                    value,
+                    quote,
+                    source_level=source_level,
+                    source_type=source_type,
+                    confidence=0.9 if verified else None,
+                    verification_status=verification_status,
+                    trust_official_context=bool(company_url),
+                )
+                reportable = audit.status in {"confirmed", "conditional"}
+                has_value = bool(value)
+                company_data[field_key] = {
+                    "value": value if has_value else "Не найдено",
+                    "diagnostic_value": value if has_value and not reportable else None,
+                    "source": _ui_source(source_level, source_type),
+                    "url": item.get("source_url") or company_url or None,
+                    "source_level": source_level,
+                    "confidence": 0.9 if verified else None,
+                    "verification_status": verification_status,
+                    "source_type": source_type,
+                    "evidence_quote": quote or None,
+                    "quality_status": audit.status,
+                    "quality_label": audit.label,
+                    "quality_reason": audit.reason,
+                    "sales_eligible": audit.sales_eligible,
+                    "raw_field": item,
+                }
+            snapshot[name] = company_data
+        return snapshot
+
     def load_snapshot(self) -> dict[str, Any]:
+        json_snapshot = self._load_json_snapshot()
+        if json_snapshot is not None:
+            return json_snapshot
         conn = _connect()
         if conn is None:
             return {}
