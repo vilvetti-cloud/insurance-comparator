@@ -25,7 +25,7 @@ class ComparisonServiceTests(unittest.TestCase):
         ]
         conn = MagicMock()
         conn.cursor.return_value.__enter__.return_value.fetchall.return_value = rows
-        with patch("core.services.comparison_service._load_json_snapshot", return_value=None), \
+        with patch("core.services.comparison_service.ComparisonService._load_json_snapshot", return_value=None), \
              patch("core.services.comparison_service._connect", return_value=conn):
             snapshot = ComparisonService().load_snapshot()
         self.assertEqual(snapshot["Т-Страхование"]["franchise"]["quality_status"],
