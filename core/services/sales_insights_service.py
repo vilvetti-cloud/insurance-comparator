@@ -840,17 +840,11 @@ class SalesInsightsService:
                 own, other,
                 "Базы расчёта отличаются или не установлены; проценты нельзя напрямую сопоставлять. Преимущество прозрачности отмечается отдельно, если оно подтверждено.",
             )
-        if own_threshold.amount > other_threshold.amount:
-            return self._advantage(
-                key="total_loss", label=label, title="Более высокий порог тотала",
-                own=own, other=other, basis="total_loss_higher_threshold",
-                reason="При одинаковой базе расчёта более высокий порог означает более позднее признание полной гибели.",
-                client_phrase="У первой страховой порог полной гибели выше при сопоставимой базе расчёта.",
-            )
-        if own_threshold.amount < other_threshold.amount:
+        if own_threshold.amount != other_threshold.amount:
             return self._comparison(
-                "total_loss", label, "competitor_advantage", "total_loss_higher_threshold",
-                own, other, "У конкурента порог полной гибели выше при сопоставимой базе расчёта.",
+                "total_loss", label, "incomparable", "total_loss_threshold_tradeoff",
+                own, other,
+                "Пороги различаются при одинаковой базе расчёта, но ни более высокий, ни более низкий порог сам по себе не является универсальным преимуществом: он меняет момент признания полной гибели. Для вывода нужно сопоставить порядок ремонта, выплату, франшизу и стоимость годных остатков.",
             )
         return self._comparison(
             "total_loss", label, "equal", "total_loss_same_threshold", own, other,
