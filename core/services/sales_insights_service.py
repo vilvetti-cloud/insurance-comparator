@@ -1140,14 +1140,19 @@ class SalesInsightsService:
 
     @staticmethod
     def _total_loss_basis(text: str) -> str | None:
-        if re.search(r"от\s+(?:страховой\s+сумм|сс\b)", text):
-            return "sum_insured"
-        if re.search(r"стоимост\w*\s+(?:ремонт|восстанов)", text):
-            return "repair_cost"
-        if re.search(r"(?:от\s+)?действительн\w*\s+стоимост", text):
+        text = text.lower().replace("ё", "е")
+        has_sum = bool(re.search(r"(?:от\s+)?страхов\w*\s+сумм|\bсс\b", text))
+        has_insured_value = bool(re.search(r"страхов\w*\s+стоимост", text))
+        if has_sum and has_insured_value and re.search(r"или|либо|при\s+неполном\s+страховании", text):
+            return "mixed_basis"
+        if re.search(r"(?:\d+(?:[.,]\d+)?\s*%\s*(?:от\s+)?)?действительн\w*\s+стоимост", text):
             return "actual_value"
-        if re.search(r"страхов\w*\s+стоимост", text):
+        if re.search(r"\d+(?:[.,]\d+)?\s*%\s*(?:от\s+)?страхов\w*\s+сумм|от\s+страхов\w*\s+сумм", text):
+            return "sum_insured"
+        if re.search(r"\d+(?:[.,]\d+)?\s*%\s*(?:от\s+)?страхов\w*\s+стоимост", text):
             return "insured_value"
+        if re.search(r"от\s+(?:стоимост\w*\s+)?(?:восстановительн\w*\s+)?ремонт", text):
+            return "repair_cost"
         return None
 
     @staticmethod
