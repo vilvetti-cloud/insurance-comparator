@@ -39,7 +39,9 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("Официальный сайт", page)
         self.assertIn("sovcomins.ru/product/articles-car/gap-strakhovanie-v-kasko/", page)
-        self.assertIn("По 105 полям факт/условие подтверждён", page)
+        self.assertIn("По 60 полям факт/условие подтверждён", page)
+        self.assertIn("24 остались частично подтверждёнными", page)
+        self.assertIn("по 5 прямое условие не подтверждено", page)
 
 
 if __name__ == "__main__":
