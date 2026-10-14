@@ -100,21 +100,25 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(result["advantages"][0]["comparison_basis"], "gap_coverage_level_2_vs_1")
 
-    def test_total_loss_higher_threshold_is_first_advantage(self):
+    def test_total_loss_higher_threshold_is_not_universal_advantage(self):
         result = self.analyze(
             "total_loss",
             field_data("total_loss", "Полная гибель — 75% от страховой суммы."),
             field_data("total_loss", "Полная гибель — 70% от страховой суммы."),
         )
-        self.assertEqual(result["advantages"][0]["comparison_basis"], "total_loss_higher_threshold")
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
 
-    def test_total_loss_actual_value_thresholds_are_comparable(self):
+    def test_total_loss_actual_value_thresholds_are_compared_without_ranking(self):
         result = self.analyze(
             "total_loss",
             field_data("total_loss", "Полная гибель — 75% действительной стоимости ТС."),
             field_data("total_loss", "Полная гибель — 70% действительной стоимости ТС."),
         )
-        self.assertEqual(result["advantages"][0]["comparison_basis"], "total_loss_higher_threshold")
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
 
     def test_total_loss_different_basis_is_incomparable(self):
         result = self.analyze(
