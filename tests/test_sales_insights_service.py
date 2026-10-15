@@ -21,7 +21,7 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             "gap_confidence": None,
         }
 
-    def test_reso_first_gets_definitive_gap_advantage(self):
+    def test_optional_gap_is_conditional_when_competitor_value_is_not_found(self):
         result = self.service.analyze(
             company="РЕСО-Гарантия",
             competitor="ВСК",
@@ -29,10 +29,11 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             competitor_data=self.vsk,
             field_labels={"gap": "GAP-страхование"},
         )
-        self.assertEqual(len(result["advantages"]), 1)
-        self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
-        self.assertEqual(result["advantages"][0]["field_key"], "gap")
-        self.assertEqual(result["conditional_advantages"], [])
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(len(result["conditional_advantages"]), 1)
+        self.assertEqual(result["conditional_advantages"][0]["outcome"], "conditional_first_advantage")
+        self.assertEqual(result["conditional_advantages"][0]["field_key"], "gap")
+        self.assertTrue(result["comparisons"][0]["conditional"])
 
     def test_reversing_order_moves_gap_advantage_to_competitor(self):
         result = self.service.analyze(
@@ -45,8 +46,8 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["conditional_advantages"], [])
         self.assertEqual(len(result["comparisons"]), 1)
-        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
-        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+        self.assertEqual(result["comparisons"][0]["outcome"], "conditional_competitor_advantage")
+        self.assertTrue(result["comparisons"][0]["conditional"])
         self.assertIn("РЕСО-Гарантия", result["comparisons"][0]["client_phrase"])
         self.assertEqual(result["advantages"], [])
 
