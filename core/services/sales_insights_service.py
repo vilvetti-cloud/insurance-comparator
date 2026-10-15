@@ -54,27 +54,16 @@ class SalesInsightsService:
                 known_data = data if own is not None else competitor_data
                 if own is None and other is None:
                     continue
-                approved_gap_absence_present = key == "gap" and any(
-                    value is None
-                    and company_data.get(f"{key}_source_level") in {1, 2}
-                    for value, company_data in ((own, data), (other, competitor_data))
-                )
-                if not self._comparison_eligible(known_data, key) and not approved_gap_absence_present:
+                # Missing/not-found is unknown, not an explicit exclusion.
+                # Source level alone cannot prove absence of a coverage term.
+                if not self._comparison_eligible(known_data, key):
                     continue
-                def missing_value(value: str | None, company_data: dict[str, Any]) -> str:
-                    if value is not None:
-                        return value
-                    if (
-                        key == "gap"
-                            and company_data.get(f"{key}_source_level") in {1, 2}
-                    ):
-                        # Approved comparison rule: if the complete checked official rules
-                        # contain no GAP provision, treat GAP as unavailable for this comparison.
-                        return "GAP не предусмотрен в проверенных официальных правилах по утверждённому правилу сравнения"
-                    return "В проверенных источниках не установлено"
 
-                own_for_compare = missing_value(own, data)
-                other_for_compare = missing_value(other, competitor_data)
+                def missing_value(value: str | None) -> str:
+                    return value if value is not None else "В проверенных источниках не установлено"
+
+                own_for_compare = missing_value(own)
+                other_for_compare = missing_value(other)
             else:
                 if (
                     own is None
