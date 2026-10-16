@@ -162,8 +162,8 @@
                 {% for key in fields %}
                   {% set value1 = data1.get(key, 'Не найдено') %}
                   {% set value2 = data2.get(key, 'Не найдено') %}
-                  {% set display_value1 = ('В принятых официальных правилах условие не указано' if data1.get(key + '_source_level') in [1, 2] else 'Требует проверки') if value1 == 'Не найдено' else value1 %}
-                  {% set display_value2 = ('В принятых официальных правилах условие не указано' if data2.get(key + '_source_level') in [1, 2] else 'Требует проверки') if value2 == 'Не найдено' else value2 %}
+                  {% set display_value1 = ('В принятых официальных правилах условие не указано' if data1.get(key + '_source_level')|int in [1, 2] else 'Требует проверки') if value1|string|lower startswith 'не найдено' else value1 %}
+                  {% set display_value2 = ('В принятых официальных правилах условие не указано' if data2.get(key + '_source_level')|int in [1, 2] else 'Требует проверки') if value2|string|lower startswith 'не найдено' else value2 %}
                   <tr>
                     <td class="parameter-cell">
                       <div class="parameter">
