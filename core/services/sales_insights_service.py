@@ -476,6 +476,17 @@ class SalesInsightsService:
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
 
+        # Equal GAP availability levels do not establish equivalent products:
+        # standalone GAP products may insure different losses and use different
+        # caps/calculation bases. Do not rank limits unless variants are proven
+        # comparable (the current accepted data does not establish that).
+        if key == "gap" and own_level is not None and own_level == other_level:
+            return self._comparison(
+                key, label, "incomparable", "gap_same_level_variants_not_comparable",
+                own, other,
+                "У обеих компаний описан GAP одного общего уровня доступности, но это не доказывает совпадение вариантов, лимитов и базы расчёта. GAP оформляется отдельно; сравнить условия можно только для сопоставимых вариантов и договоров.",
+            )
+
         if key == "gap" and own_gap_not_mentioned != other_gap_not_mentioned:
             known_level = other_level if own_gap_not_mentioned else own_level
             known_value = other if own_gap_not_mentioned else own
@@ -573,9 +584,20 @@ class SalesInsightsService:
                     own, other, "При одинаковом уровне покрытия у конкурента выше лимит.",
                 )
         if own_level is not None and other_level is not None and own_level == other_level:
+            if own_level == 0:
+                return self._comparison(
+                    key, label, "equal", f"{key}_both_explicitly_excluded", own, other,
+                    "В проверенных условиях обеих компаний это покрытие прямо исключено.",
+                )
+            if self._normalized(own_l) == self._normalized(other_l):
+                return self._comparison(
+                    key, label, "equal", f"{key}_same_accepted_condition", own, other,
+                    "Принятые формулировки условий совпадают.",
+                )
             return self._comparison(
-                key, label, "equal", f"{key}_same_coverage_level", own, other,
-                "Условия по уровню покрытия сопоставимы.",
+                key, label, "incomparable", f"{key}_same_level_terms_differ_or_unverified",
+                own, other,
+                "Одинаковый общий уровень доступности не доказывает совпадение условий, исключений и порядка включения в договор.",
             )
         return self._comparison(
             key, label, "incomparable", f"{key}_insufficient_data", own, other,
@@ -617,9 +639,17 @@ class SalesInsightsService:
                 own, other,
                 "Пороги различаются при одинаковой базе расчёта, но ни более высокий, ни более низкий порог сам по себе не является универсальным преимуществом: он меняет момент признания полной гибели. Для вывода нужно сопоставить порядок ремонта, выплату, франшизу и стоимость годных остатков.",
             )
+        own_operator = self._total_loss_operator(own_l)
+        other_operator = self._total_loss_operator(other_l)
+        if own_operator is None or other_operator is None or own_operator != other_operator:
+            return self._comparison(
+                "total_loss", label, "incomparable", "total_loss_boundary_condition_differs_or_unestablished",
+                own, other,
+                "Числовой порог и база расчёта совпадают, но условие на границе порога различается или не установлено: «свыше 75%» и «75% или более» не равнозначны.",
+            )
         return self._comparison(
-            "total_loss", label, "equal", "total_loss_same_threshold", own, other,
-            "Порог полной гибели совпадает.",
+            "total_loss", label, "equal", "total_loss_same_threshold_and_boundary", own, other,
+            "Совпадают числовой порог, база расчёта и условие на границе порога.",
         )
 
     def _compare_tow_truck(self, label, own, other, own_l, other_l):
@@ -661,9 +691,19 @@ class SalesInsightsService:
                 "Лимит эвакуации совпадает.",
             )
         if own_level is not None and other_level is not None and own_level == other_level:
+            if own_level == 0:
+                return self._comparison(
+                    "tow_truck", label, "equal", "tow_truck_both_explicitly_excluded",
+                    own, other, "В проверенных условиях обеих компаний эвакуация прямо не предусмотрена.",
+                )
+            if self._normalized(own_l) == self._normalized(other_l):
+                return self._comparison(
+                    "tow_truck", label, "equal", "tow_truck_same_accepted_condition",
+                    own, other, "Принятые формулировки условий эвакуации совпадают.",
+                )
             return self._comparison(
-                "tow_truck", label, "equal", "tow_truck_same_coverage",
-                own, other, "Эвакуация предусмотрена на сопоставимом уровне.",
+                "tow_truck", label, "incomparable", "tow_truck_same_level_terms_differ_or_unverified",
+                own, other, "Одинаковый общий уровень доступности не доказывает совпадение лимитов, маршрута и условий организации эвакуации.",
             )
         return self._comparison(
             "tow_truck", label, "incomparable", "tow_truck_context_differs",
@@ -921,6 +961,16 @@ class SalesInsightsService:
         if not match:
             return None
         return NumericValue(float(match.group(1).replace(",", ".")), "percent")
+
+    @staticmethod
+    def _total_loss_operator(text: str) -> str | None:
+        """Identify whether the total-loss threshold is strict or inclusive."""
+        text = text.lower().replace("ё", "е")
+        if re.search(r"равн\w*\s+или\s+превыш|равн\w*\s+или\s+больш|не\s+менее|не\s+ниже|>=|≥", text):
+            return "gte"
+        if re.search(r"превыша\w*|свыше|более\s+\d+(?:[.,]\d+)?\s*%", text):
+            return "gt"
+        return None
 
     @staticmethod
     def _total_loss_basis(text: str) -> str | None:
