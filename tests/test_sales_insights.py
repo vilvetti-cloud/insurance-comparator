@@ -83,14 +83,18 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
-    def test_gap_missing_is_not_treated_as_excluded(self):
+    def test_gap_not_mentioned_in_checked_official_rules_counts_as_availability_advantage(self):
         result = self.analyze(
             "gap",
             field_data("gap", "GAP включен."),
             field_data("gap", "В правилах GAP не указан."),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(
+            result["advantages"][0]["comparison_basis"],
+            "gap_available_vs_not_mentioned_in_official_rules",
+        )
+        self.assertNotIn("прямо исключено", result["advantages"][0]["client_phrase"])
 
     def test_gap_included_vs_paid(self):
         result = self.analyze(
