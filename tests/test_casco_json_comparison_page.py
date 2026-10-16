@@ -27,7 +27,8 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("РЕСО-Гарантия", page)
         self.assertIn("ВСК", page)
-        self.assertIn("Преимущество РЕСО-Гарантия", page)
+        self.assertIn("<th>Результат сравнения</th>", page)
+        self.assertNotIn("<th>Преимущество РЕСО-Гарантия</th>", page)
         self.assertIn("Нельзя уверенно сравнить", page)
         self.assertIn("GAP-страхование", page)
         self.assertIn("прямое условие gap не найдено", page.lower())
@@ -35,6 +36,33 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("Без справок", page)
         self.assertIn("Срок выплат", page)
 
+
+    def test_published_gap_and_total_loss_comparisons_are_conservative(self):
+        client = app.test_client()
+
+        gap_response = client.get(
+            "/compare",
+            query_string={
+                "company1": "РЕСО-Гарантия",
+                "company2": "АльфаСтрахование",
+            },
+        )
+        self.assertEqual(gap_response.status_code, 200)
+        gap_page = gap_response.get_data(as_text=True)
+        self.assertIn("GAP оформляется отдельно", gap_page)
+        self.assertNotIn("Выше сопоставимый лимит", gap_page)
+
+        total_response = client.get(
+            "/compare",
+            query_string={
+                "company1": "ВСК",
+                "company2": "Росгосстрах",
+            },
+        )
+        self.assertEqual(total_response.status_code, 200)
+        total_page = total_response.get_data(as_text=True)
+        self.assertIn("условие на границе порога", total_page)
+        self.assertNotIn("Порог полной гибели совпадает.", total_page)
 
     def test_populated_official_answers_render_even_when_audit_status_disagrees(self):
         def company_data(franchise_value):
