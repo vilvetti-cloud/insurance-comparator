@@ -84,7 +84,7 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
     def test_gap_absent_from_accepted_official_rules_counts_as_absence(self):
-        own = field_data("gap", "GAP включен.")
+        own = field_data("gap", "GAP предусмотрен как отдельный риск и может быть застрахован.")
         other = field_data("gap", "В правилах GAP не указан.")
         other["gap_source_level"] = 1
         result = self.analyze("gap", own, other)
