@@ -214,7 +214,6 @@ class SalesInsightsService:
         """True only when an accepted official-rules source explicitly records no term."""
         return (
             cls._value(data, key) is None
-            and data.get(f"{key}_quality_status") == "not_found"
             and data.get(f"{key}_source_level") in {1, 2}
         )
 
