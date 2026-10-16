@@ -56,7 +56,7 @@ class SalesInsightsService:
                         own=own,
                         other="В предоставленных официальных правилах условие GAP не указано",
                         basis="gap_available_first_insurer_competitor_not_stated",
-                        evidence=f"{company}: {own}. В предоставленных официальных правилах {competitor} условие GAP не указано.",
+                        reason=f"{company}: {own}. В предоставленных официальных правилах {competitor} условие GAP не указано.",
                         client_phrase=(
                             f"В правилах {company} GAP предусмотрен"
                             + (" как отдельная опция" if own_level == 1 else " в описанном покрытии")
@@ -78,7 +78,7 @@ class SalesInsightsService:
                         own="В предоставленных официальных правилах условие GAP не указано",
                         other=other,
                         basis="gap_available_competitor_first_insurer_not_stated",
-                        evidence=f"{competitor}: {other}. В предоставленных официальных правилах {company} условие GAP не указано.",
+                        reason=f"{competitor}: {other}. В предоставленных официальных правилах {company} условие GAP не указано.",
                         client_phrase=(
                             f"В правилах {competitor} GAP предусмотрен"
                             + (" как отдельная опция" if other_level == 1 else " в описанном покрытии")
