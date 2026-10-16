@@ -1198,15 +1198,6 @@ class SalesInsightsService:
         if not term or not re.search(term, text):
             return None
 
-        # For optional risks, an accepted official-rule answer that explicitly
-        # says the condition is not stated is level 0 for this comparison.
-        # Do not apply this shortcut to tow-truck limits: a missing limit does
-        # not mean the evacuation coverage itself is absent.
-        if key in {"gap", "self_ignition", "terrorism", "drone"} and re.search(
-            r"не\s+найден|не\s+указан|не\s+упомина", text
-        ):
-            return 0
-
         negative_patterns = {
             "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
             "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",
@@ -1233,6 +1224,9 @@ class SalesInsightsService:
         # wording; all other explicit exclusions remain level 0.
         if optional and re.search(r"кроме[^.;]{0,100}(?:соглашени|договор)|может\s+быть\s+включен|можно\s+включить|только\s+(?:при\s+)?(?:наличии|оформлении|включении)", text):
             return 1
+        # An explicit omission in accepted official rules means this optional risk is absent.
+        if key in {"gap", "self_ignition", "terrorism", "drone"} and re.search(r"не\s+найден|не\s+указан|не\s+упомина", text):
+            return 0
         pattern = negative_patterns.get(key)
         if pattern and re.search(pattern, text):
             return 0
