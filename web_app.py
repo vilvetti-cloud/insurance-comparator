@@ -115,37 +115,34 @@ def compare():
         }
     data1 = _prepare_company_data(snapshot, company1, contextual.get(company1))
     data2 = _prepare_company_data(snapshot, company2, contextual.get(company2))
-    reportable = {"confirmed", "conditional"}
-    found1 = sum(1 for field in FIELD_KEYS if data1.get(f"{field}_quality_status") in reportable)
-    found2 = sum(1 for field in FIELD_KEYS if data2.get(f"{field}_quality_status") in reportable)
+    def has_value(data: dict, field: str) -> bool:
+        value = data.get(field)
+        return bool(value) and not str(value).strip().lower().startswith("не найдено")
+
+    def has_official_value(data: dict, field: str) -> bool:
+        return data.get(f"{field}_source_level") in {1, 2} and has_value(data, field)
+
+    # Accepted answer text from official documents/sites is the source of truth.
+    # Quality/audit statuses are diagnostics and must not hide populated values.
+    found1 = sum(1 for field in FIELD_KEYS if has_official_value(data1, field))
+    found2 = sum(1 for field in FIELD_KEYS if has_official_value(data2, field))
     comparable_fields = [
         field for field in FIELD_KEYS
-        if data1.get(f"{field}_quality_status") in reportable
-        and data2.get(f"{field}_quality_status") in reportable
-        and data1.get(f"{field}_source_level") in {1, 2}
+        if data1.get(f"{field}_source_level") in {1, 2}
         and data2.get(f"{field}_source_level") in {1, 2}
+        and (has_value(data1, field) or has_value(data2, field))
     ]
-    comparison_ready = len(comparable_fields) > 0
+    comparison_ready = bool(comparable_fields)
 
-    if comparison_ready:
-        sales = sales_insights_service.analyze(
-            company=company1,
-            competitor=company2,
-            data=data1,
-            competitor_data=data2,
-            field_labels=FIELD_LABELS,
-        )
-    else:
-        sales = {
-            "advantages": [],
-            "conditional_advantages": [],
-            "cards": [],
-            "comparisons": [],
-            "cautions": [
-                "Пока нет параметров с достаточными доказательствами у обеих компаний для расчёта преимущества."
-            ],
-            "client_message": "Сначала нужно подтвердить условия по первичным документам обеих компаний.",
-        }
+    # Always run deterministic analysis. Missing values are handled per field
+    # by SalesInsightsService; they must not suppress the other nine parameters.
+    sales = sales_insights_service.analyze(
+        company=company1,
+        competitor=company2,
+        data=data1,
+        competitor_data=data2,
+        field_labels=FIELD_LABELS,
+    )
 
     comparison_by_field = {
         key: {
