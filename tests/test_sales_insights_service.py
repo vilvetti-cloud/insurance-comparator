@@ -66,8 +66,9 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             field_labels={"gap": "GAP-страхование"},
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["conditional_advantages"], [])
-        self.assertEqual(result["comparisons"], [])
+        self.assertEqual(len(result["conditional_advantages"]), 1)
+        self.assertTrue(result["comparisons"][0]["conditional"])
+        self.assertIn("не означает, что она точно отсутствует", result["comparisons"][0]["client_phrase"])
 
     def test_competitor_with_better_gap_level_wins_even_when_reso_is_first(self):
         reso = {
