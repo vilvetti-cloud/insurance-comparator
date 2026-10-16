@@ -139,15 +139,27 @@ def compare():
     ]
     comparison_ready = bool(comparable_fields)
 
-    # Always run deterministic analysis. Missing values are handled per field
-    # by SalesInsightsService; they must not suppress the other nine parameters.
-    sales = sales_insights_service.analyze(
-        company=company1,
-        competitor=company2,
-        data=data1,
-        competitor_data=data2,
-        field_labels=FIELD_LABELS,
-    )
+    # Audit statuses do not gate accepted official values. The only readiness
+    # gate is whether the selected companies have any official-source field data.
+    if comparison_ready:
+        sales = sales_insights_service.analyze(
+            company=company1,
+            competitor=company2,
+            data=data1,
+            competitor_data=data2,
+            field_labels=FIELD_LABELS,
+        )
+    else:
+        sales = {
+            "advantages": [],
+            "conditional_advantages": [],
+            "cards": [],
+            "comparisons": [],
+            "cautions": [
+                "Для выбранных компаний нет значений из официальных источников, пригодных для сравнения."
+            ],
+            "client_message": "Нужно выбрать пары компаний с доступными официальными условиями.",
+        }
 
     comparison_by_field = {
         key: {
