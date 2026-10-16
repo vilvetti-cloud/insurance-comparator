@@ -52,6 +52,17 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("GAP оформляется отдельно", gap_page)
         self.assertNotIn("Выше сопоставимый лимит", gap_page)
 
+        drone_response = client.get(
+            "/compare",
+            query_string={
+                "company1": "Росгосстрах",
+                "company2": "ВСК",
+            },
+        )
+        self.assertEqual(drone_response.status_code, 200)
+        drone_page = drone_response.get_data(as_text=True)
+        self.assertNotIn("БПЛА — по допусловию", drone_page)
+
         total_response = client.get(
             "/compare",
             query_string={
