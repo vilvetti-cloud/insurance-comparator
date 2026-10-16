@@ -49,9 +49,9 @@ class SalesInsightsService:
             # advantage when the competitor's supplied official rules do not
             # state a comparable GAP condition. Keep contract dependence as a
             # qualification, not as a downgrade to "possible advantage".
-            if key == "gap" and own is not None and other is None:
+            if key == "gap" and own is not None and self._accepted_rule_omission(competitor_data, key):
                 own_level = self._coverage_level_v2(key, own.lower())
-                if own_level in {1, 2} and competitor_data.get("gap_source_level") in {1, 2}:
+                if own_level in {1, 2}:
                     comparison = self._advantage(
                         key=key, label=label,
                         title="GAP — отдельная опция" if own_level == 1 else "GAP включён в покрытие",
@@ -71,9 +71,9 @@ class SalesInsightsService:
                     comparisons.append(comparison)
                     continue
 
-            if key == "gap" and own is None and other is not None:
+            if key == "gap" and self._accepted_rule_omission(data, key) and other is not None:
                 other_level = self._coverage_level_v2(key, other.lower())
-                if other_level in {1, 2} and data.get("gap_source_level") in {1, 2}:
+                if other_level in {1, 2}:
                     comparison = self._advantage(
                         key=key, label=label,
                         title=f"GAP предусмотрен у {competitor}",
@@ -104,15 +104,18 @@ class SalesInsightsService:
                 other_for_compare = other or "Порог/база расчёта не установлены в проверенных источниках"
             elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"} and (own is None or other is None):
                 known_data = data if own is not None else competitor_data
+                missing_data = competitor_data if own is not None else data
                 if own is None and other is None:
                     continue
-                # The accepted official-rule dataset treats an omitted term as absent
-                # for this comparison. The source level identifies the accepted rules set.
+                # Only an explicit omission from the accepted official rules set
+                # counts as absence; an actually missing/unreviewed field stays unknown.
+                if not self._accepted_rule_omission(missing_data, key):
+                    continue
                 if not self._comparison_eligible(known_data, key):
                     continue
 
                 def missing_value(value: str | None) -> str:
-                    return value if value is not None else "В проверенных источниках не установлено"
+                    return value if value is not None else "В принятых официальных правилах условие не указано"
 
                 own_for_compare = missing_value(own)
                 other_for_compare = missing_value(other)
@@ -205,6 +208,15 @@ class SalesInsightsService:
             return float(confidence) >= 0.75
         except (TypeError, ValueError):
             return False
+
+    @classmethod
+    def _accepted_rule_omission(cls, data: dict[str, Any], key: str) -> bool:
+        """True only when an accepted official-rules source explicitly records no term."""
+        return (
+            cls._value(data, key) is None
+            and data.get(f"{key}_quality_status") == "not_found"
+            and data.get(f"{key}_source_level") in {1, 2}
+        )
 
     @staticmethod
     def _value(data: dict[str, Any], key: str) -> str | None:
