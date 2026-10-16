@@ -241,6 +241,25 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
+    def test_equivalent_property_is_counted_as_a_distinct_repair_form(self):
+        result = self.analyze(
+            "repair_type",
+            field_data(
+                "repair_type",
+                "Правила допускают денежную выплату и натуральное возмещение через ремонт на СТОА.",
+            ),
+            field_data(
+                "repair_type",
+                "Правила допускают денежную выплату, предоставление имущества, аналогичного утраченному, либо направление на ремонт.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "repair_option_set_superset",
+        )
+
     def test_crossed_repair_options_are_incomparable(self):
         result = self.analyze(
             "repair_type",
