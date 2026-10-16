@@ -30,6 +30,8 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("Преимущество РЕСО-Гарантия", page)
         self.assertIn("Нельзя уверенно сравнить", page)
         self.assertIn("GAP-страхование", page)
+        self.assertIn("прямое условие GAP не найдено", page.lower())
+        self.assertNotIn("прямо исключено", page.lower())
         self.assertIn("Без справок", page)
         self.assertIn("Срок выплат", page)
 
