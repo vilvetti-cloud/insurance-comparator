@@ -51,23 +51,24 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertIn("РЕСО-Гарантия", result["comparisons"][0]["client_phrase"])
         self.assertEqual(result["advantages"], [])
 
-    def test_unreviewed_missing_gap_does_not_count_as_absence(self):
-        unreviewed = {
-            "gap": "Не найдено",
-            "gap_quality_status": "missing",
+    def test_official_rules_without_gap_count_as_absence(self):
+        official_rules_without_gap = {
+            "gap": "Не найдено в тексте официальных правил",
+            "gap_quality_status": "not_found",
             "gap_sales_eligible": False,
-            "gap_source_level": None,
+            "gap_source_level": 1,
         }
         result = self.service.analyze(
             company="РЕСО-Гарантия",
             competitor="Другая компания",
             data=self.reso,
-            competitor_data=unreviewed,
+            competitor_data=official_rules_without_gap,
             field_labels={"gap": "GAP-страхование"},
         )
-        self.assertEqual(result["advantages"], [])
+        self.assertEqual(len(result["advantages"]), 1)
         self.assertEqual(result["conditional_advantages"], [])
-        self.assertEqual(result["comparisons"], [])
+        self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
+        self.assertIn("преимущество по наличию опции", result["advantages"][0]["client_phrase"])
 
     def test_competitor_with_better_gap_level_wins_even_when_reso_is_first(self):
         reso = {
