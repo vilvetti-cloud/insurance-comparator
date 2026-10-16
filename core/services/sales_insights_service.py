@@ -42,6 +42,56 @@ class SalesInsightsService:
         for key, label in field_labels.items():
             own = self._value(data, key)
             other = self._value(competitor_data, key)
+
+            # Official-source GAP rule: an explicitly available option is an
+            # advantage when the competitor's supplied official rules do not
+            # state a comparable GAP condition. Keep contract dependence as a
+            # qualification, not as a downgrade to "possible advantage".
+            if key == "gap" and own is not None and other is None:
+                own_level = self._coverage_level_v2(key, own.lower())
+                if own_level in {1, 2} and competitor_data.get("gap_source_level") in {1, 2}:
+                    comparison = self._advantage(
+                        key=key, label=label,
+                        title="GAP — отдельная опция" if own_level == 1 else "GAP включён в покрытие",
+                        own=own,
+                        other="В предоставленных официальных правилах условие GAP не указано",
+                        basis="gap_available_first_insurer_competitor_not_stated",
+                        evidence=f"{company}: {own}. В предоставленных официальных правилах {competitor} условие GAP не указано.",
+                        client_phrase=(
+                            f"В правилах {company} GAP предусмотрен"
+                            + (" как отдельная опция" if own_level == 1 else " в описанном покрытии")
+                            + f"; в предоставленных официальных правилах {competitor} условие GAP не указано. "
+                            "По принятой методике это преимущество по наличию опции. "
+                            "Для подключения нужно сверить выбранную программу и договор."
+                        ),
+                    )
+                    advantages.append(comparison)
+                    comparisons.append(comparison)
+                    continue
+
+            if key == "gap" and own is None and other is not None:
+                other_level = self._coverage_level_v2(key, other.lower())
+                if other_level in {1, 2} and data.get("gap_source_level") in {1, 2}:
+                    comparison = self._advantage(
+                        key=key, label=label,
+                        title=f"GAP предусмотрен у {competitor}",
+                        own="В предоставленных официальных правилах условие GAP не указано",
+                        other=other,
+                        basis="gap_available_competitor_first_insurer_not_stated",
+                        evidence=f"{competitor}: {other}. В предоставленных официальных правилах {company} условие GAP не указано.",
+                        client_phrase=(
+                            f"В правилах {competitor} GAP предусмотрен"
+                            + (" как отдельная опция" if other_level == 1 else " в описанном покрытии")
+                            + f"; в предоставленных официальных правилах {company} условие GAP не указано. "
+                            "По принятой методике преимущество по наличию опции у конкурента."
+                        ),
+                    )
+                    comparison["outcome"] = "competitor_advantage"
+                    comparison["kind"] = "competitor_advantage"
+                    comparison["reason"] = comparison["client_phrase"]
+                    comparisons.append(comparison)
+                    continue
+
             if key == "total_loss" and (own is None or other is None):
                 known_data = data if own is not None else competitor_data
                 if own is None and other is None:
@@ -460,13 +510,14 @@ class SalesInsightsService:
                 "составу покрытия и цене."
             )
 
-        return (
+        message = (
             f"При сравнении {company} и {competitor} стоит обратить внимание на условия, "
             "которые влияют на выплату и урегулирование. "
             + " ".join(all_phrases)
             + f" Если эти условия важны для вас, {company} стоит рассмотреть в первую очередь; "
               "перед оформлением сверим их с выбранной программой и полисом."
         )
+        return re.sub(r"([.!?])(?:\s*\1)+", r"\1", message)
 
     @staticmethod
     def _normalized(text: str) -> str:
