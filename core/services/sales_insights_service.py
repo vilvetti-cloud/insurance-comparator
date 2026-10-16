@@ -21,9 +21,9 @@ class NumericValue:
 class SalesInsightsService:
     """Build deterministic, auditable CASCO comparison arguments.
 
-    A sales advantage is emitted only when both companies have a quality-audited
-    confirmed value, both values describe the same canonical field, and a
-    field-specific rule proves a real directional difference.
+    Approved populated answers are compared using deterministic field-specific
+    rules. Audit metadata does not override accepted answer text; field-specific
+    policies define how official-source omissions are handled.
     """
 
     def analyze(
@@ -54,16 +54,24 @@ class SalesInsightsService:
                 known_data = data if own is not None else competitor_data
                 if own is None and other is None:
                     continue
-                # Missing/not-found is unknown, not an explicit exclusion.
-                # Source level alone cannot prove absence of a coverage term.
+                # A populated approved answer remains eligible regardless of
+                # audit status. Special handling for official GAP omissions is
+                # applied below; other missing coverage values remain unknown.
                 if not self._comparison_eligible(known_data, key):
                     continue
 
-                def missing_value(value: str | None) -> str:
-                    return value if value is not None else "В проверенных источниках не установлено"
+                def missing_value(value: str | None, source_data: dict[str, Any]) -> str:
+                    if value is not None:
+                        return value
+                    # Approved project rule: for GAP, no direct mention in a
+                    # checked official insurer rule set (source level 1/2)
+                    # counts as the option being unavailable for comparison.
+                    if key == "gap" and source_data.get(f"{key}_source_level") in {1, 2}:
+                        return "Прямое условие GAP не найдено в проверенных официальных правилах"
+                    return "В проверенных источниках не установлено"
 
-                own_for_compare = missing_value(own)
-                other_for_compare = missing_value(other)
+                own_for_compare = missing_value(own, data)
+                other_for_compare = missing_value(other, competitor_data)
             else:
                 if (
                     own is None
@@ -91,16 +99,6 @@ class SalesInsightsService:
                     phrase = f"{phrase} Преимущество по этому параметру у {competitor}.".strip()
                 comparison["client_phrase"] = phrase
 
-            approved_gap_absence = key == "gap" and (
-                (
-                    own is None
-                    and data.get(f"{key}_source_level") in {1, 2}
-                )
-                or (
-                    other is None
-                    and competitor_data.get(f"{key}_source_level") in {1, 2}
-                )
-            )
             # Audit status is validation metadata, not a gate for approved answers.
             # Only field-specific contract conditions can make a comparison conditional.
             is_conditional = bool(comparison.get("conditional"))
@@ -145,24 +143,13 @@ class SalesInsightsService:
 
     @classmethod
     def _comparison_eligible(cls, data: dict[str, Any], key: str) -> bool:
-        if cls._trusted(data, key):
-            return True
-        # Keep genuinely unestablished values unknown; audit status must not
-        # downgrade a populated approved answer, but cannot create a value.
-        if data.get(f"{key}_quality_status") != "conditional":
+        # The accepted answer is authoritative regardless of audit labels,
+        # confidence or sales_eligible. Preserve the official-source boundary:
+        # an explicitly non-official source level must not drive sales claims.
+        if not cls._trusted(data, key):
             return False
-        if data.get(f"{key}_source_level") not in {1, 2}:
-            return False
-        value = cls._value(data, key)
-        if value is None:
-            return False
-        confidence = data.get(f"{key}_confidence")
-        if confidence is None:
-            return True
-        try:
-            return float(confidence) >= 0.75
-        except (TypeError, ValueError):
-            return False
+        source_level = data.get(f"{key}_source_level")
+        return source_level is None or source_level in {1, 2}
 
     @staticmethod
     def _value(data: dict[str, Any], key: str) -> str | None:
@@ -175,226 +162,6 @@ class SalesInsightsService:
     def _trusted(data: dict[str, Any], key: str) -> bool:
         """Approved populated answers are reliable regardless of audit metadata."""
         return SalesInsightsService._value(data, key) is not None
-
-    def _compare(
-        self,
-        *,
-        key: str,
-        label: str,
-        company: str,
-        competitor: str,
-        own: str,
-        other: str,
-    ) -> dict[str, Any] | None:
-        own_l = own.lower()
-        other_l = other.lower()
-
-        if self._normalized(own_l) == self._normalized(other_l):
-            return self._comparison(
-                key, label, "equal", "same_normalized_value", own, other,
-                "Подтверждённые значения одинаковы.",
-            )
-
-        if key == "franchise":
-            own_state = self._franchise_state(own_l)
-            other_state = self._franchise_state(other_l)
-            if own_state == "none" and other_state == "present":
-                return self._advantage(
-                    key=key,
-                    label=label,
-                    title="Без франшизы",
-                    own=own,
-                    other=other,
-                    basis="franchise_none_vs_present",
-                    evidence=(
-                        f"{company}: {own}. {competitor}: {other}. "
-                        "У основной компании подтверждено отсутствие франшизы, "
-                        "у конкурента — её наличие."
-                    ),
-                    client_phrase=(
-                        f"По франшизе у {company} есть конкретное отличие: "
-                        f"она отсутствует, тогда как в подтверждённом условии "
-                        f"{competitor} франшиза предусмотрена. Это означает, что "
-                        "по этому условию клиенту не нужно заранее брать на себя "
-                        "оговорённую часть ущерба."
-                    ),
-                )
-
-        if key == "without_certificates":
-            own_state = self._without_documents_state(own_l)
-            other_state = self._without_documents_state(other_l)
-            if own_state == "positive" and other_state == "negative":
-                return self._advantage(
-                    key=key,
-                    label=label,
-                    title="Упрощённое урегулирование",
-                    own=own,
-                    other=other,
-                    basis="without_documents_positive_vs_negative",
-                    evidence=f"{company}: {own}. {competitor}: {other}.",
-                    client_phrase=(
-                        f"У {company} подтверждено урегулирование без справок или "
-                        f"документов в предусмотренном случае, а у {competitor} "
-                        "подтверждено противоположное условие. Для клиента это "
-                        "может сократить количество действий при обращении."
-                    ),
-                )
-
-        if key == "gap":
-            own_state = self._gap_state(own_l)
-            other_state = self._gap_state(other_l)
-            if own_state == "positive" and other_state == "negative":
-                return self._advantage(
-                    key=key,
-                    label=label,
-                    title="GAP-защита",
-                    own=own,
-                    other=other,
-                    basis="gap_positive_vs_negative",
-                    evidence=f"{company}: {own}. {competitor}: {other}.",
-                    client_phrase=(
-                        f"В правилах {company} GAP прямо предусмотрен, а в проверенных "
-                        f"официальных правилах {competitor} эта опция не предусмотрена. "
-                        "По утверждённым правилам сравнения это преимущество по наличию GAP."
-                    ),
-                )
-            if own_state == "negative" and other_state == "positive":
-                comparison = self._advantage(
-                    key=key,
-                    label=label,
-                    title=f"GAP предусмотрен у {competitor}",
-                    own=own,
-                    other=other,
-                    basis="gap_negative_vs_positive",
-                    evidence=f"{company}: {own}. {competitor}: {other}.",
-                    client_phrase=(
-                        f"В проверенных официальных правилах {company} GAP не предусмотрен, "
-                        f"а в правилах {competitor} он прямо указан. По этому параметру "
-                        f"преимущество у {competitor}, а не у {company}."
-                    ),
-                )
-                comparison["outcome"] = "competitor_advantage"
-                comparison["kind"] = "competitor_advantage"
-                comparison["reason"] = comparison["client_phrase"]
-                return comparison
-
-        if key in {"self_ignition", "terrorism", "drone", "tow_truck"}:
-            own_state = self._coverage_state(key, own_l)
-            other_state = self._coverage_state(key, other_l)
-            if own_state == "positive" and other_state == "negative":
-                titles = {
-                    "self_ignition": "Покрытие самовозгорания",
-                    "terrorism": "Покрытие риска терроризма",
-                    "drone": "Покрытие ущерба от БПЛА",
-                    "tow_truck": "Эвакуация предусмотрена",
-                }
-                client_meaning = {
-                    "self_ignition": "риск самовозгорания прямо входит в подтверждённое покрытие",
-                    "terrorism": "террористический риск прямо входит в подтверждённое покрытие",
-                    "drone": "ущерб от БПЛА прямо входит в подтверждённое покрытие",
-                    "tow_truck": "эвакуация автомобиля прямо предусмотрена условиями",
-                }
-                return self._advantage(
-                    key=key,
-                    label=label,
-                    title=titles[key],
-                    own=own,
-                    other=other,
-                    basis=f"{key}_positive_vs_negative",
-                    evidence=f"{company}: {own}. {competitor}: {other}.",
-                    client_phrase=(
-                        f"По параметру «{label}» у {company} подтверждено отличие: "
-                        f"{client_meaning[key]}, тогда как у {competitor} "
-                        "подтверждено противоположное условие."
-                    ),
-                )
-
-        if key == "repair_type":
-            own_state = self._repair_state(own_l)
-            other_state = self._repair_state(other_l)
-            if own_state == "stoa" and other_state == "cash":
-                return self._advantage(
-                    key=key,
-                    label=label,
-                    title="Ремонт организует страховщик",
-                    own=own,
-                    other=other,
-                    basis="repair_stoa_vs_cash_only",
-                    evidence=f"{company}: {own}. {competitor}: {other}.",
-                    client_phrase=(
-                        f"В подтверждённых условиях {company} предусмотрен ремонт "
-                        f"через СТОА, а у {competitor} по сопоставимому условию — "
-                        "денежная форма без ремонта через СТОА. Для клиента вариант "
-                        "со СТОА может быть удобнее, если он не хочет самостоятельно "
-                        "организовывать восстановление автомобиля."
-                    ),
-                )
-
-        if key == "payment_terms":
-            own_term = self._payment_term(own_l)
-            other_term = self._payment_term(other_l)
-            if (
-                own_term
-                and other_term
-                and own_term.context == other_term.context
-                and own_term.unit == other_term.unit
-                and own_term.amount < other_term.amount
-            ):
-                unit_label = {
-                    "working_days": "рабочих дней",
-                    "calendar_days": "календарных дней",
-                    "days": "дней",
-                    "hours": "часов",
-                }[own_term.unit]
-                context_label = {
-                    "payment": "денежной выплаты",
-                    "repair_direction": "выдачи направления на ремонт",
-                    "claim_decision": "принятия решения по заявлению",
-                }[own_term.context]
-                return self._advantage(
-                    key=key,
-                    label=label,
-                    title="Короче сопоставимый срок",
-                    own=own,
-                    other=other,
-                    basis=(
-                        f"payment_term_{own_term.context}_{own_term.unit}_"
-                        f"{own_term.amount}_vs_{other_term.amount}"
-                    ),
-                    evidence=f"{company}: {own}. {competitor}: {other}.",
-                    client_phrase=(
-                        f"Для {context_label} в сопоставимых опубликованных условиях "
-                        f"{company} указан срок до {own_term.amount} {unit_label}, "
-                        f"а у {competitor} — до {other_term.amount} {unit_label}."
-                    ),
-                )
-
-        return None
-
-    @staticmethod
-    def _advantage(
-        *,
-        key: str,
-        label: str,
-        title: str,
-        own: str,
-        other: str,
-        basis: str,
-        evidence: str,
-        client_phrase: str,
-    ) -> dict[str, Any]:
-        return {
-            "kind": "advantage",
-            "outcome": "first_advantage",
-            "field_key": key,
-            "label": label,
-            "title": title,
-            "own_value": own,
-            "competitor_value": other,
-            "comparison_basis": basis,
-            "evidence": evidence,
-            "client_phrase": client_phrase,
-        }
 
     @staticmethod
     def _client_message(
@@ -473,103 +240,6 @@ class SalesInsightsService:
         return re.sub(r"\s+", " ", text).strip().lower()
 
     @staticmethod
-    def _negative(text: str) -> bool:
-        return bool(
-            re.search(
-                r"не\s+(?:покрыв|включ|предусмотр|доступ)|"
-                r"исключа(?:ется|ются)|исключен|отсутств|\bнет\b",
-                text,
-            )
-        )
-
-    @staticmethod
-    def _franchise_state(text: str) -> str:
-        if re.search(
-            r"без\s+франшиз|франшиз\w*\s+отсутств|"
-            r"франшиз\w*\s+не\s+предусмотр",
-            text,
-        ):
-            return "none"
-        if "франшиз" in text and re.search(
-            r"безуслов|условн|размер|сумм|руб|%|предусмотр|установ",
-            text,
-        ):
-            return "present"
-        return "unknown"
-
-    @staticmethod
-    def _without_documents_state(text: str) -> str:
-        negative = bool(
-            re.search(
-                r"без\s+(?:справ|документ)[^.;]{0,80}"
-                r"не\s+(?:допуска|предусмотр|возмож)|"
-                r"не\s+(?:допуска|предусмотр|возмож)[^.;]{0,80}"
-                r"без\s+(?:справ|документ)|"
-                r"(?:справ|документ)\w*\s+(?:обязательн|требуют|необходим)",
-                text,
-            )
-        )
-        if negative:
-            return "negative"
-
-        if re.search(
-            r"без\s+(?:справ|документ)|"
-            r"документ\w*\s+не\s+(?:треб|обязат)|упрощённ|упрощенн",
-            text,
-        ):
-            return "positive"
-        return "unknown"
-
-    @classmethod
-    def _gap_state(cls, text: str) -> str:
-        has_gap = bool(re.search(r"\bgap\b|гэп|сохран\w*\s+стоим", text))
-        if not has_gap:
-            return "unknown"
-        if cls._negative(text):
-            return "negative"
-        if re.search(r"покрыв|защит|сохран|компенс|предусмотр|доступ", text):
-            return "positive"
-        return "unknown"
-
-    @classmethod
-    def _coverage_state(cls, key: str, text: str) -> str:
-        terms = {
-            "self_ignition": r"самовозгор|возгоран|пожар",
-            "terrorism": r"террор",
-            "drone": r"бпла|дрон|беспилот",
-            "tow_truck": r"эвакуатор|эвакуац",
-        }[key]
-        if not re.search(terms, text):
-            return "unknown"
-        if cls._negative(text):
-            return "negative"
-        if re.search(
-            r"покрыв|страхов\w*\s+(?:случ|риск)|предусмотр|включ|"
-            r"предостав|доступ|возмещ|ущерб|услуг",
-            text,
-        ):
-            return "positive"
-        return "unknown"
-
-    @staticmethod
-    def _repair_state(text: str) -> str:
-        has_stoa = bool(
-            re.search(
-                r"стоа|станци\w*\s+техническ|официальн\w*\s+дилер|"
-                r"направлен\w*\s+на\s+ремонт",
-                text,
-            )
-        )
-        has_cash = bool(re.search(r"денежн\w*\s+(?:выплат|форм|возмещ)", text))
-        if has_stoa and has_cash:
-            return "mixed"
-        if has_stoa:
-            return "stoa"
-        if has_cash:
-            return "cash"
-        return "unknown"
-
-    @staticmethod
     def _payment_term(text: str) -> PaymentTerm | None:
         sentences = [
             part.strip()
@@ -618,8 +288,7 @@ class SalesInsightsService:
         return None
 
 
-    # --- Deterministic comparison rules v2. These later method definitions
-    # intentionally override the legacy comparison helpers above. ---
+    # Deterministic, field-specific comparison rules.
 
     @staticmethod
     def _comparison(key, label, outcome, basis, own, other, reason):
@@ -794,8 +463,48 @@ class SalesInsightsService:
         )
 
     def _compare_coverage(self, key, label, own, other, own_l, other_l):
+        # GAP absence in a checked official rule set is a distinct state:
+        # it means the option is not described in that document, not that
+        # the insurer explicitly excludes it or has no separate product.
+        gap_not_mentioned_pattern = (
+            r"прям\w*\s+услови\w*[^.;]{0,40}\bgap\b[^.;]{0,50}не\s+найден|"
+            r"\bgap\b[^.;]{0,100}(?:не\s+упомянут|не\s+указан|не\s+найден)|"
+            r"(?:не\s+упомянут|не\s+указан|не\s+найден)[^.;]{0,100}\bgap\b"
+        )
+        own_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, own_l))
+        other_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, other_l))
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
+
+        if key == "gap" and own_gap_not_mentioned != other_gap_not_mentioned:
+            known_level = other_level if own_gap_not_mentioned else own_level
+            known_value = other if own_gap_not_mentioned else own
+            unknown_value = own if own_gap_not_mentioned else other
+            if known_level in {1, 2}:
+                option_company = "конкурента" if own_gap_not_mentioned else "первой страховой"
+                option_level = known_level
+                phrase = (
+                    f"В официальных правилах {option_company} GAP "
+                    f"{'доступен как отдельная опция' if option_level == 1 else 'прямо предусмотрен в описанном покрытии'}, "
+                    "а в проверенных официальных правилах другой компании прямое условие GAP не найдено. "
+                    "По принятой методике это преимущество по доступности GAP в проверенном документе; "
+                    "это не означает, что у второй компании нигде не существует отдельного продукта GAP. "
+                    "Преимущество реализуется только после включения опции в договор."
+                )
+                if own_gap_not_mentioned:
+                    return self._comparison(
+                        key, label, "competitor_advantage",
+                        "gap_available_vs_not_mentioned_in_official_rules",
+                        own, other, phrase,
+                    )
+                advantage = self._advantage(
+                    key=key, label=label, title=self._coverage_title(key, known_level),
+                    own=own, other=other,
+                    basis="gap_available_vs_not_mentioned_in_official_rules",
+                    reason=phrase,
+                    client_phrase=phrase,
+                )
+                return advantage
         if own_level == 1 and other_level is None:
             advantage = self._advantage(
                 key=key, label=label, title=self._coverage_title(key, own_level),
@@ -1143,7 +852,7 @@ class SalesInsightsService:
             r"включен\w*\s+в\s+(?:страхов\w*\s+)?покрыти|"
             r"включен\w*\s+в\s+базов\w*\s+покрыти|"
             r"включен\w*\s+в\s+базов\w*\s+программ|"
-            r"(?<!не\s)включен\w*\b|"
+            r"(?<!не\s)включ(?:ен|ён)(?:о|а|ы|ный|ная|ное|ные|ного|ному|ным|ную|ными|ных)?\b|"
             r"покрыти\w*\s+распространяется|"
             r"прямо\s+предусмотрен\w*\s+(?:договор\w*\s+)?(?:страхов\w*\s+)?покрыти|"
             r"страхов\w*\s+случа\w*[^.;]{0,80}(?:является|признается|признаётся)",
@@ -1181,6 +890,13 @@ class SalesInsightsService:
         competitor_level: int | None,
     ) -> str:
         label = {
+            "gap": "GAP-защита",
+            "self_ignition": "риск самовозгорания",
+            "terrorism": "террористический риск",
+            "drone": "ущерб от БПЛА",
+            "tow_truck": "эвакуация",
+        }.get(key, "это условие")
+        object_label = {
             "gap": "GAP-защиту",
             "self_ignition": "покрытие самовозгорания",
             "terrorism": "террористический риск",
@@ -1190,12 +906,12 @@ class SalesInsightsService:
         if own_level == 1 and competitor_level == 0:
             if key == "terrorism":
                 return "У первой страховой террористический риск можно включить отдельным дополнительным соглашением; у конкурента он исключён из страховых случаев. Это преимущество работает только если риск явно включён в договор."
-            return f"У первой страховой можно подключить {label} как отдельную опцию или по дополнительному условию, тогда как у конкурента это условие прямо исключено. Преимущество действует только после подтверждения и включения опции в договор."
+            return f"У первой страховой можно подключить {object_label} как отдельную опцию или по дополнительному условию, тогда как у конкурента это условие прямо исключено. Преимущество действует только после подтверждения и включения опции в договор."
         if own_level == 2 and competitor_level == 0:
-            return f"У первой страховой {label} прямо включено в описанное покрытие, а у конкурента условие исключено."
+            return f"У первой страховой прямо подтверждено покрытие по параметру «{label}», а у конкурента это условие прямо исключено."
         if own_level == 2 and competitor_level == 1:
-            return f"У первой страховой {label} прямо включено в описанное покрытие; у конкурента оно доступно только как дополнительная опция или за доплату."
-        return f"У первой страховой {label} доступно на более высоком уровне; нужно сверить точный вариант с договором."
+            return f"У первой страховой {label} входит в описанное покрытие; у конкурента оно доступно только как дополнительная опция или за доплату."
+        return f"У первой страховой уровень доступности параметра «{label}» выше; точный вариант нужно сверить с договором."
 
     @staticmethod
     def _total_loss_threshold(text: str):
@@ -1225,6 +941,14 @@ class SalesInsightsService:
 
     @staticmethod
     def _repair_options_v2(text: str) -> set[str]:
+        # Do not infer available forms from examples that the same answer
+        # explicitly says are not listed/established in the checked source.
+        if re.search(
+            r"(?:форм\w*\s+возмещен|вариант\w*\s+возмещен|способ\w*\s+возмещен)"
+            r"[^.;]{0,240}(?:не\s+(?:прямо\s+)?перечислен|не\s+установлен|не\s+указан)",
+            text,
+        ):
+            return set()
         options: set[str] = set()
         if re.search(r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж", text):
             options.add("cash")

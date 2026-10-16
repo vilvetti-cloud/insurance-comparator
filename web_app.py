@@ -55,7 +55,12 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             )
             diagnostic = contextual.get(field, {})
             failure = diagnostic.get("analysis_validation")
-            prepared[f"{field}_review_note"] = (
+            has_accepted_value = (
+                bool(prepared[field])
+                and not str(prepared[field]).strip().lower().startswith("не найдено")
+                and prepared[f"{field}_source_level"] in {1, 2}
+            )
+            prepared[f"{field}_review_note"] = None if has_accepted_value else (
                 REVIEW_REASONS.get(failure, "Ответ модели требует проверки по документу.")
                 if diagnostic.get("analysis_answer") else field_data.get("quality_reason")
             ) if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
@@ -115,18 +120,27 @@ def compare():
         }
     data1 = _prepare_company_data(snapshot, company1, contextual.get(company1))
     data2 = _prepare_company_data(snapshot, company2, contextual.get(company2))
-    reportable = {"confirmed", "conditional"}
-    found1 = sum(1 for field in FIELD_KEYS if data1.get(f"{field}_quality_status") in reportable)
-    found2 = sum(1 for field in FIELD_KEYS if data2.get(f"{field}_quality_status") in reportable)
+    def has_value(data: dict, field: str) -> bool:
+        value = data.get(field)
+        return bool(value) and not str(value).strip().lower().startswith("не найдено")
+
+    def has_official_value(data: dict, field: str) -> bool:
+        return data.get(f"{field}_source_level") in {1, 2} and has_value(data, field)
+
+    # Accepted answer text from official documents/sites is the source of truth.
+    # Quality/audit statuses are diagnostics and must not hide populated values.
+    found1 = sum(1 for field in FIELD_KEYS if has_official_value(data1, field))
+    found2 = sum(1 for field in FIELD_KEYS if has_official_value(data2, field))
     comparable_fields = [
         field for field in FIELD_KEYS
-        if data1.get(f"{field}_quality_status") in reportable
-        and data2.get(f"{field}_quality_status") in reportable
-        and data1.get(f"{field}_source_level") in {1, 2}
+        if data1.get(f"{field}_source_level") in {1, 2}
         and data2.get(f"{field}_source_level") in {1, 2}
+        and (has_value(data1, field) or has_value(data2, field))
     ]
-    comparison_ready = len(comparable_fields) > 0
+    comparison_ready = bool(comparable_fields)
 
+    # Audit statuses do not gate accepted official values. The only readiness
+    # gate is whether the selected companies have any official-source field data.
     if comparison_ready:
         sales = sales_insights_service.analyze(
             company=company1,
@@ -142,9 +156,9 @@ def compare():
             "cards": [],
             "comparisons": [],
             "cautions": [
-                "Пока нет параметров с достаточными доказательствами у обеих компаний для расчёта преимущества."
+                "Для выбранных компаний нет значений из официальных источников, пригодных для сравнения."
             ],
-            "client_message": "Сначала нужно подтвердить условия по первичным документам обеих компаний.",
+            "client_message": "Нужно выбрать пары компаний с доступными официальными условиями.",
         }
 
     comparison_by_field = {

@@ -34,6 +34,13 @@ class ComparisonServiceTests(unittest.TestCase):
                          field["raw_field"]["source_analysis_status"], "found")
         self.assertIn("ingos/technical.pdf", field["raw_field"]["source_pdfs"][0])
 
+    def test_accepted_gap_answer_is_not_replaced_by_audit_not_found_label(self):
+        snapshot = ComparisonService()._load_json_snapshot()
+        gap = snapshot["ВСК"]["gap"]
+        self.assertIn("прямое условие gap не найдено", gap["value"].lower())
+        self.assertNotEqual(gap["value"], "Не найдено в тексте правил")
+        self.assertEqual(gap["quality_status"], "not_found")
+
     def test_review_value_is_visible_but_not_sales_eligible(self):
         quote = "6.8. В договоре страхования может быть установлена безусловная франшиза."
         rows = [

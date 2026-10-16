@@ -83,14 +83,18 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
-    def test_gap_missing_is_not_treated_as_excluded(self):
+    def test_gap_not_mentioned_in_checked_official_rules_counts_as_availability_advantage(self):
         result = self.analyze(
             "gap",
             field_data("gap", "GAP включен."),
             field_data("gap", "В правилах GAP не указан."),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(
+            result["advantages"][0]["comparison_basis"],
+            "gap_available_vs_not_mentioned_in_official_rules",
+        )
+        self.assertNotIn("прямо исключено", result["advantages"][0]["client_phrase"])
 
     def test_gap_included_vs_paid(self):
         result = self.analyze(
@@ -369,11 +373,73 @@ class SalesInsightsTests(unittest.TestCase):
             "gap_source_level": 1,
         }
         result = self.analyze("gap", own, other)
-        self.assertEqual(len(result["conditional_advantages"]), 1)
-        self.assertIn("только после включения опции", result["conditional_advantages"][0]["client_phrase"])
-        self.assertEqual(result["conditional_advantages"][0]["title"], "GAP — отдельная опция")
-        self.assertNotIn("включён в покрытие", result["conditional_advantages"][0]["title"])
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertIn("только после включения опции", result["advantages"][0]["client_phrase"])
+        self.assertEqual(result["advantages"][0]["title"], "GAP — отдельная опция")
+        self.assertNotIn("включён в покрытие", result["advantages"][0]["title"])
 
+
+
+    def test_word_inclusion_depending_on_contract_is_not_read_as_covered_terrorism(self):
+        result = self.analyze(
+            "terrorism",
+            field_data(
+                "terrorism",
+                "В Правилах указан риск противоправных действий третьих лиц; прямое условие о террористическом акте не найдено. Включение конкретного события в покрытие зависит от договора.",
+            ),
+            field_data(
+                "terrorism",
+                "Террористический акт — отдельный дополнительный риск, который может быть включён только в рамках действующего договора по риску «Ущерб».",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertNotEqual(result["comparisons"][0]["outcome"], "first_advantage")
+        self.assertIn(
+            result["comparisons"][0]["outcome"],
+            {"conditional_competitor_advantage", "incomparable"},
+        )
+
+    def test_repair_examples_explicitly_not_listed_are_not_counted_as_options(self):
+        result = self.analyze(
+            "repair_type",
+            field_data(
+                "repair_type",
+                "П. 12.5 предусматривает денежную выплату или направление ТС на СТОА.",
+            ),
+            field_data(
+                "repair_type",
+                "Конкретные формы возмещения (денежная выплата, ремонт на СТОА страховщика/дилера/страхователя) в представленном фрагменте прямо не перечислены — это определяется договором/полисом.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_options_missing")
+
+    def test_populated_accepted_values_are_not_suppressed_by_audit_status(self):
+        for key, own_value, other_value in (
+            ("franchise", "Франшиза отсутствует", "Безусловная франшиза 20 000 рублей"),
+            ("without_certificates", "Можно урегулировать без справок 1 раз в год", "Для выплаты справки обязательны"),
+            ("gap", "GAP включён в базовое покрытие", "GAP исключён из покрытия"),
+            ("total_loss", "Полная гибель — 75% от страховой суммы", "Полная гибель — 70% от страховой суммы"),
+            ("self_ignition", "Самовозгорание входит в покрытие", "Самовозгорание исключено из страхового покрытия"),
+            ("terrorism", "Терроризм входит в покрытие", "Терроризм исключён из страхового покрытия"),
+            ("drone", "Ущерб от БПЛА включён в покрытие", "Ущерб от БПЛА исключён"),
+            ("tow_truck", "Эвакуация включена в покрытие, лимит 10 000 руб.", "Эвакуация не предусмотрена"),
+            ("repair_type", "Ремонт на СТОА или денежная выплата", "Только денежная выплата"),
+            ("payment_terms", "Денежная страховая выплата производится в течение 10 рабочих дней", "Денежная страховая выплата производится в течение 20 рабочих дней"),
+        ):
+            with self.subTest(field=key):
+                own = field_data(key, own_value, quality="not_found", eligible=False)
+                other = field_data(key, other_value, quality="review", eligible=False)
+                result = self.analyze(key, own, other)
+                self.assertTrue(result["comparisons"], f"{key} was suppressed by audit status")
+                if key != "total_loss":
+                    self.assertNotEqual(result["comparisons"][0]["outcome"], "incomparable",
+                                        f"{key} did not use populated accepted values")
+                else:
+                    self.assertEqual(result["comparisons"][0]["outcome"], "incomparable",
+                                     "Total-loss thresholds must remain unranked without full context")
 
     def test_optional_terrorism_advantage_does_not_claim_it_is_included(self):
         result = self.analyze(
