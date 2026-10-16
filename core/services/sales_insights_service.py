@@ -21,9 +21,11 @@ class NumericValue:
 class SalesInsightsService:
     """Build deterministic, auditable CASCO comparison arguments.
 
-    A sales advantage is emitted only when both companies have a quality-audited
-    confirmed value, both values describe the same canonical field, and a
-    field-specific rule proves a real directional difference.
+    A sales advantage is emitted when approved official-rule values and the
+    field-specific comparison rules prove a directional difference. For GAP,
+    an explicit option is compared against absence from the accepted official
+    rules set according to the project's approved methodology; contract dependence
+    is stated as a qualification rather than used to suppress that advantage.
     """
 
     def analyze(
@@ -141,16 +143,6 @@ class SalesInsightsService:
                     phrase = f"{phrase} Преимущество по этому параметру у {competitor}.".strip()
                 comparison["client_phrase"] = phrase
 
-            approved_gap_absence = key == "gap" and (
-                (
-                    own is None
-                    and data.get(f"{key}_source_level") in {1, 2}
-                )
-                or (
-                    other is None
-                    and competitor_data.get(f"{key}_source_level") in {1, 2}
-                )
-            )
             # Audit status is validation metadata, not a gate for approved answers.
             # Only field-specific contract conditions can make a comparison conditional.
             is_conditional = bool(comparison.get("conditional"))
