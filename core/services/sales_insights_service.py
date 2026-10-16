@@ -435,10 +435,8 @@ class SalesInsightsService:
             # An absent franchise is a positive feature, not a coverage exclusion.
             if key == "franchise":
                 positive = SalesInsightsService._franchise_none(value_l)
-            else:
-                if re.search(r"не предусмотрен|не покрывается|исключен|отсутствует|нет\\b|не входит", value_l):
-                    continue
-                positive = False
+            elif re.search(r"не предусмотрен|не покрывается|исключен|отсутствует|нет\\b|не входит", value_l):
+                continue
             elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"}:
                 positive = SalesInsightsService._coverage_level_v2(key, value_l) in {1, 2}
             elif key == "without_certificates":
@@ -447,6 +445,8 @@ class SalesInsightsService:
                 positive = bool(SalesInsightsService._repair_options_v2(value_l))
             elif key == "payment_terms":
                 positive = bool(SalesInsightsService._payment_term(value_l))
+            else:
+                positive = False
             if positive:
                 feature = f"Также у {company} предусмотрено полезное условие по параметру «{label}»: {value}."
                 if feature not in shared_features:
