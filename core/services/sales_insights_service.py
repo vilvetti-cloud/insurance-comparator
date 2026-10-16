@@ -59,11 +59,18 @@ class SalesInsightsService:
                 if not self._comparison_eligible(known_data, key):
                     continue
 
-                def missing_value(value: str | None) -> str:
-                    return value if value is not None else "В проверенных источниках не установлено"
+                def missing_value(value: str | None, source_data: dict[str, Any]) -> str:
+                    if value is not None:
+                        return value
+                    # Approved project rule: for GAP, no direct mention in a
+                    # checked official insurer rule set (source level 1/2)
+                    # counts as the option being unavailable for comparison.
+                    if key == "gap" and source_data.get(f"{key}_source_level") in {1, 2}:
+                        return "GAP не предусмотрен в проверенных официальных правилах"
+                    return "В проверенных источниках не установлено"
 
-                own_for_compare = missing_value(own)
-                other_for_compare = missing_value(other)
+                own_for_compare = missing_value(own, data)
+                other_for_compare = missing_value(other, competitor_data)
             else:
                 if (
                     own is None
@@ -91,16 +98,6 @@ class SalesInsightsService:
                     phrase = f"{phrase} Преимущество по этому параметру у {competitor}.".strip()
                 comparison["client_phrase"] = phrase
 
-            approved_gap_absence = key == "gap" and (
-                (
-                    own is None
-                    and data.get(f"{key}_source_level") in {1, 2}
-                )
-                or (
-                    other is None
-                    and competitor_data.get(f"{key}_source_level") in {1, 2}
-                )
-            )
             # Audit status is validation metadata, not a gate for approved answers.
             # Only field-specific contract conditions can make a comparison conditional.
             is_conditional = bool(comparison.get("conditional"))
@@ -527,7 +524,7 @@ class SalesInsightsService:
             return "unknown"
         if cls._negative(text):
             return "negative"
-        if re.search(r"покрыв|защит|сохран|компенс|предусмотр|доступ", text):
+        if re.search(r"покрыв|защит|сохран|компенс|предусмотр|доступ|застрахован|подключ\w*|опци", text):
             return "positive"
         return "unknown"
 
