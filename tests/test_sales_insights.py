@@ -124,6 +124,33 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
 
+    def test_identical_total_loss_text_without_basis_is_not_equal(self):
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Полная гибель — 75%."),
+            field_data("total_loss", "Полная гибель — 75%."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "total_loss_basis_differs_or_missing",
+        )
+
+    def test_identical_non_exhaustive_repair_text_is_not_equal(self):
+        text = (
+            "Формы возмещения в представленном фрагменте не перечислены исчерпывающе; "
+            "вариант определяется договором."
+        )
+        result = self.analyze(
+            "repair_type",
+            field_data("repair_type", text),
+            field_data("repair_type", text),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_options_missing")
+
     def test_total_loss_same_percentage_with_strict_vs_inclusive_boundary_is_incomparable(self):
         result = self.analyze(
             "total_loss",
