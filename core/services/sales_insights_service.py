@@ -1058,6 +1058,19 @@ class SalesInsightsService:
             text,
         ):
             return set()
+        # If the accepted answer says the excerpt is incomplete or a listed
+        # variant must be checked in the policy, do not infer an exhaustive
+        # option set from those caveats.
+        if re.search(
+            r"не\s+полностью\s+(?:раскрыт|видн|установлен)|"
+            r"часть\s+текст\w*[^.;]{0,80}обрыв|"
+            r"возможност\w*\s+конкретн\w*\s+вариант\w*[^.;]{0,100}"
+            r"(?:нужно|необходимо)\s+проверить\s+в\s+полисе|"
+            r"конкретн\w*\s+вариант\w*[^.;]{0,100}"
+            r"(?:нужно|необходимо)\s+проверить\s+в\s+полисе",
+            text,
+        ):
+            return set()
         options: set[str] = set()
         if re.search(
             r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж|"
@@ -1068,7 +1081,13 @@ class SalesInsightsService:
             options.add("cash")
         if re.search(r"стоа|станци\w*\s+техническ|направлен\w*\s+на\s+ремонт", text):
             options.add("stoa")
-        if re.search(r"официальн\w*\s+дилер|дилерск\w*\s+центр", text):
+        if re.search(
+            r"(?:ремонт|направлен\w*)[^.;]{0,80}(?:у\s+официальн\w*\s+дилер|"
+            r"на\s+стоа\s+официальн\w*\s+дилер)|"
+            r"(?:у\s+официальн\w*\s+дилер|на\s+стоа\s+официальн\w*\s+дилер)"
+            r"[^.;]{0,80}(?:ремонт|направлен\w*)",
+            text,
+        ) and not re.search(r"определен\w*[^.;]{0,60}присутствует", text):
             options.add("dealer")
         if re.search(
             r"альтернативн\w*\s+стоа|"
@@ -1077,6 +1096,13 @@ class SalesInsightsService:
             text,
         ):
             options.add("alternative_stoa")
+        if re.search(
+            r"стоа\s+без\s+договора\s+сотрудничества[^.;]{0,100}"
+            r"(?:письменн\w*\s+соглас|согласия\s+страховщик)|"
+            r"без\s+договора\s+сотрудничества[^.;]{0,100}письменн\w*\s+соглас",
+            text,
+        ):
+            options.add("nonpartner_stoa_with_consent")
         if re.search(
             r"аналогичн\w*\s+имуществ|имуществ\w*[^.;]{0,50}аналогичн\w*\s+утраченн",
             text,
