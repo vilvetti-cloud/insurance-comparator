@@ -332,7 +332,7 @@ class SalesInsightsService:
                     own, other,
                     "Одинаковая формулировка о GAP не доказывает совпадение варианта, лимита и базы расчёта; условия отдельного продукта нужно сопоставлять отдельно.",
                 )
-            if key in {"self_ignition", "terrorism", "drone", "tow_truck"}:
+            if key in {"self_ignition", "terrorism", "drone"}:
                 level = self._coverage_level_v2(key, own_l)
                 if level is None:
                     return self._comparison(
@@ -346,6 +346,12 @@ class SalesInsightsService:
                         own, other,
                         "В проверенных условиях обеих компаний это покрытие прямо исключено.",
                     )
+            if key == "total_loss":
+                return self._compare_total_loss(label, own, other, own_l, other_l)
+            if key == "repair_type":
+                return self._compare_repair(label, own, other, own_l, other_l)
+            if key == "tow_truck":
+                return self._compare_tow_truck(label, own, other, own_l, other_l)
             return self._comparison(
                 key, label, "equal", "same_normalized_value", own, other,
                 "Принятые формулировки условий совпадают.",
