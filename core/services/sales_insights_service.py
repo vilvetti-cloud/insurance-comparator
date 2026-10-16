@@ -1061,4 +1061,9 @@ class SalesInsightsService:
             options.add("dealer")
         if re.search(r"альтернативн\w*\s+стоа", text):
             options.add("alternative_stoa")
+        if re.search(
+            r"аналогичн\w*\s+имуществ|имуществ\w*[^.;]{0,50}аналогичн\w*\s+утраченн",
+            text,
+        ):
+            options.add("replacement_property")
         return options
