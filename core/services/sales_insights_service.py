@@ -1059,7 +1059,12 @@ class SalesInsightsService:
         ):
             return set()
         options: set[str] = set()
-        if re.search(r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж", text):
+        if re.search(
+            r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж|"
+            r"(?:а\s+также|или|либо)[^.;]{0,60}выплат\w*\s+возмещен|"
+            r"выплат\w*\s+возмещен[^.;]{0,60}(?:а\s+также|или|либо)",
+            text,
+        ):
             options.add("cash")
         if re.search(r"стоа|станци\w*\s+техническ|направлен\w*\s+на\s+ремонт", text):
             options.add("stoa")
