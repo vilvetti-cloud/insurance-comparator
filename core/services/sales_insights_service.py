@@ -54,10 +54,16 @@ class SalesInsightsService:
                 known_data = data if own is not None else competitor_data
                 if own is None and other is None:
                     continue
+                # Missing/not-found is unknown, not an explicit exclusion.
+                # Source level alone cannot prove absence of a coverage term.
                 if not self._comparison_eligible(known_data, key):
                     continue
-                own_for_compare = own or "В проверенных источниках не установлено"
-                other_for_compare = other or "В проверенных источниках не установлено"
+
+                def missing_value(value: str | None) -> str:
+                    return value if value is not None else "В проверенных источниках не установлено"
+
+                own_for_compare = missing_value(own)
+                other_for_compare = missing_value(other)
             else:
                 if (
                     own is None
@@ -79,12 +85,25 @@ class SalesInsightsService:
             )
             if comparison is None:
                 continue
+            if comparison.get("outcome") in {"competitor_advantage", "conditional_competitor_advantage"}:
+                phrase = str(comparison.get("client_phrase") or comparison.get("reason") or "").strip()
+                if competitor not in phrase:
+                    phrase = f"{phrase} Преимущество по этому параметру у {competitor}.".strip()
+                comparison["client_phrase"] = phrase
 
-            is_conditional = (
-                data.get(f"{key}_quality_status") != "confirmed"
-                or competitor_data.get(f"{key}_quality_status") != "confirmed"
-                or bool(comparison.get("conditional"))
+            approved_gap_absence = key == "gap" and (
+                (
+                    own is None
+                    and data.get(f"{key}_source_level") in {1, 2}
+                )
+                or (
+                    other is None
+                    and competitor_data.get(f"{key}_source_level") in {1, 2}
+                )
             )
+            # Audit status is validation metadata, not a gate for approved answers.
+            # Only field-specific contract conditions can make a comparison conditional.
+            is_conditional = bool(comparison.get("conditional"))
             if is_conditional:
                 comparison["conditional"] = True
                 comparison["reason"] = (
@@ -120,6 +139,7 @@ class SalesInsightsService:
                 company=company,
                 competitor=competitor,
                 advantages=cards,
+                comparisons=comparisons,
             ),
         }
 
@@ -127,9 +147,8 @@ class SalesInsightsService:
     def _comparison_eligible(cls, data: dict[str, Any], key: str) -> bool:
         if cls._trusted(data, key):
             return True
-        # Contract-dependent facts from official insurer documents can be
-        # compared only with a visible caveat; web/fallback/unverified values
-        # remain excluded from sales arguments.
+        # Keep genuinely unestablished values unknown; audit status must not
+        # downgrade a populated approved answer, but cannot create a value.
         if data.get(f"{key}_quality_status") != "conditional":
             return False
         if data.get(f"{key}_source_level") not in {1, 2}:
@@ -154,20 +173,8 @@ class SalesInsightsService:
 
     @staticmethod
     def _trusted(data: dict[str, Any], key: str) -> bool:
-        if data.get(f"{key}_quality_status") != "confirmed":
-            return False
-        if not data.get(f"{key}_sales_eligible", False):
-            return False
-        if data.get(f"{key}_source_level") not in {1, 2}:
-            return False
-
-        confidence = data.get(f"{key}_confidence")
-        if confidence is None:
-            return True
-        try:
-            return float(confidence) >= 0.75
-        except (TypeError, ValueError):
-            return False
+        """Approved populated answers are reliable regardless of audit metadata."""
+        return SalesInsightsService._value(data, key) is not None
 
     def _compare(
         self,
@@ -183,7 +190,10 @@ class SalesInsightsService:
         other_l = other.lower()
 
         if self._normalized(own_l) == self._normalized(other_l):
-            return None
+            return self._comparison(
+                key, label, "equal", "same_normalized_value", own, other,
+                "Подтверждённые значения одинаковы.",
+            )
 
         if key == "franchise":
             own_state = self._franchise_state(own_l)
@@ -243,12 +253,30 @@ class SalesInsightsService:
                     basis="gap_positive_vs_negative",
                     evidence=f"{company}: {own}. {competitor}: {other}.",
                     client_phrase=(
-                        f"У {company} подтверждена GAP-защита, а в сопоставимом "
-                        f"подтверждённом условии {competitor} она не предусмотрена. "
-                        "Это даёт дополнительную защиту стоимости автомобиля при "
-                        "сценариях, на которые распространяется GAP."
+                        f"В правилах {company} GAP прямо предусмотрен, а в проверенных "
+                        f"официальных правилах {competitor} эта опция не предусмотрена. "
+                        "По утверждённым правилам сравнения это преимущество по наличию GAP."
                     ),
                 )
+            if own_state == "negative" and other_state == "positive":
+                comparison = self._advantage(
+                    key=key,
+                    label=label,
+                    title=f"GAP предусмотрен у {competitor}",
+                    own=own,
+                    other=other,
+                    basis="gap_negative_vs_positive",
+                    evidence=f"{company}: {own}. {competitor}: {other}.",
+                    client_phrase=(
+                        f"В проверенных официальных правилах {company} GAP не предусмотрен, "
+                        f"а в правилах {competitor} он прямо указан. По этому параметру "
+                        f"преимущество у {competitor}, а не у {company}."
+                    ),
+                )
+                comparison["outcome"] = "competitor_advantage"
+                comparison["kind"] = "competitor_advantage"
+                comparison["reason"] = comparison["client_phrase"]
+                return comparison
 
         if key in {"self_ignition", "terrorism", "drone", "tow_truck"}:
             own_state = self._coverage_state(key, own_l)
@@ -357,6 +385,7 @@ class SalesInsightsService:
     ) -> dict[str, Any]:
         return {
             "kind": "advantage",
+            "outcome": "first_advantage",
             "field_key": key,
             "label": label,
             "title": title,
@@ -373,15 +402,8 @@ class SalesInsightsService:
         company: str,
         competitor: str,
         advantages: list[dict[str, Any]],
+        comparisons: list[dict[str, Any]] | None = None,
     ) -> str:
-        if not advantages:
-            return (
-                f"По подтверждённым сопоставимым условиям сейчас нет различия, "
-                f"которое корректно называть преимуществом {company} перед "
-                f"{competitor}. Для решения лучше смотреть конкретные условия "
-                "предложения и цену."
-            )
-
         phrases: list[str] = []
         for item in advantages:
             label = str(item.get("label") or item.get("title") or "условию").strip()
@@ -397,10 +419,51 @@ class SalesInsightsService:
             if phrase and phrase not in phrases:
                 phrases.append(phrase)
 
+        # Include independently useful first-insurer terms even when both
+        # insurers offer them. Phrase these as positive features, never as a
+        # comparative or unique advantage.
+        shared_features: list[str] = []
+        for item in comparisons or []:
+            if item.get("outcome") != "equal":
+                continue
+            key = str(item.get("field_key") or "")
+            value = str(item.get("own_value") or "").strip()
+            label = str(item.get("label") or item.get("title") or key).strip()
+            if not value or SalesInsightsService._value({"v": value}, "v") is None:
+                continue
+            value_l = value.lower().replace("ё", "е")
+            # An absent franchise is a positive feature, not a coverage exclusion.
+            if key == "franchise":
+                positive = SalesInsightsService._franchise_none(value_l)
+            elif re.search(r"не предусмотрен|не покрывается|исключен|отсутствует|нет\\b|не входит", value_l):
+                continue
+            elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"}:
+                positive = SalesInsightsService._coverage_level_v2(key, value_l) in {1, 2}
+            elif key == "without_certificates":
+                positive = SalesInsightsService._without_documents_state_v2(value_l) == "positive"
+            elif key == "repair_type":
+                positive = bool(SalesInsightsService._repair_options_v2(value_l))
+            elif key == "payment_terms":
+                positive = bool(SalesInsightsService._payment_term(value_l))
+            else:
+                positive = False
+            if positive:
+                feature = f"Также у {company} предусмотрено полезное условие по параметру «{label}»: {value}."
+                if feature not in shared_features:
+                    shared_features.append(feature)
+
+        all_phrases = phrases + shared_features
+        if not all_phrases:
+            return (
+                f"В подтверждённых данных пока нет доказанного сравнительного преимущества {company} перед "
+                f"{competitor}. При этом окончательный выбор стоит делать по конкретной программе, "
+                "составу покрытия и цене."
+            )
+
         return (
-            f"При сравнении {company} и {competitor} стоит обратить внимание на конкретные условия, "
+            f"При сравнении {company} и {competitor} стоит обратить внимание на условия, "
             "которые влияют на выплату и урегулирование. "
-            + " ".join(phrases)
+            + " ".join(all_phrases)
             + f" Если эти условия важны для вас, {company} стоит рассмотреть в первую очередь; "
               "перед оформлением сверим их с выбранной программой и полисом."
         )
@@ -571,7 +634,7 @@ class SalesInsightsService:
             "comparison_basis": basis,
             "evidence": f"Первая: {own}. Конкурент: {other}.",
             "reason": reason,
-            "client_phrase": "",
+            "client_phrase": reason,
         }
 
     @staticmethod
@@ -744,12 +807,15 @@ class SalesInsightsService:
             advantage["conditional"] = True
             return advantage
         if own_level is None and other_level == 1:
-            return self._comparison(
+            comparison = self._comparison(
                 key, label, "competitor_advantage",
                 f"{key}_optional_availability_vs_unestablished",
                 own, other,
                 "У конкурента официально подтверждена возможность подключить отдельное покрытие; по проверенным данным первой страховой сопоставимая возможность не установлена.",
             )
+            # The first insurer's value is unknown, not a proven absence.
+            comparison["conditional"] = True
+            return comparison
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 title = self._coverage_title(key, own_level)
@@ -770,7 +836,7 @@ class SalesInsightsService:
                 )
                 # Add-on availability is a real distinction, but not an
                 # unconditional policy benefit until the option is selected.
-                if own_level == 1:
+                if own_level == 1 and not (key == "gap" and other_level == 0):
                     advantage["conditional"] = True
                 return advantage
             return self._comparison(
@@ -1052,7 +1118,11 @@ class SalesInsightsService:
         optional = bool(re.search(
             r"только\s+(?:при\s+)?(?:наличии|оформлении|включении)\s+(?:отдельн\w*\s+)?(?:дополнительн\w*\s+)?(?:соглашени\w*|опци\w*|услови\w*)|"
             r"может\s+быть\s+включен\w*[^.;]{0,80}(?:договор|соглашени|опци)|"
+            r"может\s+быть\s+застрахован\w*|"
+            r"можно\s+застраховать[^.;]{0,80}(?:договор|соглашени|опци)?|"
             r"можно\s+включить[^.;]{0,80}(?:договор|соглашени|опци)|"
+            r"отдельн\w*\s+опци\w*[^.;]{0,80}(?:дополнительн\w*\s+соглашени|договор)|"
+            r"опци\w*[^.;]{0,80}дополнительн\w*\s+соглашени|"
             r"за\s+доп(?:олнительн\w*)?\s+плат|доплат[ау]|платн\w*|"
             r"отдельн\w*\s+(?:дополнительн\w*\s+)?риск|"
             r"дополнительн\w*\s+(?:страхов\w*\s+)?опци\w*",
@@ -1071,6 +1141,8 @@ class SalesInsightsService:
         included = bool(re.search(
             r"входит\s+в\s+(?:страхов\w*\s+)?покрыти|"
             r"включен\w*\s+в\s+(?:страхов\w*\s+)?покрыти|"
+            r"включен\w*\s+в\s+базов\w*\s+покрыти|"
+            r"включен\w*\s+в\s+базов\w*\s+программ|"
             r"(?<!не\s)включен\w*\b|"
             r"покрыти\w*\s+распространяется|"
             r"прямо\s+предусмотрен\w*\s+(?:договор\w*\s+)?(?:страхов\w*\s+)?покрыти|"

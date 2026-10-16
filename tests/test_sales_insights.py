@@ -246,14 +246,17 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
 
-    def test_comparison_never_uses_untrusted_value(self):
+    def test_approved_populated_value_is_used_despite_internal_audit_status(self):
+        # The approved answer text was reviewed and agreed; internal audit
+        # metadata must not suppress a comparison of populated approved values.
         result = self.analyze(
             "gap",
-            field_data("gap", "GAP включен.", quality="confirmed"),
+            field_data("gap", "GAP включен в покрытие.", quality="confirmed"),
             field_data("gap", "GAP исключен.", quality="review", eligible=False),
         )
-        self.assertEqual(result["comparisons"], [])
-        self.assertEqual(result["advantages"], [])
+        self.assertEqual(len(result["comparisons"]), 1)
+        self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
+        self.assertEqual(len(result["advantages"]), 1)
 
 
     def test_separate_gap_risk_is_optional_not_included(self):
