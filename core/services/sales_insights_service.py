@@ -874,6 +874,15 @@ class SalesInsightsService:
         ):
             return None
 
+        # Conditional wording such as "may not be covered" is not an explicit
+        # exclusion and must not be ranked as level 0.
+        if re.search(
+            r"(?:может|могут)\s+(?:не\s+покрыв|не\s+включ|быть\s+исключ)|"
+            r"может\s+быть\s+(?:исключен|исключён|не\s+включен|не\s+включён)",
+            text,
+        ):
+            return None
+
         negative_patterns = {
             "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
             "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",
