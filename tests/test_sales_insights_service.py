@@ -34,6 +34,10 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(result["advantages"][0]["field_key"], "gap")
         self.assertEqual(result["conditional_advantages"], [])
         self.assertFalse(result["comparisons"][0].get("conditional", False))
+        phrase = result["advantages"][0]["client_phrase"]
+        self.assertIn("прямое условие GAP не найдено", phrase)
+        self.assertIn("только после включения опции в договор", phrase)
+        self.assertNotIn("прямо исключено", phrase)
 
     def test_reversing_order_moves_gap_advantage_to_competitor(self):
         result = self.service.analyze(
@@ -49,6 +53,8 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
         self.assertFalse(result["comparisons"][0].get("conditional", False))
         self.assertIn("РЕСО-Гарантия", result["comparisons"][0]["client_phrase"])
+        self.assertIn("прямое условие GAP не найдено", result["comparisons"][0]["client_phrase"])
+        self.assertNotIn("прямо исключено", result["comparisons"][0]["client_phrase"])
         self.assertEqual(result["advantages"], [])
 
     def test_unreviewed_missing_gap_does_not_count_as_absence(self):
