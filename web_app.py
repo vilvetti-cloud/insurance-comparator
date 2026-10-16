@@ -58,7 +58,7 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             failure = diagnostic.get("analysis_validation")
             prepared[f"{field}_review_note"] = (
                 REVIEW_REASONS.get(failure, "Ответ модели требует проверки по документу.")
-                if diagnostic.get("analysis_answer") else field_data.get("quality_reason")
+                if diagnostic.get("analysis_answer") else None
             ) if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
         else:
             prepared[field] = "Не найдено"
