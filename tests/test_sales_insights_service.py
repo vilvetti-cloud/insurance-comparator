@@ -141,21 +141,17 @@ class SalesInsightsSalesMessageTests(unittest.TestCase):
             data={
                 "franchise": "Франшиза отсутствует",
                 "franchise_quality_status": "confirmed",
-                "gap": "GAP включён в базовое покрытие",
-                "gap_quality_status": "confirmed",
             },
             competitor_data={
                 "franchise": "Франшиза отсутствует",
                 "franchise_quality_status": "confirmed",
-                "gap": "GAP включён в базовое покрытие",
-                "gap_quality_status": "confirmed",
             },
-            field_labels={"franchise": "Франшиза", "gap": "GAP"},
+            field_labels={"franchise": "Франшиза"},
         )
         message = result["client_message"]
         self.assertIn("Франшиза отсутствует", message)
-        self.assertIn("GAP включён в базовое покрытие", message)
         self.assertIn("полезное условие", message)
+        self.assertNotIn("GAP предусмотрен", message)
         self.assertNotIn("тогда как", message)
         self.assertNotIn("в отличие от", message)
 
