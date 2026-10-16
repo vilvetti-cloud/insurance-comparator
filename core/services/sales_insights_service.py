@@ -931,6 +931,14 @@ class SalesInsightsService:
 
     @staticmethod
     def _repair_options_v2(text: str) -> set[str]:
+        # Do not infer available forms from examples that the same answer
+        # explicitly says are not listed/established in the checked source.
+        if re.search(
+            r"(?:форм\w*\s+возмещен|вариант\w*\s+возмещен|способ\w*\s+возмещен)"
+            r"[^.;]{0,240}(?:не\s+(?:прямо\s+)?перечислен|не\s+установлен|не\s+указан)",
+            text,
+        ):
+            return set()
         options: set[str] = set()
         if re.search(r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж", text):
             options.add("cash")
