@@ -268,6 +268,22 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
+    def test_indemnity_payment_listed_with_repair_is_counted_as_cash_option(self):
+        result = self.analyze(
+            "repair_type",
+            field_data(
+                "repair_type",
+                "Предусмотрена денежная выплата или направление на СТОА, выбранную страхователем.",
+            ),
+            field_data(
+                "repair_type",
+                "Предусмотрены варианты ремонта на СТОА по направлению страховщика или на любой СТОА по выбору страхователя, а также выплата возмещения.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_same_options")
+
     def test_equivalent_property_and_insured_chosen_repair_are_compared_as_distinct_forms(self):
         result = self.analyze(
             "repair_type",
