@@ -212,8 +212,10 @@ class SalesInsightsService:
     @classmethod
     def _accepted_rule_omission(cls, data: dict[str, Any], key: str) -> bool:
         """True only when an accepted official-rules source explicitly records no term."""
+        value = data.get(key)
         return (
-            cls._value(data, key) is None
+            isinstance(value, str)
+            and value.strip().startswith("Не найдено")
             and data.get(f"{key}_source_level") in {1, 2}
         )
 
