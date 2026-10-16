@@ -382,6 +382,7 @@ class SalesInsightsTests(unittest.TestCase):
             ("franchise", "Франшиза отсутствует", "Безусловная франшиза 20 000 рублей"),
             ("without_certificates", "Можно урегулировать без справок 1 раз в год", "Для выплаты справки обязательны"),
             ("gap", "GAP включён в базовое покрытие", "GAP исключён из покрытия"),
+            ("total_loss", "Полная гибель — 75% от страховой суммы", "Полная гибель — 70% от страховой суммы"),
             ("self_ignition", "Самовозгорание входит в покрытие", "Самовозгорание исключено из страхового покрытия"),
             ("terrorism", "Терроризм входит в покрытие", "Терроризм исключён из страхового покрытия"),
             ("drone", "Ущерб от БПЛА включён в покрытие", "Ущерб от БПЛА исключён"),
@@ -394,8 +395,12 @@ class SalesInsightsTests(unittest.TestCase):
                 other = field_data(key, other_value, quality="review", eligible=False)
                 result = self.analyze(key, own, other)
                 self.assertTrue(result["comparisons"], f"{key} was suppressed by audit status")
-                self.assertNotEqual(result["comparisons"][0]["outcome"], "incomparable",
-                                    f"{key} did not use populated accepted values")
+                if key != "total_loss":
+                    self.assertNotEqual(result["comparisons"][0]["outcome"], "incomparable",
+                                        f"{key} did not use populated accepted values")
+                else:
+                    self.assertEqual(result["comparisons"][0]["outcome"], "incomparable",
+                                     "Total-loss thresholds must remain unranked without full context")
 
     def test_optional_terrorism_advantage_does_not_claim_it_is_included(self):
         result = self.analyze(
