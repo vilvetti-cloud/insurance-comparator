@@ -21,7 +21,7 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             "gap_confidence": None,
         }
 
-    def test_optional_gap_is_conditional_when_competitor_value_is_not_found(self):
+    def test_optional_gap_is_advantage_when_accepted_official_rules_omit_it(self):
         result = self.service.analyze(
             company="РЕСО-Гарантия",
             competitor="ВСК",
