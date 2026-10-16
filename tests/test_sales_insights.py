@@ -153,7 +153,7 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertEqual(
             result["comparisons"][0]["comparison_basis"],
-            "self_ignition_same_level_terms_differ_or_unverified",
+            "self_ignition_insufficient_data",
         )
 
     def test_total_loss_actual_value_basis_is_not_confused_with_repair_cost(self):
