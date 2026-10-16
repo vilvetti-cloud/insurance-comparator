@@ -581,7 +581,7 @@ class SalesInsightsService:
         has_gap = bool(re.search(r"\bgap\b|гэп|сохран\w*\s+стоим", text))
         if not has_gap:
             return "unknown"
-        if cls._negative(text) or re.search(r"не\\s+найден|не\\s+указан|не\\s+упомина", text):
+        if cls._negative(text) or re.search(r"не\s+найден|не\s+указан|не\s+упомина", text):
             return "negative"
         if re.search(r"покрыв|защит|сохран|компенс|предусмотр|доступ", text):
             return "positive"
