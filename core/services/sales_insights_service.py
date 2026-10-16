@@ -585,7 +585,7 @@ class SalesInsightsService:
             return "unknown"
         if cls._negative(text) or re.search(r"не\s+найден|не\s+указан|не\s+упомина", text):
             return "negative"
-        if re.search(r"покрыв|защит|сохран|компенс|предусмотр|доступ", text):
+        if re.search(r"покрыв|защит|сохран|компенс|предусмотр|доступ|застрах|отдельн|опци", text):
             return "positive"
         return "unknown"
 
