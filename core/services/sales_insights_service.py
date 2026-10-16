@@ -21,9 +21,9 @@ class NumericValue:
 class SalesInsightsService:
     """Build deterministic, auditable CASCO comparison arguments.
 
-    A sales advantage is emitted only when both companies have a quality-audited
-    confirmed value, both values describe the same canonical field, and a
-    field-specific rule proves a real directional difference.
+    Approved populated answers are compared using deterministic field-specific
+    rules. Audit metadata does not override accepted answer text; field-specific
+    policies define how official-source omissions are handled.
     """
 
     def analyze(
@@ -54,8 +54,9 @@ class SalesInsightsService:
                 known_data = data if own is not None else competitor_data
                 if own is None and other is None:
                     continue
-                # Missing/not-found is unknown, not an explicit exclusion.
-                # Source level alone cannot prove absence of a coverage term.
+                # A populated approved answer remains eligible regardless of
+                # audit status. Special handling for official GAP omissions is
+                # applied below; other missing coverage values remain unknown.
                 if not self._comparison_eligible(known_data, key):
                     continue
 
