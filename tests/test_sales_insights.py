@@ -377,6 +377,22 @@ class SalesInsightsTests(unittest.TestCase):
 
 
 
+    def test_repair_examples_explicitly_not_listed_are_not_counted_as_options(self):
+        result = self.analyze(
+            "repair_type",
+            field_data(
+                "repair_type",
+                "П. 12.5 предусматривает денежную выплату или направление ТС на СТОА.",
+            ),
+            field_data(
+                "repair_type",
+                "Конкретные формы возмещения (денежная выплата, ремонт на СТОА страховщика/дилера/страхователя) в представленном фрагменте прямо не перечислены — это определяется договором/полисом.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_options_missing")
+
     def test_populated_accepted_values_are_not_suppressed_by_audit_status(self):
         for key, own_value, other_value in (
             ("franchise", "Франшиза отсутствует", "Безусловная франшиза 20 000 рублей"),
