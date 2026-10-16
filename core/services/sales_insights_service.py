@@ -106,8 +106,8 @@ class SalesInsightsService:
                 known_data = data if own is not None else competitor_data
                 if own is None and other is None:
                     continue
-                # Missing/not-found is unknown, not an explicit exclusion.
-                # Source level alone cannot prove absence of a coverage term.
+                # The accepted official-rule dataset treats an omitted term as absent
+                # for this comparison. The source level identifies the accepted rules set.
                 if not self._comparison_eligible(known_data, key):
                     continue
 
@@ -860,26 +860,40 @@ class SalesInsightsService:
             )
             comparison["client_phrase"] = "В правилах конкурента GAP предусмотрен как отдельная опция, а в принятом наборе официальных правил первой страховой это условие не указано. По наличию опции преимущество у конкурента."
             return comparison
-        # Other optional coverages retain their own field-specific comparison
-        # rules; do not emit the obsolete GAP "unestablished" wording here.
-        if key != "gap" and own_level == 1 and other_level is None:
-            advantage = self._advantage(
-                key=key, label=label, title=self._coverage_title(key, own_level),
+        # Under the accepted official-rules methodology, a stated coverage
+        # level outranks a condition absent from the other accepted rule set.
+        # Contract/program restrictions remain explanatory, not a status downgrade.
+        if own_level is not None and other_level is None:
+            coverage_names = {
+                "gap": "GAP-защиту",
+                "self_ignition": "покрытие самовозгорания",
+                "terrorism": "террористический риск",
+                "drone": "ущерб от БПЛА",
+                "tow_truck": "эвакуацию",
+            }
+            return self._advantage(
+                key=key, label=label,
+                title=self._coverage_title(key, own_level),
                 own=own, other=other,
-                basis=f"{key}_optional_availability_vs_unestablished",
-                reason="У первой страховой официально подтверждена возможность подключить отдельное покрытие; у конкурента это условие в принятом наборе официальных правил не указано.",
-                client_phrase=f"У первой страховой можно подключить { {'self_ignition':'покрытие самовозгорания','terrorism':'террористический риск','drone':'ущерб от БПЛА','tow_truck':'эвакуацию'}.get(key, 'это условие') } как отдельную опцию или по дополнительному условию. В принятом наборе официальных правил конкурента это условие не указано; подключение зависит от выбранной программы и договора.",
+                basis=f"{key}_coverage_available_vs_absent_from_accepted_rules",
+                reason=f"В правилах первой страховой предусмотрено {coverage_names.get(key, 'это покрытие')}; в принятом наборе официальных правил конкурента это условие не указано.",
+                client_phrase=f"В правилах первой страховой предусмотрено {coverage_names.get(key, 'это покрытие')}, а в принятом наборе официальных правил конкурента это условие не указано. Если покрытие оформляется как дополнительная опция, его подключение зависит от выбранной программы и договора.",
             )
-            advantage["conditional"] = True
-            return advantage
-        if key != "gap" and own_level is None and other_level == 1:
+        if own_level is None and other_level is not None:
+            coverage_names = {
+                "gap": "GAP-защиту",
+                "self_ignition": "покрытие самовозгорания",
+                "terrorism": "террористический риск",
+                "drone": "ущерб от БПЛА",
+                "tow_truck": "эвакуацию",
+            }
             comparison = self._comparison(
                 key, label, "competitor_advantage",
-                f"{key}_optional_availability_vs_unestablished",
+                f"{key}_coverage_available_vs_absent_from_accepted_rules",
                 own, other,
-                "У конкурента официально подтверждена возможность подключить отдельное покрытие; в принятом наборе официальных правил первой страховой это условие не указано.",
+                f"В правилах конкурента предусмотрено {coverage_names.get(key, 'это покрытие')}; в принятом наборе официальных правил первой страховой это условие не указано.",
             )
-            comparison["conditional"] = True
+            comparison["client_phrase"] = f"В правилах конкурента предусмотрено {coverage_names.get(key, 'это покрытие')}, а в принятом наборе официальных правил первой страховой это условие не указано. По наличию покрытия преимущество у конкурента."
             return comparison
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
