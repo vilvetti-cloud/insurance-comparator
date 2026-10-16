@@ -33,7 +33,8 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
     for field in FIELD_KEYS:
         field_data = raw.get(field, {})
         if isinstance(field_data, dict):
-            prepared[field] = field_data.get("value", "Не найдено") or "Не найдено"
+            raw_value = field_data.get("value", "Не найдено") or "Не найдено"
+            prepared[field] = "Не найдено" if str(raw_value).startswith("Не найдено") else raw_value
             prepared[f"{field}_source"] = field_data.get("source", "none")
             prepared[f"{field}_url"] = field_data.get("url")
             prepared[f"{field}_source_level"] = field_data.get("source_level")
