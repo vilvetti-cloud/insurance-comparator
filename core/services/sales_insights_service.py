@@ -308,9 +308,10 @@ class SalesInsightsService:
                     basis="gap_positive_vs_negative",
                     evidence=f"{company}: {own}. {competitor}: {other}.",
                     client_phrase=(
-                        f"В правилах {company} GAP прямо предусмотрен, а в проверенных "
-                        f"официальных правилах {competitor} эта опция не предусмотрена. "
-                        "По утверждённым правилам сравнения это преимущество по наличию GAP."
+                        f"В правилах {company} GAP предусмотрен, а в принятом наборе "
+                        f"официальных правил {competitor} условие GAP не указано. "
+                        "По принятой методике это преимущество по наличию GAP; подключение "
+                        "зависит от выбранной программы и договора."
                     ),
                 )
             if own_state == "negative" and other_state == "positive":
@@ -323,9 +324,10 @@ class SalesInsightsService:
                     basis="gap_negative_vs_positive",
                     evidence=f"{company}: {own}. {competitor}: {other}.",
                     client_phrase=(
-                        f"В проверенных официальных правилах {company} GAP не предусмотрен, "
-                        f"а в правилах {competitor} он прямо указан. По этому параметру "
-                        f"преимущество у {competitor}, а не у {company}."
+                        f"В принятом наборе официальных правил {company} условие GAP не указано, "
+                        f"а в правилах {competitor} GAP предусмотрен. По этому параметру "
+                        f"преимущество у {competitor}, а не у {company}; подключение зависит "
+                        "от выбранной программы и договора."
                     ),
                 )
                 comparison["outcome"] = "competitor_advantage"
