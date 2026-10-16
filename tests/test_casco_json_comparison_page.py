@@ -71,6 +71,7 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("Что подчеркнуть в РЕСО-Гарантия", page)
         self.assertIn("Подтверждённых преимуществ: 1", page)
         self.assertIn("Франшиза отсутствует", page)
+        self.assertNotIn("Требует проверки", page)
 
     def test_data_report_labels_official_website_source_and_current_evidence_counts(self):
         client = app.test_client()
