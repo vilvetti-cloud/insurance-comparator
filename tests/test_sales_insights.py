@@ -268,6 +268,43 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
+    def test_nonpartner_station_with_written_consent_is_not_same_as_insured_choice(self):
+        text = (
+            "Правила прямо перечисляют денежную форму и направление на ремонт "
+            "в партнёрскую СТОА. Ремонт на СТОА без договора сотрудничества "
+            "возможен с письменного согласия страховщика."
+        )
+        options = self.service._repair_options_v2(text.lower())
+        self.assertIn("nonpartner_stoa_with_consent", options)
+        self.assertNotIn("alternative_stoa", options)
+
+    def test_incomplete_repair_excerpt_does_not_create_dealer_option(self):
+        text = (
+            "Правила предусматривают страховую выплату или выдачу направления "
+            "в ремонтную организацию/СТОА. Определение «СТОА официального дилера» "
+            "присутствует. Однако в представленных фрагментах не полностью раскрыто, "
+            "кто окончательно выбирает форму возмещения; часть текста об урегулировании оборвана."
+        )
+        self.assertEqual(self.service._repair_options_v2(text.lower()), set())
+
+    def test_crossed_repair_options_do_not_create_false_advantage(self):
+        result = self.analyze(
+            "repair_type",
+            field_data(
+                "repair_type",
+                "Предусмотрены денежная выплата, ремонт на СТОА по направлению страховщика "
+                "или на СТОА, выбранной страхователем.",
+            ),
+            field_data(
+                "repair_type",
+                "Предусмотрены денежная форма и направление на ремонт в партнёрскую СТОА. "
+                "Ремонт на СТОА без договора сотрудничества возможен с письменного согласия страховщика.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_option_sets_cross")
+
     def test_indemnity_payment_listed_with_repair_is_counted_as_cash_option(self):
         result = self.analyze(
             "repair_type",
