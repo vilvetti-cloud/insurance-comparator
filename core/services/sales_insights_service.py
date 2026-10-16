@@ -326,9 +326,35 @@ class SalesInsightsService:
         own_l = self._normalized(own)
         other_l = self._normalized(other)
         if own_l == other_l:
+            if key == "gap":
+                return self._comparison(
+                    key, label, "incomparable", "gap_same_level_variants_not_comparable",
+                    own, other,
+                    "Одинаковая формулировка о GAP не доказывает совпадение варианта, лимита и базы расчёта; условия отдельного продукта нужно сопоставлять отдельно.",
+                )
+            if key in {"self_ignition", "terrorism", "drone"}:
+                level = self._coverage_level_v2(key, own_l)
+                if level is None:
+                    return self._comparison(
+                        key, label, "incomparable", f"{key}_same_text_unconfirmed",
+                        own, other,
+                        "Одинаковая формулировка не подтверждает сам факт покрытия: в принятом ответе нет прямого подтверждения соответствующего риска.",
+                    )
+                if level == 0:
+                    return self._comparison(
+                        key, label, "equal", f"{key}_both_explicitly_excluded",
+                        own, other,
+                        "В проверенных условиях обеих компаний это покрытие прямо исключено.",
+                    )
+            if key == "total_loss":
+                return self._compare_total_loss(label, own, other, own_l, other_l)
+            if key == "repair_type":
+                return self._compare_repair(label, own, other, own_l, other_l)
+            if key == "tow_truck":
+                return self._compare_tow_truck(label, own, other, own_l, other_l)
             return self._comparison(
                 key, label, "equal", "same_normalized_value", own, other,
-                "Подтверждённые значения одинаковы.",
+                "Принятые формулировки условий совпадают.",
             )
         if key == "franchise":
             return self._compare_franchise(label, own, other, own_l, other_l)
@@ -505,6 +531,17 @@ class SalesInsightsService:
                     client_phrase=phrase,
                 )
                 return advantage
+        # Equal GAP availability levels do not establish equivalent products:
+        # standalone GAP products may insure different losses and use different
+        # caps/calculation bases. Do not rank limits unless variants are proven
+        # comparable (the current accepted data does not establish that).
+        if key == "gap" and own_level is not None and own_level == other_level:
+            return self._comparison(
+                key, label, "incomparable", "gap_same_level_variants_not_comparable",
+                own, other,
+                "У обеих компаний описан GAP одного общего уровня доступности, но это не доказывает совпадение вариантов, лимитов и базы расчёта. GAP оформляется отдельно; сравнить условия можно только для сопоставимых вариантов и договоров.",
+            )
+
         if own_level == 1 and other_level is None:
             advantage = self._advantage(
                 key=key, label=label, title=self._coverage_title(key, own_level),
@@ -573,9 +610,20 @@ class SalesInsightsService:
                     own, other, "При одинаковом уровне покрытия у конкурента выше лимит.",
                 )
         if own_level is not None and other_level is not None and own_level == other_level:
+            if own_level == 0:
+                return self._comparison(
+                    key, label, "equal", f"{key}_both_explicitly_excluded", own, other,
+                    "В проверенных условиях обеих компаний это покрытие прямо исключено.",
+                )
+            if self._normalized(own_l) == self._normalized(other_l):
+                return self._comparison(
+                    key, label, "equal", f"{key}_same_accepted_condition", own, other,
+                    "Принятые формулировки условий совпадают.",
+                )
             return self._comparison(
-                key, label, "equal", f"{key}_same_coverage_level", own, other,
-                "Условия по уровню покрытия сопоставимы.",
+                key, label, "incomparable", f"{key}_same_level_terms_differ_or_unverified",
+                own, other,
+                "Одинаковый общий уровень доступности не доказывает совпадение условий, исключений и порядка включения в договор.",
             )
         return self._comparison(
             key, label, "incomparable", f"{key}_insufficient_data", own, other,
@@ -617,9 +665,17 @@ class SalesInsightsService:
                 own, other,
                 "Пороги различаются при одинаковой базе расчёта, но ни более высокий, ни более низкий порог сам по себе не является универсальным преимуществом: он меняет момент признания полной гибели. Для вывода нужно сопоставить порядок ремонта, выплату, франшизу и стоимость годных остатков.",
             )
+        own_operator = self._total_loss_operator(own_l)
+        other_operator = self._total_loss_operator(other_l)
+        if own_operator is None or other_operator is None or own_operator != other_operator:
+            return self._comparison(
+                "total_loss", label, "incomparable", "total_loss_boundary_condition_differs_or_unestablished",
+                own, other,
+                "Числовой порог и база расчёта совпадают, но условие на границе порога различается или не установлено: «свыше 75%» и «75% или более» не равнозначны.",
+            )
         return self._comparison(
-            "total_loss", label, "equal", "total_loss_same_threshold", own, other,
-            "Порог полной гибели совпадает.",
+            "total_loss", label, "equal", "total_loss_same_threshold_and_boundary", own, other,
+            "Совпадают числовой порог, база расчёта и условие на границе порога.",
         )
 
     def _compare_tow_truck(self, label, own, other, own_l, other_l):
@@ -641,7 +697,15 @@ class SalesInsightsService:
             )
         own_limit = self._single_limit(own_l)
         other_limit = self._single_limit(other_l)
-        if own_limit and other_limit and own_limit.unit == other_limit.unit:
+        combined_limit_text = f"{own_l} {other_l}".lower().replace("ё", "е")
+        limit_context_is_complex = bool(re.search(
+            r"не\s+более|но\s+не\s+более|максимум|ограничен\w*|"
+            r"при\s+полной\s+гибели|при\s+повреждении|"
+            r"две?\s+эвакуац|ночн\w*|"
+            r"\d+(?:[.,]\d+)?\s*%[^.;]{0,100}(?:но\s+не\s+более|не\s+более|максимум)",
+            combined_limit_text,
+        ))
+        if own_limit and other_limit and own_limit.unit == other_limit.unit and not limit_context_is_complex:
             if own_limit.amount > other_limit.amount:
                 return self._advantage(
                     key="tow_truck", label=label, title="Выше лимит эвакуации",
@@ -661,9 +725,19 @@ class SalesInsightsService:
                 "Лимит эвакуации совпадает.",
             )
         if own_level is not None and other_level is not None and own_level == other_level:
+            if own_level == 0:
+                return self._comparison(
+                    "tow_truck", label, "equal", "tow_truck_both_explicitly_excluded",
+                    own, other, "В проверенных условиях обеих компаний эвакуация прямо не предусмотрена.",
+                )
+            if self._normalized(own_l) == self._normalized(other_l):
+                return self._comparison(
+                    "tow_truck", label, "equal", "tow_truck_same_accepted_condition",
+                    own, other, "Принятые формулировки условий эвакуации совпадают.",
+                )
             return self._comparison(
-                "tow_truck", label, "equal", "tow_truck_same_coverage",
-                own, other, "Эвакуация предусмотрена на сопоставимом уровне.",
+                "tow_truck", label, "incomparable", "tow_truck_same_level_terms_differ_or_unverified",
+                own, other, "Одинаковый общий уровень доступности не доказывает совпадение лимитов, маршрута и условий организации эвакуации.",
             )
         return self._comparison(
             "tow_truck", label, "incomparable", "tow_truck_context_differs",
@@ -815,6 +889,26 @@ class SalesInsightsService:
         if not term or not re.search(term, text):
             return None
 
+        # Generic falling-object wording or an explicit statement that drone
+        # coverage is unconfirmed does not establish an optional drone risk.
+        if key == "drone" and re.search(
+            r"(?:прям\w*\s+покрыти\w*\s+(?:бпла|дрон)[^.;]{0,60}\bнет\b|"
+            r"(?:бпла|дрон|беспилот)[^.;]{0,130}(?:не\s+назван|не\s+упомянут|не\s+подтвержден|не\s+установлен|не\s+предусмотрен)|"
+            r"(?:применени\w*|толкован\w*)[^.;]{0,130}(?:не\s+подтвержден|не\s+установлен|остаетс\w*\s+толкован)|"
+            r"(?:не\s+подтвержден|не\s+установлен)[^.;]{0,100}(?:отдельн\w*\s+риск|бпла|дрон))",
+            text,
+        ):
+            return None
+
+        # Conditional wording such as "may not be covered" is not an explicit
+        # exclusion and must not be ranked as level 0.
+        if re.search(
+            r"(?:может|могут)\s+(?:не\s+покрыв|не\s+включ|быть\s+исключ)|"
+            r"может\s+быть\s+(?:исключен|исключён|не\s+включен|не\s+включён)",
+            text,
+        ):
+            return None
+
         negative_patterns = {
             "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
             "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",
@@ -923,6 +1017,16 @@ class SalesInsightsService:
         return NumericValue(float(match.group(1).replace(",", ".")), "percent")
 
     @staticmethod
+    def _total_loss_operator(text: str) -> str | None:
+        """Identify whether the total-loss threshold is strict or inclusive."""
+        text = text.lower().replace("ё", "е")
+        if re.search(r"равн\w*\s+или\s+превыш|равн\w*\s+или\s+больш|не\s+менее|не\s+ниже|>=|≥", text):
+            return "gte"
+        if re.search(r"превыша\w*|свыше|более\s+\d+(?:[.,]\d+)?\s*%", text):
+            return "gt"
+        return None
+
+    @staticmethod
     def _total_loss_basis(text: str) -> str | None:
         text = text.lower().replace("ё", "е")
         has_sum = bool(re.search(r"(?:от\s+)?страхов\w*\s+сумм|\bсс\b", text))
@@ -947,15 +1051,61 @@ class SalesInsightsService:
             r"(?:форм\w*\s+возмещен|вариант\w*\s+возмещен|способ\w*\s+возмещен)"
             r"[^.;]{0,240}(?:не\s+(?:прямо\s+)?перечислен|не\s+установлен|не\s+указан)",
             text,
+        ) or re.search(
+            r"(?:нет|не\s+представлен\w*|не\s+содерж\w*)[^.;]{0,100}"
+            r"(?:исчерпывающ\w*\s+(?:списка|перечня)|полного\s+перечня)[^.;]{0,100}форм\w*\s+возмещен|"
+            r"форм\w*\s+возмещен[^.;]{0,160}(?:нет\s+исчерпывающ\w*|не\s+содерж\w*\s+полного\s+перечня)",
+            text,
+        ):
+            return set()
+        # If the accepted answer says the excerpt is incomplete or a listed
+        # variant must be checked in the policy, do not infer an exhaustive
+        # option set from those caveats.
+        if re.search(
+            r"не\s+полностью\s+(?:раскрыт|видн|установлен)|"
+            r"часть\s+текст\w*[^.;]{0,80}обрыв|"
+            r"возможност\w*\s+конкретн\w*\s+вариант\w*[^.;]{0,100}"
+            r"(?:нужно|необходимо)\s+проверить\s+в\s+полисе|"
+            r"конкретн\w*\s+вариант\w*[^.;]{0,100}"
+            r"(?:нужно|необходимо)\s+проверить\s+в\s+полисе",
+            text,
         ):
             return set()
         options: set[str] = set()
-        if re.search(r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж", text):
+        if re.search(
+            r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж|"
+            r"(?:а\s+также|или|либо)[^.;]{0,60}выплат\w*\s+возмещен|"
+            r"выплат\w*\s+возмещен[^.;]{0,60}(?:а\s+также|или|либо)",
+            text,
+        ):
             options.add("cash")
         if re.search(r"стоа|станци\w*\s+техническ|направлен\w*\s+на\s+ремонт", text):
             options.add("stoa")
-        if re.search(r"официальн\w*\s+дилер|дилерск\w*\s+центр", text):
+        if re.search(
+            r"(?:ремонт|направлен\w*)[^.;]{0,80}(?:у\s+официальн\w*\s+дилер|"
+            r"на\s+стоа\s+официальн\w*\s+дилер)|"
+            r"(?:у\s+официальн\w*\s+дилер|на\s+стоа\s+официальн\w*\s+дилер)"
+            r"[^.;]{0,80}(?:ремонт|направлен\w*)",
+            text,
+        ) and not re.search(r"определен\w*[^.;]{0,60}присутствует", text):
             options.add("dealer")
-        if re.search(r"альтернативн\w*\s+стоа", text):
+        if re.search(
+            r"альтернативн\w*\s+стоа|"
+            r"(?:стоа|станци\w*\s+техническ)[^.;]{0,100}(?:выбран\w*\s+страховател|по\s+выбору\s+страховател)|"
+            r"(?:выбран\w*\s+страховател|по\s+выбору\s+страховател)[^.;]{0,100}(?:стоа|станци\w*\s+техническ)",
+            text,
+        ):
             options.add("alternative_stoa")
+        if re.search(
+            r"стоа\s+без\s+договора\s+сотрудничества[^.;]{0,100}"
+            r"(?:письменн\w*\s+соглас|согласия\s+страховщик)|"
+            r"без\s+договора\s+сотрудничества[^.;]{0,100}письменн\w*\s+соглас",
+            text,
+        ):
+            options.add("nonpartner_stoa_with_consent")
+        if re.search(
+            r"аналогичн\w*\s+имуществ|имуществ\w*[^.;]{0,50}аналогичн\w*\s+утраченн",
+            text,
+        ):
+            options.add("replacement_property")
         return options

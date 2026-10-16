@@ -124,6 +124,65 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
 
+    def test_identical_total_loss_text_without_basis_is_not_equal(self):
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Полная гибель — 75%."),
+            field_data("total_loss", "Полная гибель — 75%."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "total_loss_basis_differs_or_missing",
+        )
+
+    def test_identical_non_exhaustive_repair_text_is_not_equal(self):
+        text = (
+            "Формы возмещения в представленном фрагменте не перечислены исчерпывающе; "
+            "вариант определяется договором."
+        )
+        result = self.analyze(
+            "repair_type",
+            field_data("repair_type", text),
+            field_data("repair_type", text),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_options_missing")
+
+    def test_total_loss_same_percentage_with_strict_vs_inclusive_boundary_is_incomparable(self):
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Полная гибель признаётся, если стоимость ремонта превышает 75% действительной стоимости ТС."),
+            field_data("total_loss", "Полная гибель признаётся, если стоимость ремонта равна или превышает 75% действительной стоимости ТС."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "total_loss_boundary_condition_differs_or_unestablished",
+        )
+
+    def test_same_coverage_level_with_different_exceptions_is_not_called_equal(self):
+        result = self.analyze(
+            "self_ignition",
+            field_data(
+                "self_ignition",
+                "Самовозгорание ТС прямо включено в определение пожара. Исключены повреждения от неосторожного обращения.",
+            ),
+            field_data(
+                "self_ignition",
+                "Пожар входит в перечень страховых рисков. Самовозгорание из-за технической неисправности может не покрываться.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "self_ignition_insufficient_data",
+        )
+
     def test_total_loss_actual_value_basis_is_not_confused_with_repair_cost(self):
         basis = self.service._total_loss_basis(
             "Стоимость восстановительного ремонта равна или превышает 70% действительной стоимости ТС."
@@ -209,6 +268,78 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
+    def test_nonpartner_station_with_written_consent_is_not_same_as_insured_choice(self):
+        text = (
+            "Правила прямо перечисляют денежную форму и направление на ремонт "
+            "в партнёрскую СТОА. Ремонт на СТОА без договора сотрудничества "
+            "возможен с письменного согласия страховщика."
+        )
+        options = self.service._repair_options_v2(text.lower())
+        self.assertIn("nonpartner_stoa_with_consent", options)
+        self.assertNotIn("alternative_stoa", options)
+
+    def test_incomplete_repair_excerpt_does_not_create_dealer_option(self):
+        text = (
+            "Правила предусматривают страховую выплату или выдачу направления "
+            "в ремонтную организацию/СТОА. Определение «СТОА официального дилера» "
+            "присутствует. Однако в представленных фрагментах не полностью раскрыто, "
+            "кто окончательно выбирает форму возмещения; часть текста об урегулировании оборвана."
+        )
+        self.assertEqual(self.service._repair_options_v2(text.lower()), set())
+
+    def test_crossed_repair_options_do_not_create_false_advantage(self):
+        result = self.analyze(
+            "repair_type",
+            field_data(
+                "repair_type",
+                "Предусмотрены денежная выплата, ремонт на СТОА по направлению страховщика "
+                "или на СТОА, выбранной страхователем.",
+            ),
+            field_data(
+                "repair_type",
+                "Предусмотрены денежная форма и направление на ремонт в партнёрскую СТОА. "
+                "Ремонт на СТОА без договора сотрудничества возможен с письменного согласия страховщика.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_option_sets_cross")
+
+    def test_indemnity_payment_listed_with_repair_is_counted_as_cash_option(self):
+        result = self.analyze(
+            "repair_type",
+            field_data(
+                "repair_type",
+                "Предусмотрена денежная выплата или направление на СТОА, выбранную страхователем.",
+            ),
+            field_data(
+                "repair_type",
+                "Предусмотрены варианты ремонта на СТОА по направлению страховщика или на любой СТОА по выбору страхователя, а также выплата возмещения.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_same_options")
+
+    def test_equivalent_property_and_insured_chosen_repair_are_compared_as_distinct_forms(self):
+        result = self.analyze(
+            "repair_type",
+            field_data(
+                "repair_type",
+                "Правила допускают денежную выплату, ремонт на СТОА по направлению страховщика или на СТОА, выбранной страхователем.",
+            ),
+            field_data(
+                "repair_type",
+                "Правила допускают денежную выплату, предоставление имущества, аналогичного утраченному, либо направление на ремонт.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "repair_option_sets_cross",
+        )
+
     def test_crossed_repair_options_are_incomparable(self):
         result = self.analyze(
             "repair_type",
@@ -281,14 +412,18 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(level, 1)
 
-    def test_same_optional_gap_level_is_equal_not_an_advantage(self):
+    def test_same_optional_gap_level_is_incomparable_without_variant_and_limit_match(self):
         result = self.analyze(
             "gap",
-            field_data("gap", "GAP предусмотрен как отдельный дополнительный риск и действует только при включении в договор."),
-            field_data("gap", "GAP — отдельный дополнительный риск по отдельному договору."),
+            field_data("gap", "GAP предусмотрен как отдельный дополнительный риск; лимит 25% от страховой суммы по КАСКО."),
+            field_data("gap", "GAP — отдельный дополнительный риск по отдельному договору; вариант лимита зависит от выбранной программы."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "gap_same_level_variants_not_comparable",
+        )
 
     def test_explicitly_included_gap_is_higher_level_than_optional_gap(self):
         result = self.analyze(
@@ -399,6 +534,38 @@ class SalesInsightsTests(unittest.TestCase):
             result["comparisons"][0]["outcome"],
             {"conditional_competitor_advantage", "incomparable"},
         )
+
+    def test_drone_general_falling_object_clause_is_not_a_separate_option(self):
+        generic = (
+            "БПЛА прямо не названы; общее положение о падении инородных предметов "
+            "может быть релевантно, но применение к обломкам БПЛА не подтверждено прямо."
+        )
+        result = self.analyze(
+            "drone",
+            field_data("drone", generic),
+            field_data("drone", generic),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertIsNone(self.service._coverage_level_v2("drone", generic.lower()))
+
+    def test_tow_truck_percent_with_cap_is_not_compared_to_uncapped_percent(self):
+        result = self.analyze(
+            "tow_truck",
+            field_data("tow_truck", "Эвакуация предусмотрена в пределах 1% страховой суммы по риску «Ущерб»."),
+            field_data("tow_truck", "Эвакуация предусмотрена до 5% страховой суммы, но не более 15 000 рублей на случай."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+
+    def test_non_exhaustive_repair_examples_are_not_counted_as_options(self):
+        text = (
+            "Документ допускает оплату франшизы на счёт СТОА и выплату возмещения, "
+            "но в представленных фрагментах нет исчерпывающего списка форм возмещения; "
+            "конкретный порядок определяется договором."
+        )
+        self.assertEqual(self.service._repair_options_v2(text.lower()), set())
 
     def test_repair_examples_explicitly_not_listed_are_not_counted_as_options(self):
         result = self.analyze(
