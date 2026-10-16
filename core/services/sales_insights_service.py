@@ -933,10 +933,15 @@ class SalesInsightsService:
                 if own_level == 1 and not (key == "gap" and other_level == 0):
                     advantage["conditional"] = True
                 return advantage
+            competitor_reason = (
+                "В правилах конкурента предусмотрена опция GAP; в принятом наборе официальных правил первой страховой условие GAP не указано. По наличию опции преимущество у конкурента, подключение зависит от выбранной программы и договора."
+                if key == "gap" and own_level == 0 and other_level in {1, 2}
+                else "У конкурента более высокий уровень доступности покрытия."
+            )
             return self._comparison(
                 key, label, "competitor_advantage",
                 f"{key}_coverage_level_{own_level}_vs_{other_level}",
-                own, other, "У конкурента более высокий уровень доступности покрытия.",
+                own, other, competitor_reason,
             )
 
         own_limit = self._single_limit(own_l)
