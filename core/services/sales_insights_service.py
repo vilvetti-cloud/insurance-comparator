@@ -1198,6 +1198,15 @@ class SalesInsightsService:
         if not term or not re.search(term, text):
             return None
 
+        # For optional risks, an accepted official-rule answer that explicitly
+        # says the condition is not stated is level 0 for this comparison.
+        # Do not apply this shortcut to tow-truck limits: a missing limit does
+        # not mean the evacuation coverage itself is absent.
+        if key in {"gap", "self_ignition", "terrorism", "drone"} and re.search(
+            r"не\s+найден|не\s+указан|не\s+упомина", text
+        ):
+            return 0
+
         negative_patterns = {
             "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
             "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",
