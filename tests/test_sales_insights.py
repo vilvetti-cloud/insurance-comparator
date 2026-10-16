@@ -436,6 +436,38 @@ class SalesInsightsTests(unittest.TestCase):
             {"conditional_competitor_advantage", "incomparable"},
         )
 
+    def test_drone_general_falling_object_clause_is_not_a_separate_option(self):
+        generic = (
+            "БПЛА прямо не названы; общее положение о падении инородных предметов "
+            "может быть релевантно, но применение к обломкам БПЛА не подтверждено прямо."
+        )
+        result = self.analyze(
+            "drone",
+            field_data("drone", generic),
+            field_data("drone", generic),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertIsNone(self.service._coverage_level_v2("drone", generic.lower()))
+
+    def test_tow_truck_percent_with_cap_is_not_compared_to_uncapped_percent(self):
+        result = self.analyze(
+            "tow_truck",
+            field_data("tow_truck", "Эвакуация предусмотрена в пределах 1% страховой суммы по риску «Ущерб»."),
+            field_data("tow_truck", "Эвакуация предусмотрена до 5% страховой суммы, но не более 15 000 рублей на случай."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+
+    def test_non_exhaustive_repair_examples_are_not_counted_as_options(self):
+        text = (
+            "Документ допускает оплату франшизы на счёт СТОА и выплату возмещения, "
+            "но в представленных фрагментах нет исчерпывающего списка форм возмещения; "
+            "конкретный порядок определяется договором."
+        )
+        self.assertEqual(self.service._repair_options_v2(text.lower()), set())
+
     def test_repair_examples_explicitly_not_listed_are_not_counted_as_options(self):
         result = self.analyze(
             "repair_type",
