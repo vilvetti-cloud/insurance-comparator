@@ -463,9 +463,13 @@ class SalesInsightsService:
         # GAP absence in a checked official rule set is a distinct state:
         # it means the option is not described in that document, not that
         # the insurer explicitly excludes it or has no separate product.
-        gap_not_mentioned = "прямое условие gap не найдено в проверенных официальных правилах"
-        own_gap_not_mentioned = key == "gap" and gap_not_mentioned in own_l
-        other_gap_not_mentioned = key == "gap" and gap_not_mentioned in other_l
+        gap_not_mentioned_pattern = (
+            r"прям\w*\s+услови\w*[^.;]{0,40}\bgap\b[^.;]{0,50}не\s+найден|"
+            r"\bgap\b[^.;]{0,100}(?:не\s+упомянут|не\s+указан|не\s+найден)|"
+            r"(?:не\s+упомянут|не\s+указан|не\s+найден)[^.;]{0,100}\bgap\b"
+        )
+        own_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, own_l))
+        other_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, other_l))
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
 
