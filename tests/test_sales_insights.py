@@ -359,8 +359,13 @@ class SalesInsightsTests(unittest.TestCase):
         )
 
 
-    def test_optional_gap_is_reported_as_conditional_advantage_when_competitor_is_unestablished(self):
-        own = field_data("gap", "GAP предусмотрен как отдельный риск.", quality="conditional", eligible=False)
+    def test_optional_gap_is_advantage_when_official_competitor_rules_do_not_mention_it(self):
+        own = field_data(
+            "gap",
+            "GAP оформляется как отдельный риск и может быть застрахован при наличии покрытия ущерба и/или хищения.",
+            quality="conditional",
+            eligible=False,
+        )
         own["gap_source_level"] = 1
         other = {
             "gap": "Не найдено",
@@ -369,10 +374,11 @@ class SalesInsightsTests(unittest.TestCase):
             "gap_source_level": 1,
         }
         result = self.analyze("gap", own, other)
-        self.assertEqual(len(result["conditional_advantages"]), 1)
-        self.assertIn("только после включения опции", result["conditional_advantages"][0]["client_phrase"])
-        self.assertEqual(result["conditional_advantages"][0]["title"], "GAP — отдельная опция")
-        self.assertNotIn("включён в покрытие", result["conditional_advantages"][0]["title"])
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertIn("преимущество по наличию опции", result["advantages"][0]["client_phrase"])
+        self.assertIn("сверить выбранную программу и договор", result["advantages"][0]["client_phrase"])
+        self.assertEqual(result["advantages"][0]["title"], "GAP — отдельная опция")
 
 
     def test_optional_terrorism_advantage_does_not_claim_it_is_included(self):
