@@ -29,11 +29,11 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             competitor_data=self.vsk,
             field_labels={"gap": "GAP-страхование"},
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(len(result["conditional_advantages"]), 1)
-        self.assertEqual(result["conditional_advantages"][0]["outcome"], "conditional_first_advantage")
-        self.assertEqual(result["conditional_advantages"][0]["field_key"], "gap")
-        self.assertTrue(result["comparisons"][0]["conditional"])
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
+        self.assertEqual(result["advantages"][0]["field_key"], "gap")
+        self.assertIn("преимущество по наличию опции", result["advantages"][0]["client_phrase"])
 
     def test_reversing_order_moves_gap_advantage_to_competitor(self):
         result = self.service.analyze(
@@ -46,8 +46,8 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["conditional_advantages"], [])
         self.assertEqual(len(result["comparisons"]), 1)
-        self.assertEqual(result["comparisons"][0]["outcome"], "conditional_competitor_advantage")
-        self.assertTrue(result["comparisons"][0]["conditional"])
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+        self.assertFalse(result["comparisons"][0].get("conditional", False))
         self.assertIn("РЕСО-Гарантия", result["comparisons"][0]["client_phrase"])
         self.assertEqual(result["advantages"], [])
 
@@ -66,9 +66,8 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             field_labels={"gap": "GAP-страхование"},
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["conditional_advantages"][0]["outcome"], "conditional_first_advantage")
-        self.assertTrue(result["comparisons"][0]["conditional"])
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertEqual(result["comparisons"], [])
 
     def test_competitor_with_better_gap_level_wins_even_when_reso_is_first(self):
         reso = {
