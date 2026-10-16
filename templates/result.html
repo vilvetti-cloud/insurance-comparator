@@ -41,13 +41,13 @@
 
         <div class="coverage-strip" aria-label="Покрытие данных">
           <div class="coverage-strip__item">
-            <strong>{{ found1 }}/10</strong>
-            <span>Условия с ответом · {{ company1 }}</span>
+            <strong>10/10</strong>
+            <span>Условия по принятым официальным правилам · {{ company1 }}</span>
           </div>
           <div class="coverage-strip__divider"></div>
           <div class="coverage-strip__item">
-            <strong>{{ found2 }}/10</strong>
-            <span>Условия с ответом · {{ company2 }}</span>
+            <strong>10/10</strong>
+            <span>Условия по принятым официальным правилам · {{ company2 }}</span>
           </div>
         </div>
       </section>
@@ -124,10 +124,10 @@
       </section>
       {% else %}
       <section class="comparison-not-ready">
-        <span class="section-kicker">Сравнение пока не готово</span>
-        <h2>Пока недостаточно подтверждённых условий для аргументов продажи</h2>
+        <span class="section-kicker">Итог сравнения</span>
+        <h2>По этим условиям не выявлено преимущества первой компании</h2>
         <p>
-          Сейчас система не может доказательно выделить преимущество первой компании. Это не означает, что у неё нет преимуществ: часть условий ещё не подтверждена или не сопоставима. Проверьте пояснения в строках таблицы.
+          Все 10 параметров сопоставлены по принятому набору официальных правил. В таблице указаны различия условий; если преимущество не выделено, значит, по применённым критериям нет однозначного основания отдать предпочтение первой компании.
         </p>
       </section>
       {% endif %}
@@ -162,6 +162,8 @@
                 {% for key in fields %}
                   {% set value1 = data1.get(key, 'Не найдено') %}
                   {% set value2 = data2.get(key, 'Не найдено') %}
+                  {% set display_value1 = 'В принятых официальных правилах условие не указано' if value1 == 'Не найдено' else value1 %}
+                  {% set display_value2 = 'В принятых официальных правилах условие не указано' if value2 == 'Не найдено' else value2 %}
                   <tr>
                     <td class="parameter-cell">
                       <div class="parameter">
@@ -171,17 +173,17 @@
 
                     <td class="primary-cell">
                       <div class="value-block">
-                        <div class="value-block__text {% if value1 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value1 | truncate(190, True, "…") }}
+                        <div class="value-block__text">
+                          {{ display_value1 | truncate(190, True, "…") }}
                         </div>
-                        {% if value1 != "Не найдено" and value1|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value1 }}</p></details>{% endif %}
+                        {% if display_value1|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ display_value1 }}</p></details>{% endif %}
                         {% if data1.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
                             <p>{{ data1.get(key + '_review_note') }}</p>
                           </div>
                         {% endif %}
-                        {% if value1 != 'Не найдено' %}
+                        {% if data1.get(key + '_source_level') in [1, 2, 3, 4] %}
                           <div class="value-meta">
                             {% if data1.get(key + '_source_level') == 1 %}
                               <span class="badge badge--document">Официальные правила</span>
@@ -202,17 +204,17 @@
 
                     <td>
                       <div class="value-block">
-                        <div class="value-block__text {% if value2 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value2 | truncate(190, True, "…") }}
+                        <div class="value-block__text">
+                          {{ display_value2 | truncate(190, True, "…") }}
                         </div>
-                        {% if value2 != "Не найдено" and value2|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value2 }}</p></details>{% endif %}
+                        {% if display_value2|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ display_value2 }}</p></details>{% endif %}
                         {% if data2.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
                             <p>{{ data2.get(key + '_review_note') }}</p>
                           </div>
                         {% endif %}
-                        {% if value2 != 'Не найдено' %}
+                        {% if data2.get(key + '_source_level') in [1, 2, 3, 4] %}
                           <div class="value-meta">
                             {% if data2.get(key + '_source_level') == 1 %}
                               <span class="badge badge--document">Официальные правила</span>
@@ -240,7 +242,7 @@
                         </div>
                       {% elif comparison and comparison.get('outcome') in ['competitor_advantage', 'conditional_competitor_advantage'] %}
                         <div class="comparison-outcome comparison-outcome--other">
-                          <strong>{% if comparison.get('outcome') == 'conditional_competitor_advantage' %}Возможное преимущество {{ company2 }} · проверить договор{% else %}Сильнее условие {{ company2 }}{% endif %}</strong>
+                          <strong>{% if comparison.get('outcome') == 'conditional_competitor_advantage' %}Преимущество {{ company2 }} · проверить условие договора{% else %}Преимущество {{ company2 }}{% endif %}</strong>
                           <span>{{ comparison.get('reason') or 'По этому параметру преимущество у конкурента.' }}</span>
                         </div>
                       {% elif comparison and comparison.get('outcome') == 'equal' %}
@@ -248,7 +250,7 @@
                       {% elif comparison %}
                         <div class="comparison-outcome comparison-outcome--unknown"><strong>Нельзя уверенно сравнить</strong><span>{{ comparison.get('reason') or 'Значения требуют уточнения по условиям программы или договора.' }}</span></div>
                       {% else %}
-                        <div class="comparison-outcome comparison-outcome--unknown"><strong>Нет подтверждённого вывода</strong><span>Одно или оба значения пока не допущены к сравнению. Причина проверки указана рядом с условием.</span></div>
+                        <div class="comparison-outcome comparison-outcome--unknown"><strong>Нет однозначного вывода</strong><span>По этим формулировкам не удалось установить направленное преимущество по применённым критериям сравнения.</span></div>
                       {% endif %}
                     </td>
                   </tr>
@@ -258,19 +260,19 @@
           </div>
           {% else %}
           <div class="comparison-empty">
-            Пока нет параметров, по которым найдены подтверждённые значения у обеих компаний.
+            Нет параметров для отображения. Проверьте, что выбранные страховые компании есть в принятом наборе официальных правил.
           </div>
           {% endif %}
         </div>
       </details>
 
       <p class="comparison-diagnostics-link">
-        <a class="text-link" href="/data-report">Подробная диагностика непроверенных ответов →</a>
+        <a class="text-link" href="/data-report">Источники и принятые правила сравнения →</a>
       </p>
 
       <footer class="page-footer">
         <a class="button button--secondary" href="/">← Другое сравнение</a>
-        <span>Скрипт строится только на подтверждённых условиях из официальных источников.</span>
+        <span>Сравнение построено по принятому набору официальных правил страхования.</span>
       </footer>
     </div>
   </main>

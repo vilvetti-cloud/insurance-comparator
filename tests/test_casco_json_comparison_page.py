@@ -27,6 +27,11 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("РЕСО-Гарантия", page)
         self.assertIn("ВСК", page)
         self.assertIn("Преимущество РЕСО-Гарантия", page)
+        self.assertIn("10/10", page)
+        self.assertIn("Условия по принятым официальным правилам", page)
+        self.assertIn("прямое условие GAP не найдено", page)
+        self.assertNotIn("Условия с ответом", page)
+        self.assertNotIn("часть условий ещё не подтверждена", page)
         self.assertIn("Нельзя уверенно сравнить", page)
         self.assertIn("GAP-страхование", page)
         self.assertIn("Без справок", page)
@@ -40,9 +45,11 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("Официальный сайт", page)
         self.assertIn("sovcomins.ru/product/articles-car/gap-strakhovanie-v-kasko/", page)
         self.assertIn("110 / 110", page)
-        self.assertIn("83 цитаты отмечены как found, 23 — partial", page)
-        self.assertIn("4 — not_found в проверенном фрагменте", page)
-        self.assertIn("не означает, что риск исключён", page)
+        self.assertIn("83 цитаты отмечены как found", page)
+        self.assertIn("23 — partial, 4 — not_found", page)
+        self.assertIn("Если условие не указано в принятом официальном документе", page)
+        self.assertIn("учитывается как отсутствие этого условия", page)
+        self.assertNotIn("не означает, что риск исключён", page)
 
 
 if __name__ == "__main__":

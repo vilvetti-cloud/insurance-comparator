@@ -146,7 +146,11 @@ class ComparisonService:
                     quality_label = audit.label
                     quality_reason = audit.reason
                 reportable = quality_status in {"confirmed", "conditional"}
-                has_value = bool(value) and analysis_status != "not_found"
+                # The approved cell text is authoritative even when citation
+                # audit classified its quote as not_found/partial. A populated
+                # answer such as "direct condition not found in these rules" is
+                # still an answer for the comparison, not an empty cell.
+                has_value = bool(value)
                 company_data[field_key] = {
                     "value": value if has_value else "Не найдено в тексте правил",
                     "diagnostic_value": value if has_value and not reportable else None,

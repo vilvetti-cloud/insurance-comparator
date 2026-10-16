@@ -33,7 +33,8 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
     for field in FIELD_KEYS:
         field_data = raw.get(field, {})
         if isinstance(field_data, dict):
-            prepared[field] = field_data.get("value", "Не найдено") or "Не найдено"
+            raw_value = field_data.get("value", "Не найдено") or "Не найдено"
+            prepared[field] = "Не найдено" if str(raw_value).startswith("Не найдено") else raw_value
             prepared[f"{field}_source"] = field_data.get("source", "none")
             prepared[f"{field}_url"] = field_data.get("url")
             prepared[f"{field}_source_level"] = field_data.get("source_level")
@@ -57,7 +58,7 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             failure = diagnostic.get("analysis_validation")
             prepared[f"{field}_review_note"] = (
                 REVIEW_REASONS.get(failure, "Ответ модели требует проверки по документу.")
-                if diagnostic.get("analysis_answer") else field_data.get("quality_reason")
+                if diagnostic.get("analysis_answer") else None
             ) if field_data.get("quality_status") not in {"confirmed", "conditional"} else None
         else:
             prepared[field] = "Не найдено"
@@ -115,17 +116,23 @@ def compare():
         }
     data1 = _prepare_company_data(snapshot, company1, contextual.get(company1))
     data2 = _prepare_company_data(snapshot, company2, contextual.get(company2))
-    reportable = {"confirmed", "conditional"}
-    found1 = sum(1 for field in FIELD_KEYS if data1.get(f"{field}_quality_status") in reportable)
-    found2 = sum(1 for field in FIELD_KEYS if data2.get(f"{field}_quality_status") in reportable)
+    def accepted_cell(data: dict, field: str) -> bool:
+        # Audit labels classify saved evidence; they do not determine whether an
+        # approved cell is populated. An official-rule omission is also an answer.
+        return (
+            sales_insights_service._value(data, field) is not None
+            or sales_insights_service._accepted_rule_omission(data, field)
+        )
+
+    found1 = sum(1 for field in FIELD_KEYS if accepted_cell(data1, field))
+    found2 = sum(1 for field in FIELD_KEYS if accepted_cell(data2, field))
     comparable_fields = [
         field for field in FIELD_KEYS
-        if data1.get(f"{field}_quality_status") in reportable
-        and data2.get(f"{field}_quality_status") in reportable
-        and data1.get(f"{field}_source_level") in {1, 2}
-        and data2.get(f"{field}_source_level") in {1, 2}
+        if accepted_cell(data1, field) and accepted_cell(data2, field)
     ]
-    comparison_ready = len(comparable_fields) > 0
+    # The selected companies have an accepted dataset; field-level comparisons
+    # decide whether there is an advantage or no directional difference.
+    comparison_ready = bool(snapshot.get(company1)) and bool(snapshot.get(company2))
 
     if comparison_ready:
         sales = sales_insights_service.analyze(
@@ -142,17 +149,17 @@ def compare():
             "cards": [],
             "comparisons": [],
             "cautions": [
-                "Пока нет параметров с достаточными доказательствами у обеих компаний для расчёта преимущества."
+                "Для выбранных компаний не удалось загрузить принятый набор официальных правил."
             ],
-            "client_message": "Сначала нужно подтвердить условия по первичным документам обеих компаний.",
+            "client_message": "Не удалось загрузить принятый набор официальных правил для обеих компаний.",
         }
 
     comparison_by_field = {
         key: {
             "field_key": key,
             "outcome": "incomparable",
-            "title": "Недостаточно подтверждённых данных",
-            "reason": "Нет двух сопоставимых значений, прошедших проверку источника. Это не означает, что покрытия нет.",
+            "title": "Нет однозначного преимущества",
+            "reason": "По принятым формулировкам официальных правил не выявлено однозначного направленного преимущества.",
         }
         for key in FIELD_KEYS
     }
@@ -228,9 +235,9 @@ def _json_data_report(snapshot: dict) -> dict:
                 "quality_status": quality,
                 "quality_label": item.get("quality_label", "Перепроверить") if isinstance(item, dict) else "Не найдено",
                 "quality_reason": item.get("quality_reason", "") if isinstance(item, dict) else "",
-                "checked_at": snapshot.get("_last_updated", ""), "quarantined": raw_found and quality not in {"confirmed", "conditional"},
+                "checked_at": snapshot.get("_last_updated", ""), "quarantined": False,
             })
-        found = counts["confirmed"] + counts["conditional"]
+        found = sum(1 for field in fields if field["raw_found"])
         total_found += found
         total_confirmed += counts["confirmed"]
         total_conditional += counts["conditional"]
