@@ -377,6 +377,25 @@ class SalesInsightsTests(unittest.TestCase):
 
 
 
+    def test_word_inclusion_depending_on_contract_is_not_read_as_covered_terrorism(self):
+        result = self.analyze(
+            "terrorism",
+            field_data(
+                "terrorism",
+                "В Правилах указан риск противоправных действий третьих лиц; прямое условие о террористическом акте не найдено. Включение конкретного события в покрытие зависит от договора.",
+            ),
+            field_data(
+                "terrorism",
+                "Террористический акт — отдельный дополнительный риск, который может быть включён только в рамках действующего договора по риску «Ущерб».",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertNotEqual(result["comparisons"][0]["outcome"], "first_advantage")
+        self.assertIn(
+            result["comparisons"][0]["outcome"],
+            {"conditional_competitor_advantage", "incomparable"},
+        )
+
     def test_repair_examples_explicitly_not_listed_are_not_counted_as_options(self):
         result = self.analyze(
             "repair_type",
