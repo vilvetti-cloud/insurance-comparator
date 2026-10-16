@@ -671,7 +671,15 @@ class SalesInsightsService:
             )
         own_limit = self._single_limit(own_l)
         other_limit = self._single_limit(other_l)
-        if own_limit and other_limit and own_limit.unit == other_limit.unit:
+        combined_limit_text = f"{own_l} {other_l}".lower().replace("ё", "е")
+        limit_context_is_complex = bool(re.search(
+            r"не\s+более|но\s+не\s+более|максимум|ограничен\w*|"
+            r"при\s+полной\s+гибели|при\s+повреждении|"
+            r"две?\s+эвакуац|ночн\w*|"
+            r"\d+(?:[.,]\d+)?\s*%[^.;]{0,100}(?:но\s+не\s+более|не\s+более|максимум)",
+            combined_limit_text,
+        ))
+        if own_limit and other_limit and own_limit.unit == other_limit.unit and not limit_context_is_complex:
             if own_limit.amount > other_limit.amount:
                 return self._advantage(
                     key="tow_truck", label=label, title="Выше лимит эвакуации",
@@ -855,6 +863,17 @@ class SalesInsightsService:
         if not term or not re.search(term, text):
             return None
 
+        # Generic falling-object wording or an explicit statement that drone
+        # coverage is unconfirmed does not establish an optional drone risk.
+        if key == "drone" and re.search(
+            r"(?:прям\w*\s+покрыти\w*\s+(?:бпла|дрон)[^.;]{0,60}\bнет\b|"
+            r"(?:бпла|дрон|беспилот)[^.;]{0,130}(?:не\s+назван|не\s+упомянут|не\s+подтвержден|не\s+установлен|не\s+предусмотрен)|"
+            r"(?:применени\w*|толкован\w*)[^.;]{0,130}(?:не\s+подтвержден|не\s+установлен|остаетс\w*\s+толкован)|"
+            r"(?:не\s+подтвержден|не\s+установлен)[^.;]{0,100}(?:отдельн\w*\s+риск|бпла|дрон))",
+            text,
+        ):
+            return None
+
         negative_patterns = {
             "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
             "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",
@@ -996,6 +1015,11 @@ class SalesInsightsService:
         if re.search(
             r"(?:форм\w*\s+возмещен|вариант\w*\s+возмещен|способ\w*\s+возмещен)"
             r"[^.;]{0,240}(?:не\s+(?:прямо\s+)?перечислен|не\s+установлен|не\s+указан)",
+            text,
+        ) or re.search(
+            r"(?:нет|не\s+представлен\w*|не\s+содерж\w*)[^.;]{0,100}"
+            r"(?:исчерпывающ\w*\s+(?:списка|перечня)|полного\s+перечня)[^.;]{0,100}форм\w*\s+возмещен|"
+            r"форм\w*\s+возмещен[^.;]{0,160}(?:нет\s+исчерпывающ\w*|не\s+содерж\w*\s+полного\s+перечня)",
             text,
         ):
             return set()
