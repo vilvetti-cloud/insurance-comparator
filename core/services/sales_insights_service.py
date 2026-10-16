@@ -326,9 +326,29 @@ class SalesInsightsService:
         own_l = self._normalized(own)
         other_l = self._normalized(other)
         if own_l == other_l:
+            if key == "gap":
+                return self._comparison(
+                    key, label, "incomparable", "gap_same_level_variants_not_comparable",
+                    own, other,
+                    "Одинаковая формулировка о GAP не доказывает совпадение варианта, лимита и базы расчёта; условия отдельного продукта нужно сопоставлять отдельно.",
+                )
+            if key in {"self_ignition", "terrorism", "drone", "tow_truck"}:
+                level = self._coverage_level_v2(key, own_l)
+                if level is None:
+                    return self._comparison(
+                        key, label, "incomparable", f"{key}_same_text_unconfirmed",
+                        own, other,
+                        "Одинаковая формулировка не подтверждает сам факт покрытия: в принятом ответе нет прямого подтверждения соответствующего риска.",
+                    )
+                if level == 0:
+                    return self._comparison(
+                        key, label, "equal", f"{key}_both_explicitly_excluded",
+                        own, other,
+                        "В проверенных условиях обеих компаний это покрытие прямо исключено.",
+                    )
             return self._comparison(
                 key, label, "equal", "same_normalized_value", own, other,
-                "Подтверждённые значения одинаковы.",
+                "Принятые формулировки условий совпадают.",
             )
         if key == "franchise":
             return self._compare_franchise(label, own, other, own_l, other_l)
