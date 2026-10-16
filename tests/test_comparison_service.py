@@ -37,7 +37,7 @@ class ComparisonServiceTests(unittest.TestCase):
     def test_accepted_gap_answer_is_not_replaced_by_audit_not_found_label(self):
         snapshot = ComparisonService()._load_json_snapshot()
         gap = snapshot["ВСК"]["gap"]
-        self.assertIn("прямое условие GAP не найдено", gap["value"].lower())
+        self.assertIn("прямое условие gap не найдено", gap["value"].lower())
         self.assertNotEqual(gap["value"], "Не найдено в тексте правил")
         self.assertEqual(gap["quality_status"], "not_found")
 
