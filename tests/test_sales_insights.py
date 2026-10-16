@@ -83,14 +83,15 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
-    def test_gap_missing_is_not_treated_as_excluded(self):
-        result = self.analyze(
-            "gap",
-            field_data("gap", "GAP включен."),
-            field_data("gap", "В правилах GAP не указан."),
-        )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+    def test_gap_absent_from_accepted_official_rules_counts_as_absence(self):
+        own = field_data("gap", "GAP включен.")
+        other = field_data("gap", "В правилах GAP не указан.")
+        other["gap_source_level"] = 1
+        result = self.analyze("gap", own, other)
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
+        self.assertEqual(result["conditional_advantages"], [])
+        self.assertNotIn("не означает, что она точно отсутствует", result["advantages"][0]["client_phrase"])
 
     def test_gap_included_vs_paid(self):
         result = self.analyze(
@@ -309,19 +310,18 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
 
-    def test_unmentioned_gap_is_not_treated_as_excluded(self):
-        result = self.analyze(
-            "gap",
-            field_data("gap", "GAP предусмотрен как отдельный риск."),
-            field_data("gap", "В проверенном фрагменте GAP не упоминается."),
-        )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(len(result["conditional_advantages"]), 1)
+    def test_optional_gap_is_advantage_when_accepted_official_rules_do_not_mention_it(self):
+        own = field_data("gap", "GAP предусмотрен как отдельный риск.")
+        other = field_data("gap", "Не найдено в принятом тексте официальных правил")
+        other["gap_source_level"] = 1
+        result = self.analyze("gap", own, other)
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["conditional_advantages"], [])
         self.assertEqual(
-            result["conditional_advantages"][0]["comparison_basis"],
-            "gap_optional_availability_vs_unestablished",
+            result["advantages"][0]["comparison_basis"],
+            "gap_available_first_insurer_competitor_not_stated",
         )
-        self.assertIn("не означает, что она точно отсутствует", result["conditional_advantages"][0]["client_phrase"])
+        self.assertNotIn("не означает, что она точно отсутствует", result["advantages"][0]["client_phrase"])
 
 
     def test_total_loss_missing_calculation_basis_is_incomparable(self):
