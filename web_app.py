@@ -237,7 +237,7 @@ def _json_data_report(snapshot: dict) -> dict:
                 "quality_reason": item.get("quality_reason", "") if isinstance(item, dict) else "",
                 "checked_at": snapshot.get("_last_updated", ""), "quarantined": False,
             })
-        found = counts["confirmed"] + counts["conditional"]
+        found = sum(1 for field in fields if field["raw_found"])
         total_found += found
         total_confirmed += counts["confirmed"]
         total_conditional += counts["conditional"]
