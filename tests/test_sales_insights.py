@@ -124,6 +124,38 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
 
+    def test_total_loss_same_percentage_with_strict_vs_inclusive_boundary_is_incomparable(self):
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Полная гибель признаётся, если стоимость ремонта превышает 75% действительной стоимости ТС."),
+            field_data("total_loss", "Полная гибель признаётся, если стоимость ремонта равна или превышает 75% действительной стоимости ТС."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "total_loss_boundary_condition_differs_or_unestablished",
+        )
+
+    def test_same_coverage_level_with_different_exceptions_is_not_called_equal(self):
+        result = self.analyze(
+            "self_ignition",
+            field_data(
+                "self_ignition",
+                "Самовозгорание ТС прямо включено в определение пожара. Исключены повреждения от неосторожного обращения.",
+            ),
+            field_data(
+                "self_ignition",
+                "Пожар входит в перечень страховых рисков. Самовозгорание из-за технической неисправности может не покрываться.",
+            ),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "self_ignition_same_level_terms_differ_or_unverified",
+        )
+
     def test_total_loss_actual_value_basis_is_not_confused_with_repair_cost(self):
         basis = self.service._total_loss_basis(
             "Стоимость восстановительного ремонта равна или превышает 70% действительной стоимости ТС."
@@ -281,14 +313,18 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(level, 1)
 
-    def test_same_optional_gap_level_is_equal_not_an_advantage(self):
+    def test_same_optional_gap_level_is_incomparable_without_variant_and_limit_match(self):
         result = self.analyze(
             "gap",
-            field_data("gap", "GAP предусмотрен как отдельный дополнительный риск и действует только при включении в договор."),
-            field_data("gap", "GAP — отдельный дополнительный риск по отдельному договору."),
+            field_data("gap", "GAP предусмотрен как отдельный дополнительный риск; лимит 25% от страховой суммы по КАСКО."),
+            field_data("gap", "GAP — отдельный дополнительный риск по отдельному договору; вариант лимита зависит от выбранной программы."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "gap_same_level_variants_not_comparable",
+        )
 
     def test_explicitly_included_gap_is_higher_level_than_optional_gap(self):
         result = self.analyze(
