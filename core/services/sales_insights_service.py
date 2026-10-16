@@ -67,7 +67,7 @@ class SalesInsightsService:
                     # checked official insurer rule set (source level 1/2)
                     # counts as the option being unavailable for comparison.
                     if key == "gap" and source_data.get(f"{key}_source_level") in {1, 2}:
-                        return "GAP не предусмотрен в проверенных официальных правилах"
+                        return "Прямое условие GAP не найдено в проверенных официальных правилах"
                     return "В проверенных источниках не установлено"
 
                 own_for_compare = missing_value(own, data)
@@ -792,8 +792,44 @@ class SalesInsightsService:
         )
 
     def _compare_coverage(self, key, label, own, other, own_l, other_l):
+        # GAP absence in a checked official rule set is a distinct state:
+        # it means the option is not described in that document, not that
+        # the insurer explicitly excludes it or has no separate product.
+        gap_not_mentioned = "прямое условие gap не найдено в проверенных официальных правилах"
+        own_gap_not_mentioned = key == "gap" and gap_not_mentioned in own_l
+        other_gap_not_mentioned = key == "gap" and gap_not_mentioned in other_l
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
+
+        if key == "gap" and own_gap_not_mentioned != other_gap_not_mentioned:
+            known_level = other_level if own_gap_not_mentioned else own_level
+            known_value = other if own_gap_not_mentioned else own
+            unknown_value = own if own_gap_not_mentioned else other
+            if known_level in {1, 2}:
+                option_company = "конкурента" if own_gap_not_mentioned else "первой страховой"
+                option_level = known_level
+                phrase = (
+                    f"В официальных правилах {option_company} GAP "
+                    f"{'доступен как отдельная опция' if option_level == 1 else 'прямо предусмотрен в описанном покрытии'}, "
+                    "а в проверенных официальных правилах другой компании прямое условие GAP не найдено. "
+                    "По принятой методике это преимущество по доступности GAP в проверенном документе; "
+                    "это не означает, что у второй компании нигде не существует отдельного продукта GAP. "
+                    "Опция действует только при включении в договор."
+                )
+                if own_gap_not_mentioned:
+                    return self._comparison(
+                        key, label, "competitor_advantage",
+                        "gap_available_vs_not_mentioned_in_official_rules",
+                        own, other, phrase,
+                    )
+                advantage = self._advantage(
+                    key=key, label=label, title=self._coverage_title(key, known_level),
+                    own=own, other=other,
+                    basis="gap_available_vs_not_mentioned_in_official_rules",
+                    reason=phrase,
+                    client_phrase=phrase,
+                )
+                return advantage
         if own_level == 1 and other_level is None:
             advantage = self._advantage(
                 key=key, label=label, title=self._coverage_title(key, own_level),
