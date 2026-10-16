@@ -432,11 +432,13 @@ class SalesInsightsService:
             if not value or SalesInsightsService._value({"v": value}, "v") is None:
                 continue
             value_l = value.lower().replace("ё", "е")
-            if re.search(r"не предусмотрен|не покрывается|исключен|отсутствует|нет\b|не входит", value_l):
-                continue
-            positive = False
+            # An absent franchise is a positive feature, not a coverage exclusion.
             if key == "franchise":
                 positive = SalesInsightsService._franchise_none(value_l)
+            else:
+                if re.search(r"не предусмотрен|не покрывается|исключен|отсутствует|нет\\b|не входит", value_l):
+                    continue
+                positive = False
             elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"}:
                 positive = SalesInsightsService._coverage_level_v2(key, value_l) in {1, 2}
             elif key == "without_certificates":
@@ -805,12 +807,15 @@ class SalesInsightsService:
             advantage["conditional"] = True
             return advantage
         if own_level is None and other_level == 1:
-            return self._comparison(
+            comparison = self._comparison(
                 key, label, "competitor_advantage",
                 f"{key}_optional_availability_vs_unestablished",
                 own, other,
                 "У конкурента официально подтверждена возможность подключить отдельное покрытие; по проверенным данным первой страховой сопоставимая возможность не установлена.",
             )
+            # The first insurer's value is unknown, not a proven absence.
+            comparison["conditional"] = True
+            return comparison
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 title = self._coverage_title(key, own_level)
