@@ -42,46 +42,21 @@ class SalesInsightsService:
         for key, label in field_labels.items():
             own = self._value(data, key)
             other = self._value(competitor_data, key)
-            if key == "total_loss" and (own is None or other is None):
-                known_data = data if own is not None else competitor_data
-                if own is None and other is None:
-                    continue
-                if not self._comparison_eligible(known_data, key):
-                    continue
-                own_for_compare = own or "Порог/база расчёта не установлены в проверенных источниках"
-                other_for_compare = other or "Порог/база расчёта не установлены в проверенных источниках"
-            elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"} and (own is None or other is None):
-                known_data = data if own is not None else competitor_data
-                if own is None and other is None:
-                    continue
-                # A populated approved answer remains eligible regardless of
-                # audit status. Special handling for official GAP omissions is
-                # applied below; other missing coverage values remain unknown.
-                if not self._comparison_eligible(known_data, key):
-                    continue
-
-                def missing_value(value: str | None, source_data: dict[str, Any]) -> str:
-                    if value is not None:
-                        return value
-                    # Approved project rule: for GAP, no direct mention in a
-                    # checked official insurer rule set (source level 1/2)
-                    # counts as the option being unavailable for comparison.
-                    if key == "gap" and source_data.get(f"{key}_source_level") in {1, 2}:
-                        return "Прямое условие GAP не найдено в проверенных официальных правилах"
-                    return "В проверенных источниках не установлено"
-
-                own_for_compare = missing_value(own, data)
-                other_for_compare = missing_value(other, competitor_data)
-            else:
-                if (
-                    own is None
-                    or other is None
-                    or not self._comparison_eligible(data, key)
-                    or not self._comparison_eligible(competitor_data, key)
-                ):
-                    continue
-                own_for_compare = own
-                other_for_compare = other
+            # One eligibility and omission policy for every comparison field.
+            # Accepted official-source answers remain authoritative regardless of
+            # audit labels. A missing answer is represented consistently so the
+            # common comparison rule can decide whether the other side has an
+            # explicit condition that is absent from the accepted source.
+            if own is None and other is None:
+                continue
+            if own is not None and not self._comparison_eligible(data, key):
+                own = None
+            if other is not None and not self._comparison_eligible(competitor_data, key):
+                other = None
+            if own is None and other is None:
+                continue
+            own_for_compare = own or "Условие не указано в принятом официальном источнике"
+            other_for_compare = other or "Условие не указано в принятом официальном источнике"
 
             comparison = self._compare(
                 key=key,
@@ -322,16 +297,60 @@ class SalesInsightsService:
             "client_phrase": client_phrase,
         }
 
+    @staticmethod
+    def _is_unstated_condition(text: str) -> bool:
+        """Single project-wide rule for conditions absent from accepted official terms."""
+        value = SalesInsightsService._normalized(text).replace("ё", "е")
+        patterns = (
+            r"услови\w* не указан",
+            r"услови\w* не найден",
+            r"прям\w* услови\w* не найден",
+            r"не упомянут",
+            r"не указан[аоы]? в (?:проверенн\w*|принят\w*|официальн\w*)",
+            r"не найден[аоы]? в (?:проверенн\w*|принят\w*|официальн\w*)",
+            r"не установлено",
+            r"не раскрыт[аоы]?",
+            r"не перечислен[аоы]? (?:исчерпывающе|в правилах|в тексте)",
+            r"не подтвержден[аоы]? (?:прям\w*|официальн\w*)",
+            r"не предусмотрен[аоы]? в (?:проверенн\w*|принят\w*|официальн\w*)",
+            r"не указано в тексте правил",
+            r"в представленн\w* фрагмент\w* не перечислен",
+            r"в проверенн\w* фрагмент\w* не найден",
+        )
+        return any(re.search(pattern, value) for pattern in patterns)
+
     def _compare(self, *, key, label, company, competitor, own, other):
         own_l = self._normalized(own)
         other_l = self._normalized(other)
-        if own_l == other_l:
-            if key == "gap":
-                return self._comparison(
-                    key, label, "incomparable", "gap_same_level_variants_not_comparable",
-                    own, other,
-                    "Одинаковая формулировка о GAP не доказывает совпадение варианта, лимита и базы расчёта; условия отдельного продукта нужно сопоставлять отдельно.",
+
+        # This rule is shared by all ten fields. If the accepted official terms
+        # state a condition on one side and do not state it on the other, the
+        # explicitly stated condition is the advantage. Field-specific parsers
+        # are used only when both sides state a condition and their values need
+        # semantic comparison (amounts, thresholds, repair forms, deadlines).
+        own_unstated = self._is_unstated_condition(own_l)
+        other_unstated = self._is_unstated_condition(other_l)
+        if own_unstated != other_unstated:
+            stated = other_l if own_unstated else own_l
+            unstated = own_l if own_unstated else other_l
+            first_wins = other_unstated
+            outcome = "first_advantage" if first_wins else "competitor_advantage"
+            basis = f"{key}_explicit_vs_not_stated_in_official_terms"
+            reason = (
+                "У первой компании условие прямо описано в принятой базе официальных правил, "
+                "а в условиях конкурента оно не указано."
+                if first_wins else
+                "У конкурента условие прямо описано в принятой базе официальных правил, "
+                "а в условиях первой компании оно не указано."
+            )
+            if first_wins:
+                return self._advantage(
+                    key=key, label=label, title=f"Условие прямо указано: {label}",
+                    own=own, other=other, basis=basis, reason=reason,
+                    client_phrase=f"В официальных условиях первой страховой параметр «{label}» прямо указан; в условиях второй компании он не указан.",
                 )
+            return self._comparison(key, label, outcome, basis, own, other, reason)
+        if own_l == other_l:
             if key in {"self_ignition", "terrorism", "drone"}:
                 level = self._coverage_level_v2(key, own_l)
                 if level is None:
@@ -489,46 +508,6 @@ class SalesInsightsService:
         )
 
     def _compare_coverage(self, key, label, own, other, own_l, other_l):
-        # The accepted comparison corpus is based on the insurer's official
-        # terms (ТО). If an option is not stated there, a client cannot assume
-        # it can simply be selected. Explicit availability therefore wins over
-        # an unmentioned option in the accepted terms.
-        gap_not_mentioned_pattern = (
-            r"прям\w*\s+услови\w*[^.;]{0,40}\bgap\b[^.;]{0,50}не\s+найден|"
-            r"\bgap\b[^.;]{0,100}(?:не\s+упомянут|не\s+указан|не\s+найден)|"
-            r"(?:не\s+упомянут|не\s+указан|не\s+найден)[^.;]{0,100}\bgap\b"
-        )
-        own_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, own_l))
-        other_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, other_l))
-        if key == "gap" and own_gap_not_mentioned != other_gap_not_mentioned:
-            known_level = other_level = None
-            if own_gap_not_mentioned:
-                known_level = self._coverage_level_v2(key, other_l)
-                if known_level is not None and known_level > 0:
-                    return self._comparison(
-                        key, label, "competitor_advantage",
-                        "gap_explicit_vs_not_stated_in_official_terms",
-                        own, other,
-                        "В принятых официальных условиях второй компании GAP прямо предусмотрен, а в условиях первой не указан. По принятой методике это преимущество второй компании: клиент не может считать неуказанную опцию доступной без отдельного подтверждения.",
-                    )
-            else:
-                known_level = self._coverage_level_v2(key, own_l)
-                if known_level is not None and known_level > 0:
-                    advantage = self._advantage(
-                        key=key, label=label, title=self._coverage_title(key, known_level),
-                        own=own, other=other,
-                        basis="gap_explicit_vs_not_stated_in_official_terms",
-                        reason="GAP прямо предусмотрен в принятых официальных условиях первой компании, а в условиях второй не указан.",
-                        client_phrase="В официальных условиях первой страховой GAP прямо предусмотрен; в условиях второй компании он не указан. Это преимущество по доступности условия в принятой базе, но применимость GAP зависит от конкретного договора и выбранного варианта.",
-                    )
-                    if known_level == 1:
-                        advantage["conditional"] = True
-                    return advantage
-            return self._comparison(
-                key, label, "incomparable", "gap_no_confirmed_option",
-                own, other,
-                "В принятой базе нет достаточного подтверждения доступности GAP ни у одной стороны.",
-            )
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
 
