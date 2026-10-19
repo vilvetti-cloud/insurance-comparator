@@ -558,7 +558,7 @@ class SalesInsightsService:
                 )
                 # Add-on availability is a real distinction, but not an
                 # unconditional policy benefit until the option is selected.
-                if own_level == 1 and not (key == "gap" and other_level == 0):
+                if own_level == 1:
                     advantage["conditional"] = True
                 return advantage
             return self._comparison(
