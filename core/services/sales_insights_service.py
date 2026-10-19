@@ -489,8 +489,10 @@ class SalesInsightsService:
         )
 
     def _compare_coverage(self, key, label, own, other, own_l, other_l):
-        # An unmentioned GAP clause is unknown, not evidence of absence.
-        # The same no-data-is-not-worse principle applies regardless of source level.
+        # The accepted comparison corpus is based on the insurer's official
+        # terms (ТО). If an option is not stated there, a client cannot assume
+        # it can simply be selected. Explicit availability therefore wins over
+        # an unmentioned option in the accepted terms.
         gap_not_mentioned_pattern = (
             r"прям\w*\s+услови\w*[^.;]{0,40}\bgap\b[^.;]{0,50}не\s+найден|"
             r"\bgap\b[^.;]{0,100}(?:не\s+упомянут|не\s+указан|не\s+найден)|"
@@ -498,11 +500,34 @@ class SalesInsightsService:
         )
         own_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, own_l))
         other_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, other_l))
-        if key == "gap" and (own_gap_not_mentioned or other_gap_not_mentioned):
+        if key == "gap" and own_gap_not_mentioned != other_gap_not_mentioned:
+            known_level = other_level = None
+            if own_gap_not_mentioned:
+                known_level = self._coverage_level_v2(key, other_l)
+                if known_level is not None and known_level > 0:
+                    return self._comparison(
+                        key, label, "competitor_advantage",
+                        "gap_explicit_vs_not_stated_in_official_terms",
+                        own, other,
+                        "В принятых официальных условиях второй компании GAP прямо предусмотрен, а в условиях первой не указан. По принятой методике это преимущество второй компании: клиент не может считать неуказанную опцию доступной без отдельного подтверждения.",
+                    )
+            else:
+                known_level = self._coverage_level_v2(key, own_l)
+                if known_level is not None and known_level > 0:
+                    advantage = self._advantage(
+                        key=key, label=label, title=self._coverage_title(key, known_level),
+                        own=own, other=other,
+                        basis="gap_explicit_vs_not_stated_in_official_terms",
+                        reason="GAP прямо предусмотрен в принятых официальных условиях первой компании, а в условиях второй не указан.",
+                        client_phrase="В официальных условиях первой страховой GAP прямо предусмотрен; в условиях второй компании он не указан. Это преимущество по доступности условия в принятой базе, но применимость GAP зависит от конкретного договора и выбранного варианта.",
+                    )
+                    if known_level == 1:
+                        advantage["conditional"] = True
+                    return advantage
             return self._comparison(
-                key, label, "incomparable", "gap_not_mentioned_is_unknown",
+                key, label, "incomparable", "gap_no_confirmed_option",
                 own, other,
-                "В проверенном фрагменте прямое условие GAP не найдено. Это не доказывает отсутствие отдельного продукта, поэтому победитель не определяется.",
+                "В принятой базе нет достаточного подтверждения доступности GAP ни у одной стороны.",
             )
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
@@ -519,19 +544,29 @@ class SalesInsightsService:
             )
 
         if own_level is not None and other_level is None:
-            return self._comparison(
-                key, label, "incomparable",
-                f"{key}_coverage_vs_unestablished",
-                own, other,
-                "Возможность покрытия у первой страховой описана, а по второй не установлена. Отсутствие сведений не доказывает отсутствие опции, поэтому победитель не определяется.",
-            )
+            if own_level > 0:
+                advantage = self._advantage(
+                    key=key, label=label, title=self._coverage_title(key, own_level),
+                    own=own, other=other,
+                    basis=f"{key}_explicit_vs_not_stated_in_official_terms",
+                    reason="У первой страховой условие прямо предусмотрено в принятой базе официальных правил, а у второй не указано.",
+                    client_phrase="У первой страховой это условие прямо предусмотрено в принятых официальных правилах; в условиях второй компании оно не указано. Это преимущество по доступности условия в принятой базе.",
+                )
+                if own_level == 1:
+                    advantage["conditional"] = True
+                return advantage
+            return self._comparison(key, label, "incomparable", f"{key}_not_established", own, other,
+                                    "По принятой базе нет подтверждённого положительного условия для выбора победителя.")
         if own_level is None and other_level is not None:
-            return self._comparison(
-                key, label, "incomparable",
-                f"{key}_unestablished_vs_coverage",
-                own, other,
-                "Возможность покрытия у второй страховой описана, а по первой не установлена. Отсутствие сведений не доказывает отсутствие опции, поэтому победитель не определяется.",
-            )
+            if other_level > 0:
+                return self._comparison(
+                    key, label, "competitor_advantage",
+                    f"{key}_explicit_vs_not_stated_in_official_terms",
+                    own, other,
+                    "У второй страховой условие прямо предусмотрено в принятой базе официальных правил, а у первой не указано. Это преимущество по доступности условия в принятой базе.",
+                )
+            return self._comparison(key, label, "incomparable", f"{key}_not_established", own, other,
+                                    "По принятой базе нет подтверждённого положительного условия для выбора победителя.")
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 title = self._coverage_title(key, own_level)
