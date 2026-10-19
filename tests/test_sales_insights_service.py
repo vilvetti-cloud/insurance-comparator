@@ -262,3 +262,59 @@ class GeneralizedOmissionLanguageTests(unittest.TestCase):
         self.assertEqual(len(result["advantages"]), 1)
         self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
         self.assertIn("без справок", result["advantages"][0]["client_phrase"].lower())
+
+
+class StructuredFactComparisonTests(unittest.TestCase):
+    def test_structured_not_established_state_drives_omission_comparison(self):
+        result = SalesInsightsService().analyze(
+            company="Ингосстрах",
+            competitor="Ренессанс Страхование",
+            data={
+                "without_certificates": "Можно один раз оформить повреждение без обращения в компетентные органы.",
+                "without_certificates_facts": {
+                    "schema_version": "1.0",
+                    "field_key": "without_certificates",
+                    "state": "available",
+                    "contract_dependent": False,
+                },
+            },
+            competitor_data={
+                "without_certificates": "В форме описаны варианты дополнительных условий.",
+                "without_certificates_facts": {
+                    "schema_version": "1.0",
+                    "field_key": "without_certificates",
+                    "state": "not_established",
+                    "contract_dependent": True,
+                },
+            },
+            field_labels={"without_certificates": "Без справок"},
+        )
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
+
+    def test_structured_available_optional_benefit_is_not_treated_as_missing(self):
+        result = SalesInsightsService().analyze(
+            company="Первая страховая",
+            competitor="Вторая страховая",
+            data={
+                "gap": "GAP доступен как отдельная опция по дополнительному соглашению.",
+                "gap_facts": {
+                    "schema_version": "1.0",
+                    "field_key": "gap",
+                    "state": "available",
+                    "contract_dependent": True,
+                },
+            },
+            competitor_data={
+                "gap": "GAP включён в базовое покрытие.",
+                "gap_facts": {
+                    "schema_version": "1.0",
+                    "field_key": "gap",
+                    "state": "available",
+                    "contract_dependent": False,
+                },
+            },
+            field_labels={"gap": "GAP-страхование"},
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
