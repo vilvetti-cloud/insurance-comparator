@@ -823,6 +823,7 @@ def compare():
                 result[field] = value
                 result[f"{field}_source"] = field_data.get("source", "none")
                 result[f"{field}_source_level"] = field_data.get("source_level")
+                result[f"{field}_facts"] = field_data.get("facts")
                 result[f"{field}_url"] = field_data.get("url")
                 if field_data.get("quality_reason"):
                     result[f"{field}_review_note"] = field_data["quality_reason"]
