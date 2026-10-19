@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from db import _connect
 from core.catalog import KASKO_FIELDS
 from core.condition_audit import audit_condition
+from core.condition_facts import build_condition_facts
 
 
 logger = logging.getLogger(__name__)
@@ -176,6 +177,18 @@ class ComparisonService:
                         else audit.sales_eligible
                     ),
                     "raw_field": item,
+                    "facts": build_condition_facts(
+                        field_key,
+                        value,
+                        evidence_quote=quote,
+                        source_url=source_url,
+                        source_type=source_type,
+                        source_level=source_level,
+                        source_pdfs=source_pdfs,
+                        pages=item.get("text_search_pages") or item.get("source_pages"),
+                        source_analysis_status=analysis_status,
+                        limitations=item.get("limitations"),
+                    ),
                 }
             snapshot[name] = company_data
         return snapshot
@@ -285,6 +298,14 @@ class ComparisonService:
                 "quality_label": audit.label,
                 "quality_reason": audit.reason,
                 "sales_eligible": audit.sales_eligible,
+                "facts": build_condition_facts(
+                    field_key,
+                    display_value,
+                    evidence_quote=row["evidence_quote"],
+                    source_url=row["source_url"],
+                    source_type=row["source_type"],
+                    source_level=row["source_level"],
+                ),
             }
 
             timestamp = row["checked_at"] or row["updated_at"]
