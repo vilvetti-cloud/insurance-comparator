@@ -83,18 +83,15 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
-    def test_gap_not_mentioned_in_checked_official_rules_counts_as_availability_advantage(self):
+    def test_gap_not_mentioned_is_unknown_not_an_advantage(self):
         result = self.analyze(
             "gap",
             field_data("gap", "GAP включен."),
             field_data("gap", "В правилах GAP не указан."),
         )
-        self.assertEqual(len(result["advantages"]), 1)
-        self.assertEqual(
-            result["advantages"][0]["comparison_basis"],
-            "gap_available_vs_not_mentioned_in_official_rules",
-        )
-        self.assertNotIn("прямо исключено", result["advantages"][0]["client_phrase"])
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "gap_not_mentioned_is_unknown")
 
     def test_gap_included_vs_paid(self):
         result = self.analyze(
@@ -498,7 +495,7 @@ class SalesInsightsTests(unittest.TestCase):
         )
 
 
-    def test_optional_gap_is_reported_as_conditional_advantage_when_competitor_is_unestablished(self):
+    def test_optional_gap_vs_unestablished_competitor_is_incomparable(self):
         own = field_data("gap", "GAP предусмотрен как отдельный риск.", quality="conditional", eligible=False)
         own["gap_source_level"] = 1
         other = {
@@ -508,11 +505,9 @@ class SalesInsightsTests(unittest.TestCase):
             "gap_source_level": 1,
         }
         result = self.analyze("gap", own, other)
-        self.assertEqual(len(result["advantages"]), 1)
-        self.assertEqual(result["conditional_advantages"], [])
-        self.assertIn("только после включения опции", result["advantages"][0]["client_phrase"])
-        self.assertEqual(result["advantages"][0]["title"], "GAP — отдельная опция")
-        self.assertNotIn("включён в покрытие", result["advantages"][0]["title"])
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "gap_not_mentioned_is_unknown")
 
 
 
