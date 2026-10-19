@@ -52,6 +52,45 @@
         </div>
       </section>
 
+      <section class="insight-grid" aria-label="Итоги сравнения">
+        <article class="insight-card insight-card--advantages">
+          <div class="insight-card__eyebrow">Для сотрудника</div>
+          <h2>Преимущества {{ company1 }}</h2>
+          {% if sales.advantages or sales.conditional_advantages %}
+            {% if sales.advantages %}
+              <ul class="insight-list">
+                {% for item in sales.advantages %}
+                  <li>
+                    <strong>{{ item.label or item.title }}</strong>
+                    <p>{{ item.client_phrase or item.reason }}</p>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+            {% if sales.conditional_advantages %}
+              <div class="insight-subheading">Преимущества при выполнении условий</div>
+              <ul class="insight-list insight-list--conditional">
+                {% for item in sales.conditional_advantages %}
+                  <li>
+                    <strong>{{ item.label or item.title }}</strong>
+                    <p>{{ item.client_phrase or item.reason }}</p>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          {% else %}
+            <p class="insight-card__empty">По выбранной паре компаний не найдено доказанных преимуществ первой компании в принятых официальных условиях.</p>
+          {% endif %}
+        </article>
+
+        <article class="insight-card insight-card--message">
+          <div class="insight-card__eyebrow">Готовая формулировка</div>
+          <h2>Сообщение для клиента</h2>
+          <p class="client-message">{{ sales.client_message }}</p>
+          <button class="copy-message" type="button" onclick="navigator.clipboard.writeText(document.querySelector('.client-message').innerText).then(()=>{this.textContent='Скопировано'})">Скопировать сообщение</button>
+        </article>
+      </section>
+
       <details class="details-panel" open>
         <summary class="details-panel__summary">
           <div>
@@ -91,9 +130,8 @@
                     <td class="primary-cell">
                       <div class="value-block">
                         <div class="value-block__text {% if value1 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value1 | truncate(280, True, "…") }}
+                          {{ value1 }}
                         </div>
-                        {% if value1 != "Не найдено" and value1|length > 280 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value1 }}</p></details>{% endif %}
                         {% if data1.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
@@ -122,9 +160,8 @@
                     <td>
                       <div class="value-block">
                         <div class="value-block__text {% if value2 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value2 | truncate(280, True, "…") }}
+                          {{ value2 }}
                         </div>
-                        {% if value2 != "Не найдено" and value2|length > 280 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value2 }}</p></details>{% endif %}
                         {% if data2.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
