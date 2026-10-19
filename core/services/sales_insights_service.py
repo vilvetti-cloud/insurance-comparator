@@ -65,6 +65,8 @@ class SalesInsightsService:
                 competitor=competitor,
                 own=own_for_compare,
                 other=other_for_compare,
+                own_facts=data.get(f"{key}_facts"),
+                other_facts=competitor_data.get(f"{key}_facts"),
             )
             if comparison is None:
                 continue
@@ -332,7 +334,7 @@ class SalesInsightsService:
         )
         return any(re.search(pattern, value) for pattern in patterns)
 
-    def _compare(self, *, key, label, company, competitor, own, other):
+    def _compare(self, *, key, label, company, competitor, own, other, own_facts=None, other_facts=None):
         own_l = self._normalized(own)
         other_l = self._normalized(other)
 
@@ -341,8 +343,12 @@ class SalesInsightsService:
         # explicitly stated condition is the advantage. Field-specific parsers
         # are used only when both sides state a condition and their values need
         # semantic comparison (amounts, thresholds, repair forms, deadlines).
-        own_unstated = self._is_unstated_condition(own_l)
-        other_unstated = self._is_unstated_condition(other_l)
+        own_state = own_facts.get("state") if isinstance(own_facts, dict) else None
+        other_state = other_facts.get("state") if isinstance(other_facts, dict) else None
+        # Structured facts are authoritative when present. Text classification
+        # remains a compatibility fallback for legacy/database rows.
+        own_unstated = own_state == "not_established" if own_state else self._is_unstated_condition(own_l)
+        other_unstated = other_state == "not_established" if other_state else self._is_unstated_condition(other_l)
         if own_unstated != other_unstated:
             stated = other_l if own_unstated else own_l
             unstated = own_l if own_unstated else other_l
