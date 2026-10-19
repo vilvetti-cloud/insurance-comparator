@@ -218,6 +218,35 @@ def get_headers() -> Dict[str, str]:
     }
 
 
+def concise_condition(field: str, value: Any) -> Any:
+    """Shorten display text without changing the accepted source value."""
+    if not isinstance(value, str) or not value.strip() or value.startswith("Не найдено"):
+        return value
+
+    text = re.sub(r"\\s+", " ", value).strip()
+    if field == "without_certificates":
+        # Keep the actual exception and its scope; drop generic duties that
+        # do not answer whether a limited repair can be settled without papers.
+        match = re.search(r"(?:один раз|однократно)[^.;]{0,120}(?:можно|допускается|разрешается)[^.;]*", text, re.I)
+        if match:
+            text = text[match.start():].strip(" .;")
+            # Retain any following list of eligible damage types.
+            tail = value[match.end():].strip()
+            if tail and len(tail) > 1 and not text.endswith(tail):
+                text = (text + " " + re.sub(r"\\s+", " ", tail)).strip()
+    if field == "total_loss":
+        lowered = text.lower().replace("ё", "е")
+        if "порог по умолчанию" in lowered and "страхов" in lowered:
+            text = ("Порог по умолчанию — 75% страховой стоимости ТС, а не 75% страховой суммы. "
+                    "Стороны могут согласовать другой процент до начала ремонта; "
+                    "долгосрочные договоры имеют отдельный порядок определения базы.")
+        elif "п. 11.22" in lowered and "свыше 75%" in lowered:
+            text = ("П. 11.22 устанавливает порог свыше 75% страховой суммы по п. 5.1 "
+                    "либо отсутствие технической возможности восстановления. "
+                    "По соглашению сторон процент может быть изменён, в том числе после страхового случая.")
+    return text
+
+
 def clean_text(text: str) -> str:
     if not text:
         return ""
@@ -809,6 +838,8 @@ def compare():
 
     data1 = prepare_company_data(c1)
     data2 = prepare_company_data(c2)
+    display_data1 = {**data1, **{field: concise_condition(field, data1.get(field)) for field in KASKO_FIELDS}}
+    display_data2 = {**data2, **{field: concise_condition(field, data2.get(field)) for field in KASKO_FIELDS}}
 
     # Deterministic comparison is computed for internal sales logic only.
     # The client-facing template deliberately renders no winner/verdict column.
@@ -842,6 +873,8 @@ def compare():
         company2=c2,
         data1=data1,
         data2=data2,
+        display_data1=display_data1,
+        display_data2=display_data2,
         fields=KASKO_FIELDS,
         field_labels=FIELD_LABELS,
         last_updated=last_updated,
