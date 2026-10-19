@@ -480,7 +480,7 @@ class SalesInsightsTests(unittest.TestCase):
         )
 
 
-    def test_total_loss_known_basis_vs_missing_competitor_value_is_incomparable(self):
+    def test_total_loss_stated_only_for_first_company_is_its_advantage(self):
         own = field_data(
             "total_loss",
             "Полная гибель — 75% от страховой суммы.",
@@ -492,12 +492,13 @@ class SalesInsightsTests(unittest.TestCase):
             "total_loss_source_level": 1,
         }
         result = self.analyze("total_loss", own, other)
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["conditional_advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        # Rule: a condition stated in only one company's official terms is
+        # that company's advantage.
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
         self.assertEqual(
             result["comparisons"][0]["comparison_basis"],
-            "total_loss_basis_confirmed_vs_unestablished",
+            "total_loss_explicit_vs_not_stated_in_official_terms",
         )
 
 

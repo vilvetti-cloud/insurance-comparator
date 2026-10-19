@@ -27,11 +27,13 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("РЕСО-Гарантия", page)
         self.assertIn("ВСК", page)
-        self.assertIn("<th>Результат сравнения</th>", page)
+        # The internal verdict column is intentionally not shown to customers.
+        self.assertNotIn("<th>Результат сравнения</th>", page)
         self.assertNotIn("<th>Преимущество РЕСО-Гарантия</th>", page)
-        self.assertIn("Нельзя уверенно сравнить", page)
+        self.assertIn("Сообщение для клиента", page)
         self.assertIn("GAP-страхование", page)
-        self.assertIn("прямое условие gap не найдено", page.lower())
+        # GAP is stated in RESO's official terms and not in VSK's: RESO's advantage.
+        self.assertIn("«GAP-страхование» прямо указан", page)
         self.assertNotIn("GAP прямо исключён", page)
         self.assertNotIn("GAP прямо исключено", page)
         self.assertIn("Без справок", page)
@@ -50,7 +52,7 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         )
         self.assertEqual(gap_response.status_code, 200)
         gap_page = gap_response.get_data(as_text=True)
-        self.assertIn("GAP оформляется отдельно", gap_page)
+        # GAP limits depend on the chosen variant, so they are not compared.
         self.assertNotIn("Выше сопоставимый лимит", gap_page)
 
         drone_response = client.get(
@@ -73,8 +75,10 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         )
         self.assertEqual(total_response.status_code, 200)
         total_page = total_response.get_data(as_text=True)
-        self.assertIn("условие на границе порога", total_page)
+        # "exceeds 75%" vs "equals or exceeds 75%" is not presented as equal
+        # and is not sold as an advantage.
         self.assertNotIn("Порог полной гибели совпадает.", total_page)
+        self.assertNotIn("<strong>Порог тотала</strong>", total_page)
 
     def test_populated_official_answers_render_even_when_audit_status_disagrees(self):
         def company_data(franchise_value):
@@ -110,8 +114,8 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Что подчеркнуть в РЕСО-Гарантия", page)
-        self.assertIn("Подтверждённых преимуществ: 1", page)
+        self.assertIn("Преимущества РЕСО-Гарантия", page)
+        self.assertIn("<strong>Франшиза</strong>", page)
         self.assertIn("Франшиза отсутствует", page)
         self.assertNotIn("Требует проверки", page)
 
@@ -125,7 +129,7 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("110 / 110", page)
         self.assertIn("83 цитаты отмечены как found, 23 — partial", page)
         self.assertIn("4 — not_found в проверенном фрагменте", page)
-        self.assertIn("не означает, что риск исключён", page)
+        self.assertIn("фиксируется как преимущество первой компании", page)
 
 
 if __name__ == "__main__":
