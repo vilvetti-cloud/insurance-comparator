@@ -83,15 +83,15 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
-    def test_gap_not_mentioned_is_unknown_not_an_advantage(self):
+    def test_gap_explicit_in_first_company_wins_over_not_stated_in_competitor_terms(self):
         result = self.analyze(
             "gap",
-            field_data("gap", "GAP включен."),
-            field_data("gap", "В правилах GAP не указан."),
+            field_data("gap", "GAP предусмотрен как отдельная опция."),
+            field_data("gap", "В официальных правилах GAP не указан."),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "gap_not_mentioned_is_unknown")
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["advantages"][0]["comparison_basis"], "gap_explicit_vs_not_stated_in_official_terms")
+        self.assertIn("в условиях второй компании он не указан", result["advantages"][0]["client_phrase"])
 
     def test_gap_included_vs_paid(self):
         result = self.analyze(
@@ -495,19 +495,18 @@ class SalesInsightsTests(unittest.TestCase):
         )
 
 
-    def test_optional_gap_vs_unestablished_competitor_is_incomparable(self):
+    def test_optional_gap_in_first_company_beats_not_found_in_competitor_terms(self):
         own = field_data("gap", "GAP предусмотрен как отдельный риск.", quality="conditional", eligible=False)
         own["gap_source_level"] = 1
         other = {
-            "gap": "Не найдено",
+            "gap": "В официальных правилах GAP не указан.",
             "gap_quality_status": "not_found",
             "gap_sales_eligible": False,
             "gap_source_level": 1,
         }
         result = self.analyze("gap", own, other)
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "gap_not_mentioned_is_unknown")
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["advantages"][0]["comparison_basis"], "gap_explicit_vs_not_stated_in_official_terms")
 
 
 
