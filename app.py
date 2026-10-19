@@ -848,6 +848,7 @@ def compare():
         found1=found1,
         found2=found2,
         internal_sales=internal_sales,
+        sales=internal_sales,
     )
 
 
