@@ -215,3 +215,50 @@ class OfficialRulesOmissionComparisonTests(unittest.TestCase):
         )
         self.assertEqual(len(result["comparisons"]), 1)
         self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
+
+
+class GeneralizedOmissionLanguageTests(unittest.TestCase):
+    def test_unstated_classifier_recognizes_meaning_not_only_one_fixed_phrase(self):
+        examples = [
+            "В типовой форме перечислены варианты, но наличие опции зависит от выбранных условий договора.",
+            "Перед выводом о наличии покрытия необходимо проверить конкретный полис.",
+            "Не следует считать риск включённым в базовую программу без подтверждения в договоре.",
+            "Для подтверждения нужно проверить отметки, выбранные страхователем в форме.",
+            "Условие не подтверждено в представленном официальном документе.",
+        ]
+        for text in examples:
+            with self.subTest(text=text):
+                self.assertTrue(SalesInsightsService._is_unstated_condition(text))
+
+    def test_optional_benefit_is_not_mistaken_for_missing_condition(self):
+        examples = [
+            "GAP доступен как отдельная опция по дополнительному соглашению.",
+            "Эвакуация предусмотрена при включении дополнительного условия в договор.",
+            "Риск можно застраховать отдельно за дополнительную плату.",
+        ]
+        for text in examples:
+            with self.subTest(text=text):
+                self.assertFalse(SalesInsightsService._is_unstated_condition(text))
+
+    def test_paraphrased_policy_dependent_competitor_text_gives_first_insurer_advantage(self):
+        result = SalesInsightsService().analyze(
+            company="Ингосстрах",
+            competitor="Ренессанс Страхование",
+            data={
+                "without_certificates": (
+                    "Один раз в течение срока договора можно не обращаться "
+                    "в компетентные органы при повреждении перечисленных элементов."
+                )
+            },
+            competitor_data={
+                "without_certificates": (
+                    "В типовой форме приведены варианты дополнительных условий. "
+                    "Наличие опции зависит от выбранных отметок; перед выводом "
+                    "нужно проверить конкретный договор."
+                )
+            },
+            field_labels={"without_certificates": "Без справок"},
+        )
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
+        self.assertIn("без справок", result["advantages"][0]["client_phrase"].lower())
