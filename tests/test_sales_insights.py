@@ -445,19 +445,25 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
 
-    def test_unmentioned_gap_is_not_treated_as_excluded(self):
-        result = self.analyze(
-            "gap",
-            field_data("gap", "GAP предусмотрен как отдельный риск."),
-            field_data("gap", "В проверенном фрагменте GAP не упоминается."),
+    def test_official_terms_omission_rule_is_shared_across_all_fields(self):
+        keys = (
+            "franchise", "without_certificates", "gap", "total_loss",
+            "self_ignition", "terrorism", "drone", "tow_truck",
+            "repair_type", "payment_terms",
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(len(result["conditional_advantages"]), 1)
-        self.assertEqual(
-            result["conditional_advantages"][0]["comparison_basis"],
-            "gap_optional_availability_vs_unestablished",
-        )
-        self.assertIn("не означает, что она точно отсутствует", result["conditional_advantages"][0]["client_phrase"])
+        for key in keys:
+            with self.subTest(key=key):
+                result = self.analyze(
+                    key,
+                    field_data(key, "Условие прямо предусмотрено в принятых официальных правилах."),
+                    field_data(key, "Условие не указано в принятых официальных правилах."),
+                )
+                self.assertEqual(len(result["advantages"]), 1)
+                self.assertEqual(
+                    result["advantages"][0]["comparison_basis"],
+                    f"{key}_explicit_vs_not_stated_in_official_terms",
+                )
+                self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
 
 
     def test_total_loss_missing_calculation_basis_is_incomparable(self):
