@@ -38,8 +38,8 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertNotIn("Общий порядок выплаты установлен", page)
         self.assertIn("Цитата модели не совпала", page)
         self.assertIn("Требует проверки", page)
-        self.assertIn("Нельзя уверенно сравнить", page)
-        self.assertIn("Результат сравнения", page)
+        self.assertIn("не найдено доказанных преимуществ", page)
+        self.assertNotIn("Результат сравнения", page)
         for label in FIELD_LABELS.values():
             self.assertIn(label, page)
         analyze.assert_not_called()

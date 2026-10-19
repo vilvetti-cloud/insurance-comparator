@@ -313,7 +313,7 @@ class SalesInsightsService:
             r"услови\w* не найден",
             r"прям\w* (?:услови\w*|покрыти\w*|упоминани\w*)[^.;]{0,120}\bнет\b",
             r"прям\w* услови\w* не найден",
-            r"(?:не указан|не указано|не указаны|не упомянут|не упомянуто|не найден|не найдено|не подтвержден|не подтверждено)[^.;]{0,140}(?:в правилах|в официальн\w*|в проверенн\w*|в принят\w* источнике|в тексте правил|в представленн\w* документ)",
+            r"(?:не указан|не указано|не указаны|не упомянут|не упомянуто|не найден|не найдено|не подтвержден|не подтверждено)[^.;]{0,140}(?:в правилах|в официальн\w*|в проверенн\w*|в принят\w* источнике|в тексте правил|в представленн\w* (?:\w+ )?документ)",
             r"(?:в правилах|в официальн\w*|в проверенн\w*|в принят\w* источнике|в тексте правил|в представленн\w* документ)[^.;]{0,140}(?:не указан|не указано|не упомянут|не найден|не подтвержден)",
             r"не упомянут",
             r"не указан[аоы]? в (?:проверенн\w*|принят\w*|официальн\w*)",
@@ -327,10 +327,14 @@ class SalesInsightsService:
             # The answer itself warns not to infer availability without checking
             # selected options or the specific policy/contract.
             r"(?:нужно|необходимо|требуется|следует) проверить[^.;]{0,180}(?:выбранн\w*|отметк\w*|услови\w* договор\w*|конкретн\w* (?:договор\w*|полис\w*|программ\w*|вариант\w*))",
-            r"проверить[^.;]{0,160}(?:выбранн\w* отметк\w*|отметк\w* в (?:договор\w*|форм\w*)|конкретн\w* (?:договор\w*|полис\w*|программ\w*))",
+            r"проверить(?! применимост)[^.;]{0,160}(?:выбранн\w* отметк\w*|отметк\w* в (?:договор\w*|форм\w*)|конкретн\w* (?:договор\w*|полис\w*|программ\w*))",
             r"(?:не заявля|нельзя утвержда|не следует считать|не считать)[^.;]{0,140}(?:по умолчанию|без проверки|без подтверждения|включенн\w* в договор)",
             r"не подтверждает[^.;]{0,100}(?:что|будто)[^.;]{0,100}(?:включен|предусмотрен|доступен)",
             r"нельзя сделать вывод[^.;]{0,100}(?:включен|предусмотрен|доступен)",
+            r"не прям\w* подтвержден\w*[^.;]{0,60}покрыти",
+            r"не заявля\w*[^.;]{0,40}наличи\w*[^.;]{0,20}покрыти",
+            # Availability itself is left to the selected contract terms.
+            r"наличие[^.;]{0,60}зависит от (?:выбранн\w*|услови\w* договор\w*|конкретн\w* (?:договор\w*|полис\w*|программ\w*))",
         )
         return any(re.search(pattern, value) for pattern in patterns)
 
@@ -530,30 +534,32 @@ class SalesInsightsService:
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
 
-        if own_level is not None and other_level is None:
-            if own_level > 0:
-                advantage = self._advantage(
-                    key=key, label=label, title=self._coverage_title(key, own_level),
-                    own=own, other=other,
-                    basis=f"{key}_explicit_vs_not_stated_in_official_terms",
-                    reason="У первой страховой условие прямо предусмотрено в принятой базе официальных правил, а у второй не указано.",
-                    client_phrase="У первой страховой это условие прямо предусмотрено в принятых официальных правилах; в условиях второй компании оно не указано. Это преимущество по доступности условия в принятой базе.",
-                )
-                if own_level == 1:
-                    advantage["conditional"] = True
-                return advantage
-            return self._comparison(key, label, "incomparable", f"{key}_not_established", own, other,
-                                    "По принятой базе нет подтверждённого положительного условия для выбора победителя.")
-        if own_level is None and other_level is not None:
-            if other_level > 0:
-                return self._comparison(
-                    key, label, "competitor_advantage",
-                    f"{key}_explicit_vs_not_stated_in_official_terms",
-                    own, other,
-                    "У второй страховой условие прямо предусмотрено в принятой базе официальных правил, а у первой не указано. Это преимущество по доступности условия в принятой базе.",
-                )
-            return self._comparison(key, label, "incomparable", f"{key}_not_established", own, other,
-                                    "По принятой базе нет подтверждённого положительного условия для выбора победителя.")
+        # A condition that is absent from the official terms is handled by the
+        # shared rule in _compare(). Here both sides state something; if one
+        # statement cannot be graded, the texts are not safely comparable.
+        if own_level is not None and other_level is None and own_level > 0 and self._is_unstated_condition(other_l):
+            advantage = self._advantage(
+                key=key, label=label, title=self._coverage_title(key, own_level),
+                own=own, other=other,
+                basis=f"{key}_explicit_vs_not_stated_in_official_terms",
+                reason="У первой страховой условие прямо предусмотрено в принятой базе официальных правил, а у второй не указано.",
+                client_phrase="У первой страховой это условие прямо предусмотрено в принятых официальных правилах; в условиях второй компании оно не указано.",
+            )
+            if own_level == 1:
+                advantage["conditional"] = True
+            return advantage
+        if own_level is None and other_level is not None and other_level > 0 and self._is_unstated_condition(own_l):
+            return self._comparison(
+                key, label, "competitor_advantage",
+                f"{key}_explicit_vs_not_stated_in_official_terms",
+                own, other,
+                "У второй страховой условие прямо предусмотрено в принятой базе официальных правил, а у первой не указано.",
+            )
+        if (own_level is None) != (other_level is None):
+            return self._comparison(
+                key, label, "incomparable", f"{key}_insufficient_data", own, other,
+                "Условие указано у обеих компаний, но одна из формулировок не позволяет однозначно сравнить уровень покрытия.",
+            )
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 title = self._coverage_title(key, own_level)
@@ -585,6 +591,15 @@ class SalesInsightsService:
 
         own_limit = self._single_limit(own_l)
         other_limit = self._single_limit(other_l)
+        variants_differ = any(re.search(r"вариант", text) for text in (own_l, other_l))
+        if (
+            own_level is not None and other_level is not None and own_level == other_level
+            and own_level >= 1 and (own_limit or other_limit) and variants_differ
+        ):
+            return self._comparison(
+                key, label, "incomparable", f"{key}_same_level_variants_not_comparable", own, other,
+                "Лимит зависит от выбранного варианта, поэтому цифры лимитов нельзя сравнивать напрямую.",
+            )
         if (
             own_level is not None and other_level is not None and own_level == other_level
             and own_level >= 1 and own_limit and other_limit and own_limit.unit == other_limit.unit
@@ -920,6 +935,8 @@ class SalesInsightsService:
             r"опци\w*[^.;]{0,80}дополнительн\w*\s+соглашени|"
             r"за\s+доп(?:олнительн\w*)?\s+плат|доплат[ау]|платн\w*|"
             r"отдельн\w*\s+(?:дополнительн\w*\s+)?риск|"
+            r"(?:описан|предлага|оформля)\w*[^.;]{0,40}отдельн\w*\s+(?:дополнительн\w*\s+)?продукт|"
+            r"если\s+(?:это\s+)?прямо\s+предусмотрен\w*\s+договор|"
             r"дополнительн\w*\s+(?:страхов\w*\s+)?опци\w*",
             text,
         ))

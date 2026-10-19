@@ -21,7 +21,7 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             "gap_confidence": None,
         }
 
-    def test_optional_gap_is_conditional_when_competitor_value_is_not_found(self):
+    def test_gap_stated_only_for_first_company_is_its_advantage(self):
         result = self.service.analyze(
             company="РЕСО-Гарантия",
             competitor="ВСК",
@@ -35,8 +35,8 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(result["conditional_advantages"], [])
         self.assertFalse(result["comparisons"][0].get("conditional", False))
         phrase = result["advantages"][0]["client_phrase"]
-        self.assertIn("прямое условие GAP не найдено", phrase)
-        self.assertIn("только после включения опции в договор", phrase)
+        self.assertIn("прямо указан", phrase)
+        self.assertIn("не указан", phrase)
         self.assertNotIn("прямо исключено", phrase)
 
     def test_reversing_order_moves_gap_advantage_to_competitor(self):
@@ -53,11 +53,11 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
         self.assertFalse(result["comparisons"][0].get("conditional", False))
         self.assertIn("РЕСО-Гарантия", result["comparisons"][0]["client_phrase"])
-        self.assertIn("прямое условие GAP не найдено", result["comparisons"][0]["client_phrase"])
+        self.assertIn("не указано", result["comparisons"][0]["client_phrase"])
         self.assertNotIn("прямо исключено", result["comparisons"][0]["client_phrase"])
         self.assertEqual(result["advantages"], [])
 
-    def test_unreviewed_missing_gap_does_not_count_as_absence(self):
+    def test_missing_gap_answer_counts_as_not_stated(self):
         unreviewed = {
             "gap": "Не найдено",
             "gap_quality_status": "missing",
@@ -71,10 +71,11 @@ class SalesInsightsGapDirectionTests(unittest.TestCase):
             competitor_data=unreviewed,
             field_labels={"gap": "GAP-страхование"},
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(len(result["conditional_advantages"]), 1)
-        self.assertTrue(result["comparisons"][0]["conditional"])
-        self.assertIn("не означает, что она точно отсутствует", result["comparisons"][0]["client_phrase"])
+        # No accepted answer means the condition is not stated in the official
+        # terms, so the company that states it gets the advantage.
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["advantages"][0]["field_key"], "gap")
+        self.assertEqual(result["conditional_advantages"], [])
 
     def test_competitor_with_better_gap_level_wins_even_when_reso_is_first(self):
         reso = {
