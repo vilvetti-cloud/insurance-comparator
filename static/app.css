@@ -1943,3 +1943,117 @@ select:focus {
 .details-panel[open] > .details-panel__summary .details-panel__chevron {
   transform: rotate(180deg);
 }
+
+
+/* Result page: full source conditions and restored sales tools. */
+.comparison-table--compact {
+  min-width: 1080px;
+}
+.comparison-table--compact .value-block__text {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: auto;
+}
+.insight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  margin: 0 0 24px;
+  align-items: stretch;
+}
+.insight-card {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.insight-card--advantages {
+  background: #f5fbf6;
+  border-color: #d5e9db;
+}
+.insight-card--message {
+  background: #fff;
+}
+.insight-card__eyebrow {
+  margin-bottom: 8px;
+  color: var(--reso-green);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.insight-card h2 {
+  margin: 0 0 16px;
+  font-size: 19px;
+  line-height: 1.3;
+}
+.insight-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 14px;
+}
+.insight-list li {
+  padding-left: 3px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.insight-list li strong {
+  display: block;
+  font-size: 13px;
+}
+.insight-list li p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.insight-list--conditional {
+  margin-top: 10px;
+}
+.insight-subheading {
+  margin-top: 18px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.insight-card__empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.client-message {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.copy-message {
+  margin-top: 16px;
+  min-height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.copy-message:hover {
+  border-color: var(--reso-green);
+}
+@media (max-width: 760px) {
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+  .insight-card {
+    padding: 18px;
+  }
+}
