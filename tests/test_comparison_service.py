@@ -79,3 +79,29 @@ class ComparisonServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_all_110_accepted_fields_receive_structured_facts(self):
+        snapshot = ComparisonService()._load_json_snapshot()
+        companies = [name for name in snapshot if not name.startswith("_")]
+        self.assertEqual(len(companies), 11)
+        total = 0
+        for company in companies:
+            for field_key, field in snapshot[company].items():
+                if field_key not in {
+                    "franchise", "without_certificates", "gap", "total_loss",
+                    "self_ignition", "terrorism", "drone", "tow_truck",
+                    "repair_type", "payment_terms",
+                }:
+                    continue
+                total += 1
+                facts = field.get("facts")
+                self.assertIsInstance(facts, dict, f"{company}/{field_key} has no structured facts")
+                self.assertEqual(facts.get("field_key"), field_key)
+                self.assertIn(
+                    facts.get("state"),
+                    {"available", "excluded", "contract_dependent", "described", "not_established"},
+                )
+                self.assertIn("source", facts)
+                self.assertIn("quantities", facts)
+        self.assertEqual(total, 110)
