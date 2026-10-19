@@ -118,8 +118,8 @@
               </thead>
               <tbody>
                 {% for key in fields %}
-                  {% set value1 = data1.get(key, 'Не найдено') %}
-                  {% set value2 = data2.get(key, 'Не найдено') %}
+                  {% set value1 = display_data1.get(key, 'Не найдено') %}
+                  {% set value2 = display_data2.get(key, 'Не найдено') %}
                   <tr>
                     <td class="parameter-cell">
                       <div class="parameter">
