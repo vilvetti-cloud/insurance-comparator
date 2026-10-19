@@ -88,10 +88,12 @@ def build_condition_facts(
         state = "not_established"
     elif _EXCLUSION.search(answer):
         state = "excluded"
+    elif _POSITIVE.search(answer):
+        # An explicitly offered add-on is available, even though it depends on
+        # the customer selecting it. Contract dependence is recorded separately.
+        state = "available"
     elif _CONTRACT_DEPENDENCY.search(combined):
         state = "contract_dependent"
-    elif _POSITIVE.search(answer):
-        state = "available"
     else:
         state = "described"
 
@@ -115,7 +117,7 @@ def build_condition_facts(
         "state": state,
         "answer": answer or None,
         "limitations": limits_text or None,
-        "contract_dependent": state == "contract_dependent",
+        "contract_dependent": bool(_CONTRACT_DEPENDENCY.search(combined)),
         "quantities": {"percentages": percentages, "money": money_values},
         "source": {
             "url": _clean(source_url) or None,
