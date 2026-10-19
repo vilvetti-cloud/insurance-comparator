@@ -118,13 +118,10 @@ class SalesInsightsService:
 
     @classmethod
     def _comparison_eligible(cls, data: dict[str, Any], key: str) -> bool:
-        # The accepted answer is authoritative regardless of audit labels,
-        # confidence or sales_eligible. Preserve the official-source boundary:
-        # an explicitly non-official source level must not drive sales claims.
-        if not cls._trusted(data, key):
-            return False
-        source_level = data.get(f"{key}_source_level")
-        return source_level is None or source_level in {1, 2}
+        # Accepted values from the approved comparison dataset are the source
+        # of truth. Audit flags, confidence, sales_eligible and source-level
+        # metadata must not silently erase an accepted condition.
+        return cls._trusted(data, key)
 
     @staticmethod
     def _value(data: dict[str, Any], key: str) -> str | None:
