@@ -775,25 +775,66 @@ def compare():
     if not c1 or c1 not in companies or not c2 or c2 not in companies or c1 == c2:
         return redirect("/")
 
-    data = load_data()
+    # Prefer the accepted, normalized PDF comparison dataset. Fall back to the
+    # legacy collector only when the normalized snapshot is unavailable.
+    snapshot = {}
+    try:
+        from core.services.comparison_service import ComparisonService
+        snapshot = ComparisonService().load_snapshot()
+    except Exception as exc:
+        logger.exception("Could not load normalized comparison data: %s", exc)
+
+    legacy = load_data() if not snapshot or c1 not in snapshot or c2 not in snapshot else {}
+    source = snapshot if snapshot and c1 in snapshot and c2 in snapshot else legacy
 
     def prepare_company_data(company):
-        raw = data.get(company, {})
+        raw = source.get(company, {})
         result = {}
         for field in KASKO_FIELDS:
             field_data = raw.get(field, {})
             if isinstance(field_data, dict):
-                result[field] = field_data.get("value", "Не найдено")
+                value = field_data.get("value", "Не найдено")
+                result[field] = value
                 result[f"{field}_source"] = field_data.get("source", "none")
+                result[f"{field}_source_level"] = field_data.get("source_level")
                 result[f"{field}_url"] = field_data.get("url")
+                if field_data.get("quality_reason"):
+                    result[f"{field}_review_note"] = field_data["quality_reason"]
             else:
                 result[field] = "Не найдено"
                 result[f"{field}_source"] = "none"
+                result[f"{field}_source_level"] = None
                 result[f"{field}_url"] = None
         return result
 
     data1 = prepare_company_data(c1)
     data2 = prepare_company_data(c2)
+
+    # Deterministic comparison is computed for internal sales logic only.
+    # The client-facing template deliberately renders no winner/verdict column.
+    internal_sales = {}
+    try:
+        from core.services.sales_insights_service import SalesInsightsService
+        internal_sales = SalesInsightsService().analyze(
+            company=c1,
+            competitor=c2,
+            data=data1,
+            competitor_data=data2,
+            field_labels=FIELD_LABELS,
+        )
+        logger.info(
+            "Internal comparison %s vs %s: %s first-company advantages, %s conditional, %s comparisons",
+            c1, c2,
+            len(internal_sales.get("advantages", [])),
+            len(internal_sales.get("conditional_advantages", [])),
+            len(internal_sales.get("comparisons", [])),
+        )
+    except Exception as exc:
+        logger.exception("Internal comparison failed for %s vs %s: %s", c1, c2, exc)
+
+    found1 = sum(1 for field in KASKO_FIELDS if data1.get(field) not in (None, "", "Не найдено") and not str(data1.get(field)).startswith("Не найдено"))
+    found2 = sum(1 for field in KASKO_FIELDS if data2.get(field) not in (None, "", "Не найдено") and not str(data2.get(field)).startswith("Не найдено"))
+    last_updated = source.get("_last_updated", "Не обновлялось")
 
     return render_template(
         "result.html",
@@ -803,7 +844,10 @@ def compare():
         data2=data2,
         fields=KASKO_FIELDS,
         field_labels=FIELD_LABELS,
-        last_updated=data.get("_last_updated", "Не обновлялось")
+        last_updated=last_updated,
+        found1=found1,
+        found2=found2,
+        internal_sales=internal_sales,
     )
 
 
