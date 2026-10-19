@@ -172,9 +172,9 @@
                     <td class="primary-cell">
                       <div class="value-block">
                         <div class="value-block__text {% if value1 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value1 | truncate(190, True, "…") }}
+                          {{ value1 | truncate(280, True, "…") }}
                         </div>
-                        {% if value1 != "Не найдено" and value1|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value1 }}</p></details>{% endif %}
+                        {% if value1 != "Не найдено" and value1|length > 280 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value1 }}</p></details>{% endif %}
                         {% if data1.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
@@ -203,9 +203,9 @@
                     <td>
                       <div class="value-block">
                         <div class="value-block__text {% if value2 == 'Не найдено' %}value-block__text--empty{% endif %}">
-                          {{ value2 | truncate(190, True, "…") }}
+                          {{ value2 | truncate(280, True, "…") }}
                         </div>
-                        {% if value2 != "Не найдено" and value2|length > 190 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value2 }}</p></details>{% endif %}
+                        {% if value2 != "Не найдено" and value2|length > 280 %}<details class="condition-more"><summary>Полное условие</summary><p>{{ value2 }}</p></details>{% endif %}
                         {% if data2.get(key + '_review_note') %}
                           <div class="value-block__contextual">
                             <span class="quality-badge quality-badge--review">Требует проверки</span>
