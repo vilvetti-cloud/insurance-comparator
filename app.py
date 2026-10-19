@@ -229,11 +229,8 @@ def concise_condition(field: str, value: Any) -> Any:
         # do not answer whether a limited repair can be settled without papers.
         match = re.search(r"(?:один раз|однократно)[^.;]{0,120}(?:можно|допускается|разрешается)[^.;]*", text, re.I)
         if match:
+            # Keep the complete accepted exception and its damage-type list.
             text = text[match.start():].strip(" .;")
-            # Retain any following list of eligible damage types.
-            tail = value[match.end():].strip()
-            if tail and len(tail) > 1 and not text.endswith(tail):
-                text = (text + " " + re.sub(r"\\s+", " ", tail)).strip()
     if field == "total_loss":
         lowered = text.lower().replace("ё", "е")
         if "порог по умолчанию" in lowered and "страхов" in lowered:
