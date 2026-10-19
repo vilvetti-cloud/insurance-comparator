@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   review:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -38,8 +38,8 @@ jobs:
       APPLY: ${{ inputs.apply }}
       USE_AI: ${{ inputs.ai }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -58,7 +58,7 @@ jobs:
           python scripts/casco_review.py "${args[@]}"
       - name: Upload full review report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: casco-review-report
           path: casco-review-report.json

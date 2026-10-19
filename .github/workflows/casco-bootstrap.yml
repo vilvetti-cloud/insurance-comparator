@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   bootstrap:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -51,8 +51,8 @@ jobs:
       OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
       CASCO_AI_PROVIDER: auto
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -76,7 +76,7 @@ jobs:
           python scripts/casco_bootstrap.py "${args[@]}"
       - name: Upload bootstrap report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: casco-bootstrap-report
           path: work/casco-bootstrap/bootstrap-report.json

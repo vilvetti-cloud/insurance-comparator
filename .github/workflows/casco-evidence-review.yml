@@ -14,13 +14,13 @@ permissions:
 
 jobs:
   full-pdf-search:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install PDF text extraction
@@ -28,7 +28,7 @@ jobs:
       - name: Search full text of insurer PDFs
         run: python scripts/search_casco_review_terms.py
       - name: Upload review report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: casco-full-pdf-evidence-search
           path: reports/casco-pdf-term-search-2026-10-14.md
