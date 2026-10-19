@@ -168,3 +168,50 @@ class SalesInsightsSalesMessageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OfficialRulesOmissionComparisonTests(unittest.TestCase):
+    def setUp(self):
+        self.service = SalesInsightsService()
+
+    def test_explicit_repair_without_certificates_beats_unmentioned_competitor_condition(self):
+        result = self.service.analyze(
+            company="Ингосстрах",
+            competitor="Ренессанс Страхование",
+            data={
+                "without_certificates": (
+                    "Один раз в течение срока договора можно не обращаться в компетентные органы "
+                    "при повреждении ЛКП не более одной детали, остекления кроме крыши, "
+                    "внешних световых приборов, зеркал или антенны."
+                ),
+                "without_certificates_source_level": 1,
+                "without_certificates_quality_status": "conditional",
+                "without_certificates_sales_eligible": False,
+            },
+            competitor_data={
+                "without_certificates": "Не найдено в тексте правил",
+                "without_certificates_source_level": 1,
+                "without_certificates_quality_status": "not_found",
+            },
+            field_labels={"without_certificates": "Ремонт без справок"},
+        )
+        self.assertEqual(len(result["advantages"]), 1)
+        self.assertEqual(result["advantages"][0]["outcome"], "first_advantage")
+        self.assertEqual(result["advantages"][0]["field_key"], "without_certificates")
+        self.assertIn("прямо указан", result["advantages"][0]["client_phrase"])
+
+    def test_accepted_answer_is_not_discarded_by_audit_metadata(self):
+        result = self.service.analyze(
+            company="Ингосстрах",
+            competitor="Ренессанс Страхование",
+            data={
+                "without_certificates": "Можно один раз оформить повреждение без обращения в компетентные органы.",
+                "without_certificates_source_level": 4,
+                "without_certificates_quality_status": "needs_review",
+                "without_certificates_sales_eligible": False,
+            },
+            competitor_data={"without_certificates": "Не найдено в тексте правил"},
+            field_labels={"without_certificates": "Ремонт без справок"},
+        )
+        self.assertEqual(len(result["comparisons"]), 1)
+        self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
