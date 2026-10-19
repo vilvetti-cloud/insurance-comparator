@@ -492,9 +492,9 @@ class SalesInsightsService:
         # An unmentioned GAP clause is unknown, not evidence of absence.
         # The same no-data-is-not-worse principle applies regardless of source level.
         gap_not_mentioned_pattern = (
-            r"прям\\w*\\s+услови\\w*[^.;]{0,40}\\bgap\\b[^.;]{0,50}не\\s+найден|"
-            r"\\bgap\\b[^.;]{0,100}(?:не\\s+упомянут|не\\s+указан|не\\s+найден)|"
-            r"(?:не\\s+упомянут|не\\s+указан|не\\s+найден)[^.;]{0,100}\\bgap\\b"
+            r"прям\w*\s+услови\w*[^.;]{0,40}\bgap\b[^.;]{0,50}не\s+найден|"
+            r"\bgap\b[^.;]{0,100}(?:не\s+упомянут|не\s+указан|не\s+найден)|"
+            r"(?:не\s+упомянут|не\s+указан|не\s+найден)[^.;]{0,100}\bgap\b"
         )
         own_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, own_l))
         other_gap_not_mentioned = key == "gap" and bool(re.search(gap_not_mentioned_pattern, other_l))
@@ -507,35 +507,6 @@ class SalesInsightsService:
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
 
-        if key == "gap" and own_gap_not_mentioned != other_gap_not_mentioned:
-            known_level = other_level if own_gap_not_mentioned else own_level
-            known_value = other if own_gap_not_mentioned else own
-            unknown_value = own if own_gap_not_mentioned else other
-            if known_level in {1, 2}:
-                option_company = "конкурента" if own_gap_not_mentioned else "первой страховой"
-                option_level = known_level
-                phrase = (
-                    f"В официальных правилах {option_company} GAP "
-                    f"{'доступен как отдельная опция' if option_level == 1 else 'прямо предусмотрен в описанном покрытии'}, "
-                    "а в проверенных официальных правилах другой компании прямое условие GAP не найдено. "
-                    "По принятой методике это преимущество по доступности GAP в проверенном документе; "
-                    "это не означает, что у второй компании нигде не существует отдельного продукта GAP. "
-                    "Преимущество реализуется только после включения опции в договор."
-                )
-                if own_gap_not_mentioned:
-                    return self._comparison(
-                        key, label, "competitor_advantage",
-                        "gap_available_vs_not_mentioned_in_official_rules",
-                        own, other, phrase,
-                    )
-                advantage = self._advantage(
-                    key=key, label=label, title=self._coverage_title(key, known_level),
-                    own=own, other=other,
-                    basis="gap_available_vs_not_mentioned_in_official_rules",
-                    reason=phrase,
-                    client_phrase=phrase,
-                )
-                return advantage
         # Equal GAP availability levels do not establish equivalent products:
         # standalone GAP products may insure different losses and use different
         # caps/calculation bases. Do not rank limits unless variants are proven
