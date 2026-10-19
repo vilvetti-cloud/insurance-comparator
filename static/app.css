@@ -586,11 +586,16 @@ select:focus {
 
 .comparison-table {
   width: 100%;
-  min-width: 880px;
+  min-width: 1120px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
 }
+
+.comparison-table thead th:nth-child(1) { width: 16%; }
+.comparison-table thead th:nth-child(2) { width: 29%; }
+.comparison-table thead th:nth-child(3) { width: 29%; }
+.comparison-table thead th:nth-child(4) { width: 26%; }
 
 .comparison-table th,
 .comparison-table td {
@@ -701,7 +706,9 @@ select:focus {
   font-size: 13px;
   font-weight: 650;
   line-height: 1.55;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
 }
 
 .value-block__text--empty {
