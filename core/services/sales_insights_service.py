@@ -514,17 +514,6 @@ class SalesInsightsService:
         own_level = self._coverage_level_v2(key, own_l)
         other_level = self._coverage_level_v2(key, other_l)
 
-        # Equal GAP availability levels do not establish equivalent products:
-        # standalone GAP products may insure different losses and use different
-        # caps/calculation bases. Do not rank limits unless variants are proven
-        # comparable (the current accepted data does not establish that).
-        if key == "gap" and own_level is not None and own_level == other_level:
-            return self._comparison(
-                key, label, "incomparable", "gap_same_level_variants_not_comparable",
-                own, other,
-                "У обеих компаний описан GAP одного общего уровня доступности, но это не доказывает совпадение вариантов, лимитов и базы расчёта. GAP оформляется отдельно; сравнить условия можно только для сопоставимых вариантов и договоров.",
-            )
-
         if own_level is not None and other_level is None:
             if own_level > 0:
                 advantage = self._advantage(
