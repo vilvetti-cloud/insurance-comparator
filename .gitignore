@@ -7,3 +7,7 @@ venv/
 .vercel/
 .DS_Store
 Thumbs.db
+
+# Auto-update working files and rules downloaded by hand (local only)
+work/
+inbox/

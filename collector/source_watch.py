@@ -60,25 +60,40 @@ def _unavailable_reason(exc: Exception) -> str:
 
 
 def check_file(source: SourceFile, slug: str, fetch: Callable[[str], Any],
-               sources_dir: Path = SOURCES_DIR) -> dict[str, Any]:
+               sources_dir: Path = SOURCES_DIR, download_dir: Path | None = None,
+               manual_body: bytes | None = None) -> dict[str, Any]:
+    """Compare one rules file on the insurer site with our copy.
+
+    A changed file is saved to ``download_dir`` so the auto-update can analyse
+    exactly the bytes that were checked. ``manual_body`` is a file the owner
+    downloaded by hand (for sites closed to programs); it is checked the same way.
+    """
     result = {"file": source.file, "url": source.url}
     local = sources_dir / source.file
     try:
-        fetched = fetch(source.url)
-        if not official_url(slug, fetched.url):
-            raise ValueError("redirect left the insurer site")
-        body = fetched.body
+        if manual_body is not None:
+            body = manual_body
+            result["via"] = "manual"
+        else:
+            fetched = fetch(source.url)
+            if not official_url(slug, fetched.url):
+                raise ValueError("redirect left the insurer site")
+            body = fetched.body
         if not body.lstrip().startswith(b"%PDF"):
             # A block page, a "not a robot" check or a removed file page.
             result.update(status="unavailable", reason="сайт отдал страницу вместо файла правил")
             return result
-        if not local.is_file():
-            result.update(status="changed", reason="в проекте нет сохранённой копии")
-        elif _sha256(body) == _sha256(local.read_bytes()):
+        if local.is_file() and _sha256(body) == _sha256(local.read_bytes()):
             result.update(status="unchanged")
         else:
-            result.update(status="changed", reason="файл на сайте отличается от сохранённой копии",
+            reason = ("файл на сайте отличается от сохранённой копии" if local.is_file()
+                      else "в проекте нет сохранённой копии")
+            result.update(status="changed", reason=reason,
                           remote_sha256=_sha256(body), remote_size=len(body))
+            if download_dir is not None:
+                target = download_dir / source.file
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(body)
     except Exception as exc:  # noqa: BLE001 - every failure is reported, never raised
         result.update(status="unavailable", reason=_unavailable_reason(exc))
     return result
@@ -142,15 +157,30 @@ def company_status(files: list[dict[str, Any]], pages: list[dict[str, Any]]) -> 
 
 def run_check(fetch: Callable[[str], Any], *, previous: dict[str, Any] | None = None,
               table: list[SourceFile] | None = None, sources_dir: Path = SOURCES_DIR,
-              now: datetime | None = None) -> dict[str, Any]:
+              now: datetime | None = None, download_dir: Path | None = None,
+              only_unavailable: bool = False,
+              manual_files: dict[str, bytes] | None = None) -> dict[str, Any]:
+    """Check every insurer, or only those the previous run could not reach.
+
+    ``only_unavailable`` is the second pass from a computer in Russia: it keeps
+    the night's results and re-checks the insurers whose sites refused the
+    first run. ``manual_files`` maps a table file (e.g. "yugoria/technical.pdf")
+    to bytes the owner downloaded by hand.
+    """
     previous = previous or {}
+    manual_files = manual_files or {}
     table = table if table is not None else load_source_table()
     checked_at = (now or datetime.now(MOSCOW)).astimezone(MOSCOW).isoformat(timespec="minutes")
     companies = {}
     for insurer in INSURERS:
-        rows = [row for row in table if row.company == insurer.name]
-        files = [check_file(row, insurer.slug, fetch, sources_dir) for row in rows]
         before = previous.get("companies", {}).get(insurer.name, {})
+        rows = [row for row in table if row.company == insurer.name]
+        has_manual = any(row.file in manual_files for row in rows)
+        if only_unavailable and before.get("status") != "unavailable" and not has_manual:
+            companies[insurer.name] = before
+            continue
+        files = [check_file(row, insurer.slug, fetch, sources_dir, download_dir,
+                            manual_files.get(row.file)) for row in rows]
         prior_pages = {page["url"]: page for page in before.get("pages", [])}
         pages = check_pages(insurer, fetch, prior_pages, {row.url for row in rows})
         status = company_status(files, pages)
@@ -160,7 +190,12 @@ def run_check(fetch: Callable[[str], Any], *, previous: dict[str, Any] | None = 
             "files": files,
             "pages": pages,
         }
-    return {"version": 1, "checked_at": checked_at, "companies": companies}
+    result = {"version": 1, "checked_at": checked_at, "companies": companies}
+    if only_unavailable and previous.get("checked_at"):
+        # The second pass completes the night's check; it is not a new night.
+        result["checked_at"] = previous["checked_at"]
+        result["rechecked_at"] = checked_at
+    return result
 
 
 def accept_new_documents(status: dict[str, Any], company: str) -> dict[str, Any]:

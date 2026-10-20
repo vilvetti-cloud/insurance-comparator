@@ -1,0 +1,27 @@
+name: Email the owner about rule changes found from the PC
+# The morning pass on the owner's PC writes its report to
+# data/auto-update-notes/; a new issue sends the owner an email.
+on:
+  push:
+    branches: [main]
+    paths: ["data/auto-update-notes/**"]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - name: Open an issue for every new report
+        shell: bash
+        run: |
+          git diff --name-only --diff-filter=A HEAD~1 HEAD -- data/auto-update-notes | while read -r note; do
+            gh issue create --title "Правила КАСКО: изменения ($(basename "$note" .md))" --body-file "$note"
+          done
