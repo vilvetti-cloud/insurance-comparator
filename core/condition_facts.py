@@ -8,17 +8,24 @@ FACT_SCHEMA_VERSION = "1.0"
 
 # These patterns classify the *kind of statement*, not insurer-specific wording.
 # The original accepted answer and evidence are always preserved alongside facts.
+# Every pattern starts at a word boundary, so "в салоне указаны" is not read
+# as "не указан". "Не указан в качестве риска" names a risk category, not a
+# gap in the source, and is left to the exclusion/coverage patterns. "Полные
+# правила не найдены" is about a document, not about the condition itself.
 _NOT_ESTABLISHED = re.compile(
-    r"(?:не найдено|не найден|не указано|не указан|не упомянуто|не упомянут|"
+    r"(?<!\w)(?<!правила )(?:не найдено|не найден|не указан[оаы]?(?!\w)(?! в качестве)|"
+    r"не упомянуто|не упомянут|не назван\w*|"
     r"не подтверждено|не подтвержден|не установлено|нет прямого условия|"
-    r"прямое условие[^.]{0,80}не найдено|не раскрыто в представленн\w* документ|"
-    r"не заявля\w*[^.]{0,100}(?:по умолчанию|без подтверждения)|"
+    r"прям\w* (?:услови\w*|покрыти\w*|упоминани\w*)[^.;]{0,120}(?<!\w)нет(?!\w)|"
+    r"прямое условие[^.]{0,80}не найдено|не раскрыт\w*|"
+    r"не заявля\w*[^.]{0,100}(?:по умолчанию|без подтверждения|наличи\w* покрыти)|"
     r"(?:нужно|необходимо|требуется) проверить[^.]{0,100}(?:выбранн\w* отметк|конкретн\w* договор|услови\w* договор))",
     re.IGNORECASE,
 )
 _EXCLUSION = re.compile(
-    r"(?:(?<!может )не покрыва(?:ется|ются)|не является страховым случаем|исключается из покрытия|"
-    r"не относится к страховым случаям|покрытие отсутствует|не входит в покрытие)",
+    r"(?<!\w)(?:(?<!может )не покрыва(?:ется|ются)|не является страховым случаем|исключается из покрытия|"
+    r"не относится к страховым случаям|покрытие отсутствует|не входит в покрытие|"
+    r"(?:относит|отнесен\w*)[^.;]{0,80} к исключени\w*|в перечень исключени\w*)",
     re.IGNORECASE,
 )
 _CONTRACT_DEPENDENCY = re.compile(
@@ -35,7 +42,8 @@ _POSITIVE = re.compile(
     r"(?:покрывается|включен\w* в покрытие|является страховым случаем|"
     r"предусмотрен\w* покрытием|доступен\w* как отдельн\w* опци\w*|страховщик возмещает|"
     r"можно не обращаться|может быть застрахован\w*|"
-    r"предусмотрен\w* договором)",
+    r"предусмотрен\w* договором|(?<!не )возмеща(?:ется|ются)|указыва\w* на покрыти|"
+    r"отдельн\w* (?:дополнительн\w* )?продукт)",
     re.IGNORECASE,
 )
 _PERCENT = re.compile(r"(?<!\w)(\d{1,3}(?:[,.]\d+)?)\s*%")
@@ -59,6 +67,30 @@ def _unique(values: list[str]) -> list[str]:
             seen.add(normalized)
             result.append(value)
     return result
+
+
+_SENTENCE_END = re.compile(
+    r"(?<!\bп)(?<!\bпп)(?<!\bст)(?<!\bП)(?<!\bПп)(?<!\bСт)[.!?]\s+(?=[А-ЯЁA-Z«\"])"
+)
+
+
+def lead_sentence(text: str) -> str:
+    """First sentence of an answer; «п. 12.5» or «ст. 68» do not end it."""
+    text = _clean(text)
+    match = _SENTENCE_END.search(text)
+    return text[: match.start() + 1] if match else text
+
+
+def _statement_state(text: str) -> str | None:
+    if _NOT_ESTABLISHED.search(text):
+        return "not_established"
+    if _EXCLUSION.search(text):
+        return "excluded"
+    if _POSITIVE.search(text):
+        # An explicitly offered add-on is available, even though it depends on
+        # the customer selecting it. Contract dependence is recorded separately.
+        return "available"
+    return None
 
 
 def build_condition_facts(
@@ -86,18 +118,19 @@ def build_condition_facts(
     combined = " ".join(part for part in (answer, limits_text) if part)
     lowered = combined.casefold()
 
-    if not answer or _NOT_ESTABLISHED.search(answer):
+    # The lead sentence carries the answer's main claim; later sentences are
+    # usually caveats ("the limit is not stated", "check the policy"). A lead
+    # that decides the state is not overturned by them. Only when the lead
+    # is neutral does the whole answer decide.
+    if not answer:
         state = "not_established"
-    elif _EXCLUSION.search(answer):
-        state = "excluded"
-    elif _POSITIVE.search(answer):
-        # An explicitly offered add-on is available, even though it depends on
-        # the customer selecting it. Contract dependence is recorded separately.
-        state = "available"
-    elif _CONTRACT_DEPENDENCY.search(combined):
-        state = "contract_dependent"
     else:
-        state = "described"
+        state = _statement_state(lead_sentence(answer)) or _statement_state(answer)
+    if state is None:
+        if _CONTRACT_DEPENDENCY.search(combined):
+            state = "contract_dependent"
+        else:
+            state = "described"
 
     percentages = [
         {"value": float(match.group(1).replace(",", ".")), "unit": "percent",
