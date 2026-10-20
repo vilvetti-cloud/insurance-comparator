@@ -144,9 +144,14 @@ class SalesInsightsTests(unittest.TestCase):
             field_data("repair_type", text),
             field_data("repair_type", text),
         )
+        # Owner's rule: a condition the rules do not clearly state does not
+        # exist, so two such answers are "both minus" — no advantage either way.
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_options_missing")
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
+        self.assertEqual(
+            result["comparisons"][0]["comparison_basis"],
+            "repair_type_both_not_stated_in_official_terms",
+        )
 
     def test_total_loss_same_percentage_with_strict_vs_inclusive_boundary_is_incomparable(self):
         result = self.analyze(

@@ -548,6 +548,13 @@ class SalesInsightsService:
         # remains a compatibility fallback for legacy/database rows.
         own_unstated = own_state == "not_established" if own_state else self._is_unstated_condition(own_l)
         other_unstated = other_state == "not_established" if other_state else self._is_unstated_condition(other_l)
+        if own_unstated and other_unstated:
+            # Owner's rule: what the rules do not clearly grant does not exist,
+            # so two unstated conditions are equal — neither side wins.
+            return self._comparison(
+                key, label, "equal", f"{key}_both_not_stated_in_official_terms", own, other,
+                "У обеих компаний условие в официальных правилах прямо не прописано.",
+            )
         if own_unstated != other_unstated:
             stated = other_l if own_unstated else own_l
             unstated = own_l if own_unstated else other_l
@@ -1062,7 +1069,9 @@ class SalesInsightsService:
         if re.search(
             r"без\s+(?:справ|документ)[^.;]{0,80}(?:не\s+допуска|не\s+предусмотр|не\s+возмож)|"
             r"(?:справ|документ)\w*\s+(?:обязательн|требуют|необходим)|"
-            r"(?:не\s+допуска|не\s+предусмотр|не\s+возмож)[^.;]{0,80}без\s+(?:справ|документ)",
+            r"(?:не\s+допуска|не\s+предусмотр|не\s+возмож)[^.;]{0,80}без\s+(?:справ|документ)|"
+            # "нет общего перечня повреждений, по которым … без документов"
+            r"(?:\bнет|отсутству\w*)\s+(?:общего\s+|прямого\s+)?(?:перечн|положени|указани)\w*[^.;]{0,120}без\s+(?:справ|документ)",
             text,
         ):
             return "negative"

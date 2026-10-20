@@ -453,6 +453,24 @@ class UnifiedRuleTests(unittest.TestCase):
                 self.assertEqual(result["outcome"], "conditional_first_advantage")
                 self.assertEqual(result["comparison_basis"], f"{key}_coverage_level_1_vs_0")
 
+    def test_vague_no_general_list_reads_as_absent_for_every_field(self):
+        stated = "Можно обратиться без документов компетентных органов при повреждении стекла."
+        vague = "В Правилах нет общего перечня повреждений, по которым выплата допускается без документов."
+        result = SalesInsightsService().analyze(
+            company="A", competitor="B",
+            data={"without_certificates": stated}, competitor_data={"without_certificates": vague},
+            field_labels={"without_certificates": "Без справок"},
+        )["comparisons"][0]
+        self.assertEqual(result["outcome"], "first_advantage")
+
+    def test_both_not_stated_is_equal_for_every_coverage_field(self):
+        unstated = "Условие не указано в принятом официальном источнике"
+        for key in self.COVERAGE:
+            with self.subTest(key=key):
+                result = self.analyze(key, unstated, "Прямое условие не найдено в проверенных правилах.")
+                self.assertEqual(result["outcome"], "equal")
+                self.assertEqual(result["comparison_basis"], f"{key}_both_not_stated_in_official_terms")
+
     def test_identical_unconfirmed_wording_is_not_called_equal_for_any_coverage_field(self):
         for key, word in self.COVERAGE.items():
             with self.subTest(key=key):
