@@ -208,7 +208,7 @@ class SalesInsightsSalesMessageTests(unittest.TestCase):
         message = self._structured_result()["client_message"]
         for role_word in ("первой страховой", "второй компании", "конкурент", "первой компании"):
             self.assertNotIn(role_word, message.lower())
-        self.assertIn("у ВСК в правилах это прямо не прописано", message)
+        self.assertIn("у ВСК этого нет", message)
 
     def test_bonus_ignores_caveat_sentences_and_unconfirmed_conditions(self):
         feature = SalesInsightsService._client_feature
@@ -440,6 +440,16 @@ class UnifiedRuleTests(unittest.TestCase):
                     self.assertEqual(
                         result["comparison_basis"], f"{key}_excluded_vs_not_stated_in_official_terms",
                     )
+
+    def test_opt_in_by_contract_is_an_add_on_for_every_coverage_field(self):
+        words = {"gap": "GAP", "self_ignition": "Самовозгорание", "terrorism": "Террористический акт", "drone": "Ущерб от БПЛА"}
+        for key, word in words.items():
+            with self.subTest(key=key):
+                own = f"{word} описан в правилах. Риск застрахован только «если это прямо указано в Договоре»."
+                other = f"{word} прямо исключён из покрытия."
+                result = self.analyze(key, own, other)
+                self.assertEqual(result["outcome"], "conditional_first_advantage")
+                self.assertEqual(result["comparison_basis"], f"{key}_coverage_level_1_vs_0")
 
     def test_identical_unconfirmed_wording_is_not_called_equal_for_any_coverage_field(self):
         for key, word in self.COVERAGE.items():
