@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: source-check
@@ -15,7 +16,10 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -23,20 +27,59 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt anthropic pytest
       - name: Download rules from insurer sites and compare with our copies
-        run: python scripts/check_sources.py
+        run: python scripts/check_sources.py --downloads work/downloads
+      - name: Update answers from changed rules
+        # A failure here must not stop the nightly date from being published.
+        continue-on-error: true
+        run: python scripts/auto_update.py --downloads work/downloads --summary work/auto-update-summary.md
+      - name: Verify updated answers
+        # The site's own tests must still pass with the new answers;
+        # otherwise the answers are rolled back and the owner is told.
+        shell: bash
+        run: |
+          if git diff --quiet -- data/casco-comparison-master.json; then
+            echo "Answers unchanged"
+            exit 0
+          fi
+          if python -m pytest -q; then
+            exit 0
+          fi
+          git checkout -- data/casco-comparison-master.json data/sources docs/source-urls.md
+          {
+            echo ""
+            echo "**Внимание:** после автообновления не прошли проверки сайта, новые ответы откатены."
+            echo "Старые ответы оставлены; нужен ручной разбор."
+          } >> work/auto-update-summary.md
       - name: Publish the result to the site
         # The site shows the check date even when nothing changed, so the
         # result is committed every night; the push redeploys the site.
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/source-check.json
+          git add -A -- data docs/source-urls.md
           if git diff --cached --quiet; then
             echo "Nothing to publish"
             exit 0
           fi
-          git commit -m "Ночная проверка правил на сайтах страховых"
+          if git diff --cached --quiet -- data/casco-comparison-master.json; then
+            git commit -m "Ночная проверка правил на сайтах страховых"
+          else
+            git commit -m "Автообновление ответов по новой редакции правил"
+          fi
           git pull --rebase origin main
           git push origin HEAD:main
+      - name: Email the owner about changes
+        # A new issue sends an email to the repository owner.
+        if: hashFiles('work/auto-update-summary.md') != ''
+        run: gh issue create --title "Правила КАСКО: изменения от $(date +%d.%m.%Y)" --body-file work/auto-update-summary.md
+      - name: Monthly reminder for sites closed to programs
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          [ "$(date +%d)" = "01" ] || exit 0
+          python scripts/manual_reminder.py > work/reminder.md
+          [ -s work/reminder.md ] || exit 0
+          gh issue create --title "Проверьте правила вручную: $(date +%m.%Y)" --body-file work/reminder.md

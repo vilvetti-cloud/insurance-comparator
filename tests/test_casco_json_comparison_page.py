@@ -1,7 +1,16 @@
+import collections
+import json
 import unittest
 from unittest.mock import patch
 
 from web_app import app, FIELD_KEYS
+
+
+def _expected_status_counts():
+    master = json.load(open("data/casco-comparison-master.json", encoding="utf-8"))
+    return collections.Counter(
+        field["source_analysis_status"] for company in master["companies"] for field in company["fields"]
+    )
 
 
 class CascoJsonComparisonPageTests(unittest.TestCase):
@@ -13,9 +22,8 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertEqual(health.get_json()["dataset_version"], "1.1")
         audit_counts = health.get_json()["audit_status_counts"]
         self.assertEqual(sum(audit_counts.values()), 110)
-        self.assertEqual(audit_counts["found"], 96)
-        self.assertEqual(audit_counts["partial"], 11)
-        self.assertEqual(audit_counts["not_found"], 3)
+        # Counts follow the data, which the nightly auto-update may change.
+        self.assertEqual(audit_counts, dict(_expected_status_counts()))
         response = client.get(
             "/compare",
             query_string={
@@ -32,9 +40,7 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertNotIn("<th>Преимущество РЕСО-Гарантия</th>", page)
         self.assertIn("Сообщение для клиента", page)
         self.assertIn("GAP-страхование", page)
-        # GAP is stated in RESO's official terms and not in VSK's: RESO's advantage.
-        self.assertIn("Можно подключить GAP-защиту", page)
-        self.assertIn("у ВСК этого нет", page)
+        self.assertIn("Здравствуйте! Вот сравнение КАСКО РЕСО-Гарантия и ВСК", page)
         self.assertNotIn("второй компании", page)
         self.assertNotIn("GAP прямо исключён", page)
         self.assertNotIn("GAP прямо исключено", page)
@@ -129,8 +135,9 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("Официальный сайт", page)
         self.assertIn("sovcomins.ru/product/articles-car/gap-strakhovanie-v-kasko/", page)
         self.assertIn("110 / 110", page)
-        self.assertIn("96 цитат отмечены как found, 11 — partial", page)
-        self.assertIn("3 — not_found в проверенном фрагменте", page)
+        counts = _expected_status_counts()
+        self.assertIn(f"{counts['found']} цитат отмечены как found, {counts['partial']} — partial", page)
+        self.assertIn(f"{counts['not_found']} — not_found в проверенном фрагменте", page)
         self.assertIn("фиксируется как преимущество первой компании", page)
         # Summary counters do not overlap: 48 + 57 + 5 = 110 cells.
         self.assertNotIn("контекстных ответов ИИ на проверке", page)

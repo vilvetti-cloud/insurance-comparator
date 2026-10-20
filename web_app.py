@@ -16,7 +16,7 @@ app = Flask(__name__)
 
 SOURCE_STATUS_LABELS = {
     "ok": "правила на сайте не менялись",
-    "changed": "на сайте новая редакция правил — ответы пока по прежней",
+    "changed": "на сайте новая редакция правил — автоматический разбор не прошёл проверку, ответы пока по прежней",
     "unavailable": "сайт не дал проверить автоматически — проверьте вручную",
 }
 
@@ -46,6 +46,7 @@ def source_check_context() -> dict:
             "status": state,
             "label": SOURCE_STATUS_LABELS.get(state, SOURCE_STATUS_LABELS["unavailable"]),
             "verified": _ru_date(item.get("verified_at"), with_time=True),
+            "auto_updated": _ru_date(item.get("auto_updated_at")),
             "changed_files": [f for f in item.get("files", []) if f.get("status") == "changed"],
             "new_documents": new_documents,
             "files": item.get("files", []),
@@ -314,6 +315,14 @@ def _json_data_report(snapshot: dict) -> dict:
             "last_checked": snapshot.get("_last_updated"), "latest_run": None, "fields": fields,
         })
     return {
+        "analysis_counts": {
+            status: sum(
+                1 for name in COMPANIES for item in snapshot.get(name, {}).values()
+                if isinstance(item, dict)
+                and (item.get("raw_field") or {}).get("source_analysis_status") == status
+            )
+            for status in ("found", "partial", "not_found")
+        },
         "total_found": total_found, "total_possible": total_possible,
         "coverage_percent": round(100 * total_found / total_possible) if total_possible else 0,
         "total_confirmed": total_confirmed, "total_conditional": total_conditional,

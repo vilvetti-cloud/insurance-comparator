@@ -92,6 +92,32 @@ class SourceWatchTests(unittest.TestCase):
         fourth = self.check(FakeFetch(files={self.url: PDF}, pages={page: new}), accepted)
         self.assertEqual(fourth["companies"][self.reso.name]["status"], "ok")
 
+    def test_changed_file_is_saved_for_the_auto_update(self):
+        downloads = self.dir / "downloads"
+        self.check_saving = run_check(FakeFetch(files={self.url: b"%PDF-1.7 rules v2"}), table=self.table,
+                                      sources_dir=self.dir, now=self.now, download_dir=downloads)
+        self.assertEqual((downloads / "reso" / "technical.pdf").read_bytes(), b"%PDF-1.7 rules v2")
+
+    def test_second_pass_rechecks_only_unreachable_insurers_and_keeps_the_night_date(self):
+        previous = {"checked_at": "2026-10-21T06:00+03:00", "companies": {
+            self.reso.name: {"status": "unavailable", "files": [], "pages": []},
+            INSURERS[1].name: {"status": "ok", "verified_at": "2026-10-21T06:00+03:00"},
+        }}
+        later = datetime(2026, 10, 21, 6, 30, tzinfo=MOSCOW)
+        result = run_check(FakeFetch(files={self.url: PDF}), previous=previous, table=self.table,
+                           sources_dir=self.dir, now=later, only_unavailable=True)
+        self.assertEqual(result["companies"][self.reso.name]["status"], "ok")
+        self.assertEqual(result["companies"][INSURERS[1].name], previous["companies"][INSURERS[1].name])
+        self.assertEqual(result["checked_at"], "2026-10-21T06:00+03:00")
+
+    def test_file_downloaded_by_hand_is_checked_without_the_site(self):
+        fetch = FakeFetch(errors={self.url: FetchError("Forbidden", status_code=403)})
+        result = run_check(fetch, table=self.table, sources_dir=self.dir, now=self.now,
+                           manual_files={"reso/technical.pdf": PDF})
+        reso = result["companies"][self.reso.name]
+        self.assertEqual(reso["status"], "ok")
+        self.assertEqual(reso["files"][0]["via"], "manual")
+
     def test_company_status_priority(self):
         unchanged = {"status": "unchanged"}
         self.assertEqual(company_status([unchanged], []), "ok")
