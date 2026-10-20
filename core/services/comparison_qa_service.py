@@ -222,6 +222,8 @@ class ComparisonQAService:
 
         message = str(sales.get("client_message") or "")
         if advantages:
+            # Advantages may quote both companies; bonus lines quote only the
+            # first company's own accepted conditions.
             allowed_numbers = set(
                 re.findall(
                     r"\d+(?:[.,]\d+)?",
@@ -229,7 +231,12 @@ class ComparisonQAService:
                         str(item.get("own_value") or "")
                         + " "
                         + str(item.get("competitor_value") or "")
-                        for item in advantages[:3]
+                        for item in advantages
+                    )
+                    + " "
+                    + " ".join(
+                        str(item.get("own_value") or "")
+                        for item in sales.get("comparisons") or []
                     ),
                 )
             )

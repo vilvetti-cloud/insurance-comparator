@@ -150,8 +150,9 @@ class SalesInsightsSalesMessageTests(unittest.TestCase):
             field_labels={"franchise": "Франшиза"},
         )
         message = result["client_message"]
-        self.assertIn("Франшиза отсутствует", message)
-        self.assertIn("полезное условие", message)
+        self.assertIn("Без франшизы", message)
+        self.assertIn("Что вы получаете в Первая страховая", message)
+        self.assertNotIn("Почему Первая страховая лучше", message)
         self.assertNotIn("GAP предусмотрен", message)
         self.assertNotIn("тогда как", message)
         self.assertNotIn("в отличие от", message)
@@ -166,6 +167,71 @@ class SalesInsightsSalesMessageTests(unittest.TestCase):
         )
         self.assertNotIn("полезное условие по параметру", result["client_message"])
         self.assertNotIn("GAP предусмотрен", result["client_message"])
+
+    def _structured_result(self):
+        return self.service.analyze(
+            company="РЕСО-Гарантия",
+            competitor="ВСК",
+            data={
+                # Advantage: stated here, not stated at the competitor.
+                "gap": "GAP — отдельный дополнительный риск, который действует только при включении в договор.",
+                # Bonus: the same at both insurers.
+                "franchise": "Франшиза отсутствует",
+                # Competitor is better here: must not appear at all.
+                "terrorism": "Террористический акт прямо исключён из страхового покрытия.",
+            },
+            competitor_data={
+                "gap": "В проверенных официальных Правилах прямое условие GAP не найдено.",
+                "franchise": "Франшиза отсутствует",
+                "terrorism": "Террористический акт — отдельный дополнительный риск, который может быть включён в договор.",
+            },
+            field_labels={"gap": "GAP-страхование", "franchise": "Франшиза", "terrorism": "Терроризм"},
+        )
+
+    def test_message_lists_advantages_first_then_bonuses_then_call_to_action(self):
+        message = self._structured_result()["client_message"]
+        advantages = message.index("Почему РЕСО-Гарантия лучше, чем ВСК")
+        gap = message.index("GAP-защиту")
+        bonuses = message.index("А ещё в РЕСО-Гарантия")
+        franchise = message.index("Без франшизы")
+        call = message.index("Предлагаем оформить КАСКО в РЕСО-Гарантия")
+        self.assertLess(advantages, gap)
+        self.assertLess(gap, bonuses)
+        self.assertLess(bonuses, franchise)
+        self.assertLess(franchise, call)
+
+    def test_message_never_mentions_fields_where_competitor_is_better(self):
+        message = self._structured_result()["client_message"]
+        self.assertNotIn("террор", message.lower())
+
+    def test_message_uses_company_names_instead_of_role_words(self):
+        message = self._structured_result()["client_message"]
+        for role_word in ("первой страховой", "второй компании", "конкурент", "первой компании"):
+            self.assertNotIn(role_word, message.lower())
+        self.assertIn("у ВСК в правилах это прямо не прописано", message)
+
+    def test_bonus_ignores_caveat_sentences_and_unconfirmed_conditions(self):
+        feature = SalesInsightsService._client_feature
+        # The lead sentence states coverage; later caveats do not cancel it.
+        self.assertEqual(
+            feature(
+                "self_ignition",
+                "Самовозгорание ТС прямо включено в определение пожара. "
+                "Повреждения от неосторожного обращения с огнём исключены.",
+            ),
+            "Покрывается ущерб от самовозгорания автомобиля",
+        )
+        # Clause references such as «п. 59» do not cut the lead sentence short.
+        self.assertIsNone(feature(
+            "without_certificates",
+            "По п. 59 Правил страхователь обязан обратиться в компетентные органы.",
+        ))
+        self.assertIsNone(feature("drone", "Прямого покрытия БПЛА нет; есть падение предметов."))
+        self.assertIsNone(feature("payment_terms", "Льготный период 7 дней по уплате взноса."))
+        self.assertEqual(
+            feature("payment_terms", "Срок составляет 30 рабочих дней со дня получения последнего документа."),
+            "Понятные сроки урегулирования: до 30 рабочих дней после получения всех документов",
+        )
 
 if __name__ == "__main__":
     unittest.main()
