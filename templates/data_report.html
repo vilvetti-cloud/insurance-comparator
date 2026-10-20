@@ -1,31 +1,9 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Контроль данных — Страховой аналитик</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-</head>
-<body>
-  <header class="site-header">
-    <div class="app-shell site-header__inner">
-      <a class="brand" href="/">
-        <span class="brand__mark">РЕСО</span>
-        <span class="brand__copy">
-          <span class="brand__title">Страховой аналитик</span>
-          <span class="brand__subtitle">Контроль источников КАСКО</span>
-        </span>
-      </a>
+{% extends "base.html" %}
+{% block title %}Контроль данных — Страховой аналитик{% endblock %}
+{% block subtitle %}Контроль источников КАСКО{% endblock %}
+{% block page_class %}report-page{% endblock %}
 
-      <div class="header-actions">
-        <a class="header-link" href="/">Сравнение</a>
-        <span class="header-link header-link--active">Контроль данных</span>
-      </div>
-    </div>
-  </header>
-
-  <main class="page report-page">
-    <div class="app-shell">
+{% block content %}
       <section class="report-hero">
         <div>
           <div class="eyebrow">Контроль качества базы</div>
@@ -271,8 +249,4 @@
         </details>
         {% endfor %}
       </section>
-    </div>
-  </main>
-</body>
-</html>
-
+{% endblock %}

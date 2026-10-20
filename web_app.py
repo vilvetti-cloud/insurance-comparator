@@ -275,7 +275,12 @@ def data_report():
     snapshot = comparison_service.load_snapshot()
     report = (_json_data_report(snapshot) if snapshot.get("_data_source") == "normalized_json"
               else data_quality_report_service.load())
-    return render_template("data_report.html", report=report)
+    return render_template(
+        "data_report.html",
+        report=report,
+        active_section="report",
+        last_updated=snapshot.get("_last_updated", "Не обновлялось"),
+    )
 
 
 @app.route("/health")
