@@ -62,7 +62,7 @@
                 {% for item in sales.advantages %}
                   <li>
                     <strong>{{ item.label or item.title }}</strong>
-                    <p>{{ item.client_phrase or item.reason }}</p>
+                    <p>{{ item.message_line or item.client_phrase or item.reason }}</p>
                   </li>
                 {% endfor %}
               </ul>
@@ -73,7 +73,7 @@
                 {% for item in sales.conditional_advantages %}
                   <li>
                     <strong>{{ item.label or item.title }}</strong>
-                    <p>{{ item.client_phrase or item.reason }}</p>
+                    <p>{{ item.message_line or item.client_phrase or item.reason }}</p>
                   </li>
                 {% endfor %}
               </ul>

@@ -97,6 +97,9 @@ class SalesInsightsService:
             comparisons.append(comparison)
 
         cards = advantages + conditional_advantages
+        for card in cards:
+            # Same wording the client message uses, with real company names.
+            card["message_line"] = self._advantage_line(card, company, competitor)
         cautions: list[str] = []
         if not cards:
             cautions.append(
@@ -145,69 +148,231 @@ class SalesInsightsService:
         advantages: list[dict[str, Any]],
         comparisons: list[dict[str, Any]] | None = None,
     ) -> str:
-        phrases: list[str] = []
+        """Selling message the agent can paste to the client as is.
+
+        Structure: first every proven advantage of the first insurer over the
+        competitor, then every other positive condition of the first insurer as
+        a bonus (even when the competitor has the same one), then a call to
+        action. Fields where the competitor is better are never mentioned.
+        """
+        lines: list[str] = []
+        used_fields: set[str] = set()
         for item in advantages:
-            label = str(item.get("label") or item.get("title") or "условию").strip()
-            phrase = str(item.get("client_phrase") or item.get("reason") or "").strip()
-            phrase = phrase.replace("первой страховой", f"компании «{company}»").replace("конкурента", f"компании «{competitor}»")
-            if item.get("conditional"):
-                phrase = (
-                    f"По параметру «{label}» есть возможное преимущество {company}: "
-                    f"{phrase} Важно проверить, включено ли это условие в конкретный договор."
-                )
-            else:
-                phrase = f"По параметру «{label}»: {phrase}"
-            if phrase and phrase not in phrases:
-                phrases.append(phrase)
+            line = SalesInsightsService._advantage_line(item, company, competitor)
+            if line and line not in lines:
+                lines.append(line)
+                used_fields.add(str(item.get("field_key") or ""))
 
-        # Include independently useful first-insurer terms even when both
-        # insurers offer them. Phrase these as positive features, never as a
-        # comparative or unique advantage.
-        shared_features: list[str] = []
+        bonuses: list[str] = []
         for item in comparisons or []:
-            if item.get("outcome") != "equal":
-                continue
             key = str(item.get("field_key") or "")
-            value = str(item.get("own_value") or "").strip()
-            label = str(item.get("label") or item.get("title") or key).strip()
-            if not value or SalesInsightsService._value({"v": value}, "v") is None:
+            if key in used_fields or item.get("outcome") in {
+                "competitor_advantage", "conditional_competitor_advantage",
+            }:
                 continue
-            value_l = value.lower().replace("ё", "е")
-            # An absent franchise is a positive feature, not a coverage exclusion.
-            if key == "franchise":
-                positive = SalesInsightsService._franchise_none(value_l)
-            elif re.search(r"не предусмотрен|не покрывается|исключен|отсутствует|нет\\b|не входит", value_l):
-                continue
-            elif key in {"gap", "self_ignition", "terrorism", "drone", "tow_truck"}:
-                positive = SalesInsightsService._coverage_level_v2(key, value_l) in {1, 2}
-            elif key == "without_certificates":
-                positive = SalesInsightsService._without_documents_state_v2(value_l) == "positive"
-            elif key == "repair_type":
-                positive = bool(SalesInsightsService._repair_options_v2(value_l))
-            elif key == "payment_terms":
-                positive = bool(SalesInsightsService._payment_term(value_l))
-            else:
-                positive = False
-            if positive:
-                feature = f"Также у {company} предусмотрено полезное условие по параметру «{label}»: {value}."
-                if feature not in shared_features:
-                    shared_features.append(feature)
+            feature = SalesInsightsService._client_feature(key, str(item.get("own_value") or ""))
+            if feature and feature not in bonuses:
+                bonuses.append(feature)
 
-        all_phrases = phrases + shared_features
-        if not all_phrases:
+        if not lines and not bonuses:
             return (
                 f"В подтверждённых данных пока нет доказанного сравнительного преимущества {company} перед "
                 f"{competitor}. При этом окончательный выбор стоит делать по конкретной программе, "
                 "составу покрытия и цене."
             )
 
-        return SalesInsightsService._tidy_punctuation(
-            f"При сравнении {company} и {competitor} стоит обратить внимание на условия, "
-            "которые влияют на выплату и урегулирование. "
-            + " ".join(all_phrases)
-            + f" Если эти условия важны для вас, {company} стоит рассмотреть в первую очередь; "
-              "перед оформлением сверим их с выбранной программой и полисом."
+        parts = [
+            f"Здравствуйте! Мы сравнили для вас КАСКО {company} и {competitor} "
+            "по официальным правилам страхования обеих компаний."
+        ]
+        if lines:
+            parts.append(
+                f"Почему {company} лучше, чем {competitor}:\n"
+                + "\n".join(f"✅ {line}" for line in lines)
+            )
+        if bonuses:
+            heading = f"А ещё в {company}:" if lines else f"Что вы получаете в {company}:"
+            parts.append(heading + "\n" + "\n".join(f"• {feature}" for feature in bonuses))
+        parts.append(
+            f"Предлагаем оформить КАСКО в {company}: рассчитаем стоимость под ваш автомобиль "
+            "и ответим на все вопросы."
         )
+        return "\n\n".join(SalesInsightsService._tidy_punctuation(part) for part in parts)
+
+    @staticmethod
+    def _advantage_line(item: dict[str, Any], company: str, competitor: str) -> str:
+        """One client-facing sentence: our condition and why it beats the competitor."""
+        key = str(item.get("field_key") or "")
+        label = str(item.get("label") or item.get("title") or key).strip()
+        basis = str(item.get("comparison_basis") or "")
+        own = str(item.get("own_value") or "")
+        other_l = SalesInsightsService._normalized(str(item.get("competitor_value") or "")).replace("ё", "е")
+        feature = SalesInsightsService._client_feature(key, own)
+
+        if basis.endswith("_explicit_vs_not_stated_in_official_terms"):
+            tail = f"у {competitor} в правилах это прямо не прописано"
+            feature = feature or f"Условие «{label}» прямо закреплено в правилах {company}"
+        elif "_coverage_level_" in basis:
+            other_level = SalesInsightsService._coverage_level_v2(key, other_l)
+            tail = (
+                f"у {competitor} это исключено из покрытия" if other_level == 0
+                else f"у {competitor} это доступно только как дополнительная опция"
+            )
+        elif basis == "franchise_none_vs_present":
+            tail = f"у {competitor} франшиза предусмотрена"
+        elif basis.startswith("franchise_") and basis.endswith("_lower"):
+            feature, tail = "Франшиза меньше", f"у {competitor} её размер выше"
+        elif basis.startswith("payment_term_"):
+            feature = None
+            tail = ""
+        elif basis == "without_documents_positive_vs_negative":
+            tail = f"у {competitor} такой возможности нет"
+        elif basis in {"without_documents_higher_count"}:
+            tail = f"обращений без справок больше, чем у {competitor}"
+        elif "higher_limit" in basis:
+            tail = f"лимит выше, чем у {competitor}"
+        elif basis == "repair_option_set_superset":
+            tail = f"у {competitor} вариантов меньше"
+        else:
+            tail = ""
+
+        if feature and tail:
+            return f"{feature} — {tail}."
+        # Fall back to the comparison's own client phrase with neutral role
+        # names replaced by the real company names.
+        phrase = str(item.get("client_phrase") or item.get("reason") or "").strip()
+        for neutral, name in (
+            ("первой страховой", company), ("первой компании", company),
+            ("второй страховой", competitor), ("второй компании", competitor),
+            ("у конкурента", f"у {competitor}"), ("конкурента", competitor),
+        ):
+            phrase = phrase.replace(neutral, name)
+        phrase = re.sub(
+            r"\s*(?:Преимущество действует|Это преимущество работает|Это может дать|Сравнение не означает|"
+            r"конкретная форма)[^.]*\.", "", phrase,
+        ).strip()
+        return f"{label}: {SalesInsightsService._lower_first(phrase)}" if phrase else ""
+
+    @staticmethod
+    def _lower_first(text: str) -> str:
+        text = text.strip()
+        # Keep abbreviations such as GAP, СТОА or БПЛА as they are.
+        if len(text) > 1 and text[0].isupper() and not text[1].isupper():
+            return text[0].lower() + text[1:]
+        return text
+
+    # Phrases that make a condition read as absent, unconfirmed or excluded.
+    _NEGATIVE_LEAD = re.compile(
+        r"\bнет\b|не\s+установлен|не\s+указан|не\s+найден|не\s+подтвержд|прямо\s+не|"
+        r"не\s+назван|не\s+описан|не\s+раскрыт|не\s+покрыва|не\s+включ|не\s+предусмотр|"
+        r"исключ|не\s+подпада|не\s+связан"
+    )
+
+    @staticmethod
+    def _lead_sentence(value: str) -> str:
+        """The accepted answer's first sentence carries its main claim.
+
+        A sentence ends at a full stop followed by a capital letter, so clause
+        references such as «п. 12.5» or «ст. 68» do not cut it short.
+        """
+        text = " ".join(value.split())
+        match = re.search(r"(?<!\bп)(?<!\bпп)(?<!\bст)(?<!\bП)(?<!\bПп)(?<!\bСт)[.!?]\s+(?=[А-ЯЁA-Z«\"])", text)
+        lead = text[: match.start() + 1] if match else text
+        return lead.lower().replace("ё", "е")
+
+    @staticmethod
+    def _client_feature(key: str, value: str) -> str | None:
+        """Describe a positive condition of one insurer in plain client language.
+
+        Returns None unless the accepted answer clearly states a benefit. Only
+        the answer's lead sentence is read, because later sentences usually
+        list caveats and exclusions. Numbers are copied from the answer itself.
+        """
+        if SalesInsightsService._value({"v": value}, "v") is None:
+            return None
+        lead = SalesInsightsService._lead_sentence(value)
+        full = " ".join(value.split()).lower().replace("ё", "е")
+        if not lead or SalesInsightsService._is_unstated_condition(lead):
+            return None
+
+        if key == "franchise":
+            if SalesInsightsService._franchise_none(lead):
+                return "Без франшизы: ущерб возмещается без вычета собственного участия"
+            kinds = {
+                word[:6] for word in re.findall(r"[а-я]+", lead)
+                if word.startswith(("безусл", "условн", "динами", "агрега", "прогре", "пропор"))
+            }
+            if len(kinds) >= 2:
+                return "Гибкие условия по франшизе: можно выбрать подходящий вид франшизы"
+            return None
+
+        # Caveats in brackets do not cancel the main claim of the sentence.
+        if SalesInsightsService._NEGATIVE_LEAD.search(re.sub(r"\([^)]*\)", "", lead)):
+            return None
+
+        if key == "without_certificates":
+            if not re.search(r"без\s+(?:справ|документ)|не\s+предъявля\w*\s+(?:справ|документ)", lead):
+                return None
+            if re.search(r"опци|включени\w*\s+в\s+договор|наличи\w*\s+услови|дополнительн\w*\s+услови", lead):
+                return "Можно добавить в полис урегулирование части повреждений без справок из ГИБДД и полиции"
+            example = " (например, повреждённое стекло)" if re.search(r"стекл|остеклен", lead) else ""
+            return f"Часть повреждений{example} можно урегулировать без справок из ГИБДД и полиции"
+
+        if key in {"gap", "self_ignition", "terrorism", "drone"}:
+            level = SalesInsightsService._coverage_level_v2(key, lead)
+            if level not in {1, 2}:
+                return None
+            if level == 2:
+                return {
+                    "gap": "GAP-защита входит в покрытие: при угоне или полной гибели компенсируется разница в стоимости автомобиля",
+                    "self_ignition": "Покрывается ущерб от самовозгорания автомобиля",
+                    "terrorism": "Покрывается ущерб от террористического акта",
+                    "drone": "Покрывается ущерб от падения беспилотника (БПЛА)",
+                }[key]
+            return {
+                "gap": "Можно подключить GAP-защиту: при угоне или полной гибели компенсируется разница в стоимости автомобиля",
+                "self_ignition": "Риск самовозгорания можно включить в полис",
+                "terrorism": "Можно включить в полис защиту от террористического акта",
+                "drone": "Можно включить в полис защиту от ущерба беспилотниками (БПЛА)",
+            }[key]
+
+        if key == "tow_truck":
+            if not re.search(r"эвакуац|эвакуатор|транспортировк", lead):
+                return None
+            return "Расходы на эвакуацию автомобиля после страхового случая возмещаются"
+
+        if key == "repair_type":
+            options = SalesInsightsService._repair_options_v2(full)
+            names = [
+                name for option, name in (
+                    ("stoa", "ремонт на СТОА по направлению страховой"),
+                    ("dealer", "ремонт у официального дилера"),
+                    ("alternative_stoa", "ремонт на СТОА по вашему выбору"),
+                    ("nonpartner_stoa_with_consent", "ремонт на другой СТОА по согласованию"),
+                    ("cash", "денежная выплата"),
+                    ("replacement_property", "замена аналогичным имуществом"),
+                ) if option in options
+            ]
+            if len(names) < 2:
+                return None
+            return "Несколько вариантов возмещения: " + ", ".join(names)
+
+        if key == "payment_terms":
+            # One settlement deadline counted from the documents. Several
+            # different deadlines, premium instalments or notification periods
+            # are not a single promise to the client.
+            if re.search(r"взнос|уведомлен|подач\w*\s+заявлен", lead):
+                return None
+            if not re.search(r"срок|выплат|решени|направлен|рассмотрен", lead) or not re.search(r"документ", lead):
+                return None
+            terms = set(re.findall(r"(\d{1,3})\s*(рабоч\w*\s+дн|календарн\w*\s+дн)", lead))
+            if len(terms) != 1:
+                return None
+            amount, unit = terms.pop()
+            unit = "рабочих дней" if unit.startswith("рабоч") else "календарных дней"
+            return f"Понятные сроки урегулирования: до {amount} {unit} после получения всех документов"
+
+        return None
 
     @staticmethod
     def _tidy_punctuation(text: str) -> str:
