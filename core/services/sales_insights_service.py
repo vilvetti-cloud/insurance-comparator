@@ -182,7 +182,9 @@ class SalesInsightsService:
             )
 
         parts = [
-            f"Здравствуйте! Мы сравнили для вас КАСКО {company} и {competitor} "
+            # The agent writes in their own voice; the wording avoids
+            # grammatical gender because the agent's is not known.
+            f"Здравствуйте! Вот сравнение КАСКО {company} и {competitor} "
             "по официальным правилам страхования обеих компаний."
         ]
         if lines:
@@ -194,8 +196,8 @@ class SalesInsightsService:
             heading = f"А ещё в {company}:" if lines else f"Что вы получаете в {company}:"
             parts.append(heading + "\n" + "\n".join(f"• {feature}" for feature in bonuses))
         parts.append(
-            f"Предлагаем оформить КАСКО в {company}: рассчитаем стоимость под ваш автомобиль "
-            "и ответим на все вопросы."
+            f"Предлагаю оформить КАСКО в {company}: рассчитаю стоимость под ваш автомобиль "
+            "и отвечу на все вопросы."
         )
         return "\n\n".join(SalesInsightsService._tidy_punctuation(part) for part in parts)
 
