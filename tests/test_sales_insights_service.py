@@ -424,6 +424,23 @@ class UnifiedRuleTests(unittest.TestCase):
                 self.assertEqual(result["outcome"], "first_advantage")
                 self.assertEqual(result["comparison_basis"], f"{key}_explicit_vs_not_stated_in_official_terms")
 
+    def test_excluded_vs_not_stated_has_no_winner_for_every_coverage_field(self):
+        excluded = {
+            "gap": "GAP прямо исключён из покрытия.",
+            "self_ignition": "Самовозгорание прямо исключено из покрытия.",
+            "terrorism": "Террористический акт прямо исключён из покрытия.",
+            "drone": "Повреждения от БПЛА прямо исключены из покрытия.",
+        }
+        unstated = "Условие не указано в принятом официальном источнике"
+        for key, text in excluded.items():
+            for own, other in ((text, unstated), (unstated, text)):
+                with self.subTest(key=key, excluded_side="first" if own == text else "second"):
+                    result = self.analyze(key, own, other)
+                    self.assertEqual(result["outcome"], "equal")
+                    self.assertEqual(
+                        result["comparison_basis"], f"{key}_excluded_vs_not_stated_in_official_terms",
+                    )
+
     def test_identical_unconfirmed_wording_is_not_called_equal_for_any_coverage_field(self):
         for key, word in self.COVERAGE.items():
             with self.subTest(key=key):

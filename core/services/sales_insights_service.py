@@ -510,6 +510,23 @@ class SalesInsightsService:
         )
         return any(re.search(pattern, value) for pattern in patterns)
 
+    @classmethod
+    def _states_exclusion(cls, key: str, text: str, facts: Any = None) -> bool:
+        """The accepted answer explicitly excludes the condition.
+
+        Read the same way for every field: structured facts first, then the
+        field's own reading of the text (coverage level 0, or settlement
+        without documents explicitly not allowed).
+        """
+        if isinstance(facts, dict) and facts.get("state") == "excluded":
+            return True
+        comparator = cls._FIELD_COMPARATORS.get(key)
+        if comparator in {"_compare_coverage", "_compare_tow_truck"}:
+            return cls._coverage_level_v2(key, text) == 0
+        if comparator == "_compare_without_certificates":
+            return cls._without_documents_state_v2(cls._normalized(text).replace("ё", "е")) == "negative"
+        return False
+
     def _compare(self, *, key, label, company, competitor, own, other, own_facts=None, other_facts=None):
         own_l = self._normalized(own)
         other_l = self._normalized(other)
@@ -529,6 +546,16 @@ class SalesInsightsService:
             stated = other_l if own_unstated else own_l
             unstated = own_l if own_unstated else other_l
             first_wins = other_unstated
+            # An explicit exclusion is stated, but it is not a benefit: against
+            # a condition that is not stated at all, neither side wins.
+            stated_raw, stated_facts = (other, other_facts) if own_unstated else (own, own_facts)
+            if self._states_exclusion(key, stated_raw, stated_facts):
+                return self._comparison(
+                    key, label, "equal", f"{key}_excluded_vs_not_stated_in_official_terms",
+                    own, other,
+                    "У одной компании условие прямо исключено, у другой в правилах не указано: "
+                    "ни у одной из них нет подтверждённого преимущества.",
+                )
             outcome = "first_advantage" if first_wins else "competitor_advantage"
             basis = f"{key}_explicit_vs_not_stated_in_official_terms"
             reason = (
