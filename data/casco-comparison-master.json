@@ -1,6 +1,6 @@
 {
   "schema_version": "1.1",
-  "created_date": "2026-10-14",
+  "created_date": "2026-10-20",
   "purpose": "Customer-facing CASCO comparison from the 110-field official-PDF audit; 11 insurers x 10 parameters.",
   "source_method": "Official insurer PDFs and the repository's first-pass evidence audit. Missing mentions are not interpreted as exclusions; contract-dependent terms remain conditional.",
   "companies": [
