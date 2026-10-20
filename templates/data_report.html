@@ -4,6 +4,50 @@
 {% block page_class %}report-page{% endblock %}
 
 {% block content %}
+      <section id="source-check" class="report-hero source-check" aria-labelledby="source-check-title">
+        <div>
+          <div class="eyebrow">Ночная проверка сайтов страховых</div>
+          <h2 id="source-check-title">
+            {% if source_check.checked %}Проверено {{ source_check.checked }}{% else %}Проверка ещё не запускалась{% endif %}
+          </h2>
+          <p>
+            Каждую ночь в 06:00 по Москве файлы правил скачиваются с сайтов страховых и сравниваются
+            с сохранёнными копиями, а страницы страховых — проверяются на новые документы КАСКО.
+            Если что-то изменилось, ответы на сайте не меняются сами: компания помечается здесь,
+            и изменения разбираются вручную. Согласованные ответы действуют с {{ source_check.agreed or "—" }}.
+          </p>
+        </div>
+
+        {% if source_check.companies %}
+        <ul class="source-check__list">
+          {% for name, check in source_check.companies.items() %}
+          <li class="source-check__item source-check__item--{{ check.status }}">
+            <div class="source-check__head">
+              <strong>{{ name }}</strong>
+              <span class="source-check__status">{{ check.label }}</span>
+            </div>
+            {% if check.status == 'ok' %}
+              <span class="source-check__meta">Подтверждено {{ check.verified }}{% if check.pages_unavailable %} · страница со списком документов не открылась, новую редакцию по новой ссылке заметить нельзя{% endif %}</span>
+            {% else %}
+              {% if check.verified %}<span class="source-check__meta">Последний раз без изменений: {{ check.verified }}</span>{% endif %}
+              {% for file in check.changed_files %}
+                <span class="source-check__meta">Изменился файл: <a href="{{ file.url }}" target="_blank" rel="noopener">{{ file.file }} ↗</a></span>
+              {% endfor %}
+              {% for link in check.new_documents %}
+                <span class="source-check__meta">Новый документ на сайте: <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.title or link.url }} ↗</a></span>
+              {% endfor %}
+              {% if check.status == 'unavailable' %}
+                {% for file in check.files %}
+                  <span class="source-check__meta">{{ file.reason or "не проверено" }}: <a href="{{ file.url }}" target="_blank" rel="noopener">открыть файл правил ↗</a></span>
+                {% endfor %}
+              {% endif %}
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </section>
+
       <section class="report-hero">
         <div>
           <div class="eyebrow">Контроль качества базы</div>

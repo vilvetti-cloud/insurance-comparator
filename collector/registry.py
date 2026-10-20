@@ -56,7 +56,9 @@ INSURERS = (
         "Альфа",
         "https://www.alfastrah.ru/",
         "https://www.alfastrah.ru/individuals/auto/kasko/",
-        "https://www.alfastrah.ru/upload/iblock/464/464485b507cb3ecec4aa8cb7c87f932f.pdf",
+        # Main CASCO rules (alfa/technical.pdf). The .../464/... link is the
+        # separate GAP rules, see docs/source-urls.md.
+        "https://www.alfastrah.ru/upload/iblock/da8/6hxelk9vq4cnlhue3okjcluz1lowk2k0.pdf",
     ),
     InsurerConfig(
         "soglasie",

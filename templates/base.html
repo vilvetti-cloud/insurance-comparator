@@ -42,7 +42,10 @@
 
   <footer class="site-footer">
     <div class="app-shell site-footer__inner">
-      <span>Данные из официальных правил страхования · обновлено {{ last_updated or "—" }}</span>
+      <span>
+        Условия согласованы: {{ source_check.agreed or last_updated or "—" }}
+        {% if source_check.checked %} · Сайты страховых проверены: {{ source_check.checked }}{% endif %}
+      </span>
       <a class="text-link" href="/data-report">Источники и проверка данных</a>
     </div>
   </footer>

@@ -20,3 +20,7 @@
 | СберСтрахование | `sber/technical.pdf` | https://sberbankins.ru/upload/iblock/257/Pravila-dobrovolnogo-strakhovaniya-transportnykh-sredstv-_-85.1.pdf |
 | СберСтрахование | `sber/supporting/sber-349-2020.pdf` | https://sberbankins.ru/upload/iblock/750/-349-ot-25.11.2020.pdf |
 | Совкомбанк Страхование | `sovcom/technical.pdf` | https://sovcomins.ru/upload/pravila/kasko_11_23.pdf |
+| Югория | `yugoria/technical.pdf` | https://ugsk.ru/pravila/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%D0%9A%D0%90%D0%A1%D0%9A%D0%9E_04_%D1%80%D0%B5%D0%B4.9.0.pdf |
+
+Каждую ночь `scripts/check_sources.py` скачивает все файлы из этой таблицы и сравнивает их
+с копиями в `data/sources/`. Если ссылка меняется, обновите её здесь.

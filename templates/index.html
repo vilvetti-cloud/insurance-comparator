@@ -77,8 +77,17 @@
     </form>
 
     <p class="compare-card__foot">
-      <span class="status-dot" aria-hidden="true"></span>
-      <span>Данные обновлены: {{ last_updated }}</span>
+      {% if source_check.checked %}
+        <span class="status-dot {% if source_check.ok_count < source_check.total %}status-dot--partial{% endif %}" aria-hidden="true"></span>
+        <span>
+          Сайты страховых проверены {{ source_check.checked }}:
+          без изменений {{ source_check.ok_count }} из {{ source_check.total }}.
+          <a class="text-link" href="/data-report#source-check">Подробнее</a>
+        </span>
+      {% else %}
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Условия согласованы: {{ last_updated }}</span>
+      {% endif %}
     </p>
   </aside>
 </section>

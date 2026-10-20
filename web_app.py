@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from flask import Flask, jsonify, redirect, render_template, request
 
 from collector.registry import INSURERS
+from collector.source_watch import load_status as load_source_status
 from core.catalog import KASKO_FIELDS
 from core.services.comparison_service import ComparisonService
 from core.services.sales_insights_service import SalesInsightsService
@@ -10,6 +13,54 @@ from core.services.data_quality_report_service import DataQualityReportService
 
 
 app = Flask(__name__)
+
+SOURCE_STATUS_LABELS = {
+    "ok": "правила на сайте не менялись",
+    "changed": "на сайте новая редакция правил — ответы пока по прежней",
+    "unavailable": "сайт не дал проверить автоматически — проверьте вручную",
+}
+
+
+def _ru_date(value: str | None, with_time: bool = False) -> str | None:
+    """2026-10-20T06:00+03:00 -> 20.10.2026 в 06:00; 2026-10-14 -> 14.10.2026."""
+    if not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return moment.strftime("%d.%m.%Y в %H:%M" if with_time else "%d.%m.%Y")
+
+
+@app.context_processor
+def source_check_context() -> dict:
+    """Nightly source check (data/source-check.json) for every page."""
+    status = load_source_status() or {}
+    companies = {}
+    for name, item in (status.get("companies") or {}).items():
+        state = item.get("status", "unavailable")
+        new_documents = [
+            link for page in item.get("pages", []) for link in page.get("new_documents", [])
+        ]
+        companies[name] = {
+            "status": state,
+            "label": SOURCE_STATUS_LABELS.get(state, SOURCE_STATUS_LABELS["unavailable"]),
+            "verified": _ru_date(item.get("verified_at"), with_time=True),
+            "changed_files": [f for f in item.get("files", []) if f.get("status") == "changed"],
+            "new_documents": new_documents,
+            "files": item.get("files", []),
+            "pages_unavailable": sum(p.get("status") == "unavailable" for p in item.get("pages", [])),
+        }
+    snapshot_date = comparison_service.load_snapshot().get("_last_updated")
+    return {
+        "source_check": {
+            "checked": _ru_date(status.get("checked_at"), with_time=True),
+            "agreed": _ru_date(snapshot_date),
+            "companies": companies,
+            "ok_count": sum(c["status"] == "ok" for c in companies.values()),
+            "total": len(companies),
+        }
+    }
 
 comparison_service = ComparisonService()
 sales_insights_service = SalesInsightsService()

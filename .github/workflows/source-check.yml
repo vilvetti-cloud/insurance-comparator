@@ -1,0 +1,42 @@
+name: Nightly rules check on insurer sites
+on:
+  schedule:
+    # 06:00 Moscow time.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: source-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Download rules from insurer sites and compare with our copies
+        run: python scripts/check_sources.py
+      - name: Publish the result to the site
+        # The site shows the check date even when nothing changed, so the
+        # result is committed every night; the push redeploys the site.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/source-check.json
+          if git diff --cached --quiet; then
+            echo "Nothing to publish"
+            exit 0
+          fi
+          git commit -m "Ночная проверка правил на сайтах страховых"
+          git pull --rebase origin main
+          git push origin HEAD:main

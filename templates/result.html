@@ -61,6 +61,22 @@
   </div>
 </section>
 
+{% set notices = [] %}
+{% for name in [company1, company2] %}
+  {% set check = source_check.companies.get(name) %}
+  {% if check and check.status != 'ok' %}{% set _ = notices.append((name, check)) %}{% endif %}
+{% endfor %}
+{% if notices %}
+<section class="source-notices" aria-label="Проверка правил на сайтах">
+  {% for name, check in notices %}
+    <p class="source-notice source-notice--{{ check.status }}">
+      <strong>{{ name }}:</strong> {{ check.label }}.
+      <a class="text-link" href="/data-report#source-check">Подробнее</a>
+    </p>
+  {% endfor %}
+</section>
+{% endif %}
+
 <section class="insight-grid" aria-label="Итоги сравнения">
   <article class="insight-card insight-card--advantages">
     <p class="insight-card__eyebrow">Для сотрудника</p>
