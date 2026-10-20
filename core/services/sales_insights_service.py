@@ -201,13 +201,20 @@ class SalesInsightsService:
                 "составу покрытия и цене."
             )
 
-        return (
+        return SalesInsightsService._tidy_punctuation(
             f"При сравнении {company} и {competitor} стоит обратить внимание на условия, "
             "которые влияют на выплату и урегулирование. "
             + " ".join(all_phrases)
             + f" Если эти условия важны для вас, {company} стоит рассмотреть в первую очередь; "
               "перед оформлением сверим их с выбранной программой и полисом."
         )
+
+    @staticmethod
+    def _tidy_punctuation(text: str) -> str:
+        """Collapse doubled sentence punctuation produced by joining phrases."""
+        text = re.sub(r"\.(?:\s*\.)+", ".", text)
+        text = re.sub(r"([!?])\s*\.", r"\1", text)
+        return re.sub(r"\s{2,}", " ", text).strip()
 
     @staticmethod
     def _normalized(text: str) -> str:
