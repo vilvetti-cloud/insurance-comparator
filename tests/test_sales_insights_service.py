@@ -463,6 +463,16 @@ class UnifiedRuleTests(unittest.TestCase):
         )["comparisons"][0]
         self.assertEqual(result["outcome"], "first_advantage")
 
+    def test_legal_reservation_is_not_read_as_unstated_condition(self):
+        from core.condition_facts import build_condition_facts
+        for text in (
+            "Предусмотрены условная и безусловная франшиза; если иное не установлено договором, франшиза безусловная.",
+            "Франшиза может быть условной или безусловной; если вид не указан — безусловная.",
+        ):
+            with self.subTest(text=text):
+                self.assertFalse(SalesInsightsService._is_unstated_condition(text))
+                self.assertNotEqual(build_condition_facts("franchise", text)["state"], "not_established")
+
     def test_both_not_stated_is_equal_for_every_coverage_field(self):
         unstated = "Условие не указано в принятом официальном источнике"
         for key in self.COVERAGE:

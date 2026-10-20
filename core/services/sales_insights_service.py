@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from core.condition_facts import without_reservations
+
 
 @dataclass(frozen=True)
 class PaymentTerm:
@@ -393,12 +395,18 @@ class SalesInsightsService:
 
     @staticmethod
     def _payment_term(text: str) -> PaymentTerm | None:
+        # Clause references («п. 14.1», «ст. 62») do not end a sentence.
         sentences = [
             part.strip()
-            for part in re.split(r"(?<=[.!?;])\s+", text)
+            for part in re.split(r"(?<!\bп\.)(?<!\bпп\.)(?<!\bст\.)(?<=[.!?;])\s+", text)
             if part.strip()
         ]
+        term_pattern = r"(\d{1,3})\s*(?:\([а-я ]+\)\s*)?(рабоч\w*\s+дн|календарн\w*\s+дн|дн|час)"
         for sentence in sentences:
+            # Several different deadlines in one sentence describe stages
+            # (decision, then payment); none of them alone is comparable.
+            if len(set(re.findall(term_pattern, sentence))) > 1:
+                continue
             match = re.search(
                 r"(?:до\s+|в\s+течение\s+)?(\d{1,3})\s*"
                 r"(рабоч\w*\s+дн|календарн\w*\s+дн|дн|час)",
@@ -484,7 +492,7 @@ class SalesInsightsService:
         optional benefit as absent when the answer positively describes how to
         add it.
         """
-        value = SalesInsightsService._normalized(text).replace("ё", "е")
+        value = without_reservations(SalesInsightsService._normalized(text).replace("ё", "е"))
         patterns = (
             # Direct absence / non-confirmation in the accepted official source.
             r"услови\w* не указан",

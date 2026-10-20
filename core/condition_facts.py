@@ -84,7 +84,22 @@ def lead_sentence(text: str) -> str:
     return text[: match.start() + 1] if match else text
 
 
+# Standard legal reservations ("если иное не установлено договором", "если вид
+# не указан — безусловная") describe a default, not a missing condition.
+_RESERVATION = re.compile(
+    r"(?:если|когда)\s+(?:иное\s+)?(?:[а-яё]+\s+){0,3}?не\s+"
+    r"(?:установлен|указан|предусмотрен|оговорен|согласован)\w*"
+    r"(?:\s+(?:иное|договором|в\s+договоре|соглашением\s+сторон|правилами|полисом))*",
+    re.IGNORECASE,
+)
+
+
+def without_reservations(text: str) -> str:
+    return _RESERVATION.sub(" ", text)
+
+
 def _statement_state(text: str) -> str | None:
+    text = without_reservations(text)
     if _NOT_ESTABLISHED.search(text):
         return "not_established"
     if _EXCLUSION.search(text):

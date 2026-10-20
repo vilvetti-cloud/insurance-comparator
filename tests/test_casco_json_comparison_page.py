@@ -13,9 +13,9 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertEqual(health.get_json()["dataset_version"], "1.1")
         audit_counts = health.get_json()["audit_status_counts"]
         self.assertEqual(sum(audit_counts.values()), 110)
-        self.assertEqual(audit_counts["found"], 83)
-        self.assertEqual(audit_counts["partial"], 23)
-        self.assertEqual(audit_counts["not_found"], 4)
+        self.assertEqual(audit_counts["found"], 96)
+        self.assertEqual(audit_counts["partial"], 11)
+        self.assertEqual(audit_counts["not_found"], 3)
         response = client.get(
             "/compare",
             query_string={
@@ -129,8 +129,8 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("Официальный сайт", page)
         self.assertIn("sovcomins.ru/product/articles-car/gap-strakhovanie-v-kasko/", page)
         self.assertIn("110 / 110", page)
-        self.assertIn("83 цитаты отмечены как found, 23 — partial", page)
-        self.assertIn("4 — not_found в проверенном фрагменте", page)
+        self.assertIn("96 цитат отмечены как found, 11 — partial", page)
+        self.assertIn("3 — not_found в проверенном фрагменте", page)
         self.assertIn("фиксируется как преимущество первой компании", page)
         # Summary counters do not overlap: 48 + 57 + 5 = 110 cells.
         self.assertNotIn("контекстных ответов ИИ на проверке", page)
