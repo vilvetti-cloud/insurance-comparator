@@ -34,7 +34,7 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("GAP-страхование", page)
         # GAP is stated in RESO's official terms and not in VSK's: RESO's advantage.
         self.assertIn("Можно подключить GAP-защиту", page)
-        self.assertIn("у ВСК в правилах это прямо не прописано", page)
+        self.assertIn("у ВСК этого нет", page)
         self.assertNotIn("второй компании", page)
         self.assertNotIn("GAP прямо исключён", page)
         self.assertNotIn("GAP прямо исключено", page)

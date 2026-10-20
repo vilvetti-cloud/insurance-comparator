@@ -210,7 +210,9 @@ class SalesInsightsService:
         feature = SalesInsightsService._client_feature(key, own)
 
         if basis.endswith("_explicit_vs_not_stated_in_official_terms"):
-            tail = f"у {competitor} в правилах это прямо не прописано"
+            # Owner's rule: what the competitor's rules do not clearly grant,
+            # the client cannot count on, so it is presented as absent.
+            tail = f"у {competitor} этого нет"
             feature = feature or f"Условие «{label}» прямо закреплено в правилах {company}"
         elif "_coverage_level_" in basis:
             other_level = SalesInsightsService._coverage_level_v2(key, other)
@@ -319,7 +321,9 @@ class SalesInsightsService:
             return f"Часть повреждений{example} можно урегулировать без справок из ГИБДД и полиции"
 
         if key in {"gap", "self_ignition", "terrorism", "drone"}:
-            level = SalesInsightsService._coverage_level_v2(key, lead)
+            # The coverage reader itself prefers the lead claim and lets later
+            # sentences refine it (e.g. "insured only if the contract says so").
+            level = SalesInsightsService._coverage_level_v2(key, value)
             if level not in {1, 2}:
                 return None
             if level == 2:
@@ -1159,9 +1163,18 @@ class SalesInsightsService:
             "drone": r"(?:бпла|дрон|беспилот)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,100}(?:бпла|дрон|беспилот)",
             "tow_truck": r"эвакуац\w*[^.;]{0,100}(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)|(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)[^.;]{0,100}эвакуац",
         }
+        # "Insured only if the contract states it" offers the risk as an
+        # opt-in: the client can have it, so it reads as an add-on (level 1).
+        # The boilerplate "unless the contract provides otherwise" after an
+        # exclusion is not such an offer and stays an exclusion.
+        opt_in = (
+            r"застрахован\w*\s+только[^.;]{0,60}(?:если|при)[^.;]{0,40}"
+            r"(?:прям\w*\s+)?(?:указан|включен|включени|предусмотрен)\w*[^.;]{0,30}договор|"
+            r"только\s+при\s+прям\w*\s+включени\w*\s+в\s+договор"
+        )
         # Do not let "can be included by addendum" be mistaken for a blanket
         # exclusion just because the sentence also contains "not included".
-        optional = bool(re.search(
+        optional = bool(re.search(opt_in + "|" +
             r"только\s+(?:при\s+)?(?:наличии|оформлении|включении)\s+(?:отдельн\w*\s+)?(?:дополнительн\w*\s+)?(?:соглашени\w*|опци\w*|услови\w*)|"
             r"может\s+быть\s+включен\w*[^.;]{0,80}(?:договор|соглашени|опци)|"
             r"может\s+быть\s+застрахован\w*|"
@@ -1178,7 +1191,7 @@ class SalesInsightsService:
         ))
         # A specific opt-in exception takes precedence over broad exclusion
         # wording; all other explicit exclusions remain level 0.
-        if optional and re.search(r"кроме[^.;]{0,100}(?:соглашени|договор)|может\s+быть\s+включен|можно\s+включить|только\s+(?:при\s+)?(?:наличии|оформлении|включении)", text):
+        if optional and re.search(opt_in + r"|кроме[^.;]{0,100}(?:соглашени|договор)|может\s+быть\s+включен|можно\s+включить|только\s+(?:при\s+)?(?:наличии|оформлении|включении)", text):
             return 1
         pattern = negative_patterns.get(key)
         if pattern and re.search(pattern, text):
