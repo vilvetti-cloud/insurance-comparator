@@ -53,6 +53,9 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             prepared[f"{field}_sales_eligible"] = bool(
                 field_data.get("sales_eligible", False)
             )
+            # Structured facts decide whether the condition is stated at all;
+            # SalesInsightsService falls back to reading the text without them.
+            prepared[f"{field}_facts"] = field_data.get("facts")
             diagnostic = contextual.get(field, {})
             failure = diagnostic.get("analysis_validation")
             has_accepted_value = (
@@ -75,6 +78,7 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
             prepared[f"{field}_quality_label"] = "Не найдено"
             prepared[f"{field}_quality_reason"] = "Значение отсутствует."
             prepared[f"{field}_sales_eligible"] = False
+            prepared[f"{field}_facts"] = None
             diagnostic = contextual.get(field, {})
             failure = diagnostic.get("analysis_validation")
             prepared[f"{field}_review_note"] = (

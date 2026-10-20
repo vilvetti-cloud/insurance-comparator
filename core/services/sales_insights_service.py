@@ -206,14 +206,14 @@ class SalesInsightsService:
         label = str(item.get("label") or item.get("title") or key).strip()
         basis = str(item.get("comparison_basis") or "")
         own = str(item.get("own_value") or "")
-        other_l = SalesInsightsService._normalized(str(item.get("competitor_value") or "")).replace("ё", "е")
+        other = str(item.get("competitor_value") or "")
         feature = SalesInsightsService._client_feature(key, own)
 
         if basis.endswith("_explicit_vs_not_stated_in_official_terms"):
             tail = f"у {competitor} в правилах это прямо не прописано"
             feature = feature or f"Условие «{label}» прямо закреплено в правилах {company}"
         elif "_coverage_level_" in basis:
-            other_level = SalesInsightsService._coverage_level_v2(key, other_l)
+            other_level = SalesInsightsService._coverage_level_v2(key, other)
             tail = (
                 f"у {competitor} это исключено из покрытия" if other_level == 0
                 else f"у {competitor} это доступно только как дополнительная опция"
@@ -510,6 +510,23 @@ class SalesInsightsService:
         )
         return any(re.search(pattern, value) for pattern in patterns)
 
+    @classmethod
+    def _states_exclusion(cls, key: str, text: str, facts: Any = None) -> bool:
+        """The accepted answer explicitly excludes the condition.
+
+        Read the same way for every field: structured facts first, then the
+        field's own reading of the text (coverage level 0, or settlement
+        without documents explicitly not allowed).
+        """
+        if isinstance(facts, dict) and facts.get("state") == "excluded":
+            return True
+        comparator = cls._FIELD_COMPARATORS.get(key)
+        if comparator in {"_compare_coverage", "_compare_tow_truck"}:
+            return cls._coverage_level_v2(key, text) == 0
+        if comparator == "_compare_without_certificates":
+            return cls._without_documents_state_v2(cls._normalized(text).replace("ё", "е")) == "negative"
+        return False
+
     def _compare(self, *, key, label, company, competitor, own, other, own_facts=None, other_facts=None):
         own_l = self._normalized(own)
         other_l = self._normalized(other)
@@ -529,6 +546,16 @@ class SalesInsightsService:
             stated = other_l if own_unstated else own_l
             unstated = own_l if own_unstated else other_l
             first_wins = other_unstated
+            # An explicit exclusion is stated, but it is not a benefit: against
+            # a condition that is not stated at all, neither side wins.
+            stated_raw, stated_facts = (other, other_facts) if own_unstated else (own, own_facts)
+            if self._states_exclusion(key, stated_raw, stated_facts):
+                return self._comparison(
+                    key, label, "equal", f"{key}_excluded_vs_not_stated_in_official_terms",
+                    own, other,
+                    "У одной компании условие прямо исключено, у другой в правилах не указано: "
+                    "ни у одной из них нет подтверждённого преимущества.",
+                )
             outcome = "first_advantage" if first_wins else "competitor_advantage"
             basis = f"{key}_explicit_vs_not_stated_in_official_terms"
             reason = (
@@ -556,7 +583,7 @@ class SalesInsightsService:
                 "Для этого поля не задано правило чтения значения.",
             )
         if own_l == other_l and comparator == "_compare_coverage":
-            level = self._coverage_level_v2(key, own_l)
+            level = self._coverage_level_v2(key, own)
             if level is None:
                 return self._comparison(
                     key, label, "incomparable", f"{key}_same_text_unconfirmed",
@@ -714,8 +741,8 @@ class SalesInsightsService:
         )
 
     def _compare_coverage(self, key, label, own, other, own_l, other_l):
-        own_level = self._coverage_level_v2(key, own_l)
-        other_level = self._coverage_level_v2(key, other_l)
+        own_level = self._coverage_level_v2(key, own)
+        other_level = self._coverage_level_v2(key, other)
 
         # A condition that is absent from the official terms is handled by the
         # shared rule in _compare(). Here both sides state something; if one
@@ -869,8 +896,8 @@ class SalesInsightsService:
         )
 
     def _compare_tow_truck(self, label, own, other, own_l, other_l):
-        own_level = self._coverage_level_v2("tow_truck", own_l)
-        other_level = self._coverage_level_v2("tow_truck", other_l)
+        own_level = self._coverage_level_v2("tow_truck", own)
+        other_level = self._coverage_level_v2("tow_truck", other)
         if own_level is not None and other_level is not None and own_level != other_level:
             if own_level > other_level:
                 return self._advantage(
@@ -1059,6 +1086,14 @@ class SalesInsightsService:
             return NumericValue(float(raw), "rubles")
         return None
 
+    _COVERAGE_TERMS = {
+        "gap": r"\bgap\b|гэп|сохран\w*\s+стоим",
+        "self_ignition": r"самовозгор|возгоран",
+        "terrorism": r"террор",
+        "drone": r"бпла|дрон|беспилот",
+        "tow_truck": r"эвакуац|эвакуатор",
+    }
+
     @staticmethod
     def _coverage_level_v2(key: str, text: str) -> int | None:
         """Return a conservative availability level for a specific coverage.
@@ -1066,19 +1101,32 @@ class SalesInsightsService:
         0 = explicitly excluded; 1 = optional/add-on/extra agreement; 2 = included
         in the described cover. Mere mention of a separate product/risk is not
         evidence that it is included in the base policy.
-        """
-        terms = {
-            "gap": r"\bgap\b|гэп|сохран\w*\s+стоим",
-            "self_ignition": r"самовозгор|возгоран",
-            "terrorism": r"террор",
-            "drone": r"бпла|дрон|беспилот",
-            "tow_truck": r"эвакуац|эвакуатор",
-        }
-        text = text.lower().replace("ё", "е")
-        term = terms.get(key)
-        if not term or not re.search(term, text):
-            return None
 
+        Read the same way for every coverage field: when the answer's lead
+        sentence speaks about the risk, its claim is read first. Later
+        sentences usually list caveats ("fire caused by careless handling is
+        excluded"), so they may refine a lead that cannot be graded but never
+        turn it into an exclusion. Pass the original (not lower-cased) text
+        so sentence boundaries can be found.
+        """
+        full = " ".join(text.split()).lower().replace("ё", "е")
+        term = SalesInsightsService._COVERAGE_TERMS.get(key)
+        if not term or not re.search(term, full):
+            return None
+        if SalesInsightsService._coverage_unconfirmed(key, full):
+            return None
+        lead = SalesInsightsService._lead_sentence(text)
+        if not re.search(term, lead):
+            return SalesInsightsService._coverage_grade(key, full)
+        level = SalesInsightsService._coverage_grade(key, lead)
+        if level is not None:
+            return level
+        level = SalesInsightsService._coverage_grade(key, full)
+        return None if level == 0 else level
+
+    @staticmethod
+    def _coverage_unconfirmed(key: str, text: str) -> bool:
+        """Wording anywhere in the answer that leaves the coverage unconfirmed."""
         # Generic falling-object wording or an explicit statement that drone
         # coverage is unconfirmed does not establish an optional drone risk.
         if key == "drone" and re.search(
@@ -1088,17 +1136,22 @@ class SalesInsightsService:
             r"(?:не\s+подтвержден|не\s+установлен)[^.;]{0,100}(?:отдельн\w*\s+риск|бпла|дрон))",
             text,
         ):
-            return None
+            return True
 
         # Conditional wording such as "may not be covered" is not an explicit
         # exclusion and must not be ranked as level 0.
-        if re.search(
+        return bool(re.search(
             r"(?:может|могут)\s+(?:не\s+покрыв|не\s+включ|быть\s+исключ)|"
             r"может\s+быть\s+(?:исключен|исключён|не\s+включен|не\s+включён)",
             text,
-        ):
-            return None
+        ))
 
+    @staticmethod
+    def _coverage_grade(key: str, text: str) -> int | None:
+        """Grade one stretch of lower-cased text: 0, 1, 2 or None."""
+        # "May be covered" is a hedge, not an explicit level either way.
+        if re.search(r"(?:может|могут)\s+(?:быть\s+)?покры(?:ва|т)", text):
+            return None
         negative_patterns = {
             "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
             "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",

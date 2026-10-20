@@ -424,6 +424,23 @@ class UnifiedRuleTests(unittest.TestCase):
                 self.assertEqual(result["outcome"], "first_advantage")
                 self.assertEqual(result["comparison_basis"], f"{key}_explicit_vs_not_stated_in_official_terms")
 
+    def test_excluded_vs_not_stated_has_no_winner_for_every_coverage_field(self):
+        excluded = {
+            "gap": "GAP прямо исключён из покрытия.",
+            "self_ignition": "Самовозгорание прямо исключено из покрытия.",
+            "terrorism": "Террористический акт прямо исключён из покрытия.",
+            "drone": "Повреждения от БПЛА прямо исключены из покрытия.",
+        }
+        unstated = "Условие не указано в принятом официальном источнике"
+        for key, text in excluded.items():
+            for own, other in ((text, unstated), (unstated, text)):
+                with self.subTest(key=key, excluded_side="first" if own == text else "second"):
+                    result = self.analyze(key, own, other)
+                    self.assertEqual(result["outcome"], "equal")
+                    self.assertEqual(
+                        result["comparison_basis"], f"{key}_excluded_vs_not_stated_in_official_terms",
+                    )
+
     def test_identical_unconfirmed_wording_is_not_called_equal_for_any_coverage_field(self):
         for key, word in self.COVERAGE.items():
             with self.subTest(key=key):
@@ -431,3 +448,111 @@ class UnifiedRuleTests(unittest.TestCase):
                 result = self.analyze(key, text, text)
                 self.assertEqual(result["outcome"], "incomparable")
                 self.assertEqual(result["comparison_basis"], f"{key}_same_text_unconfirmed")
+
+    # Every coverage field, tow_truck included, reads its level the same way.
+    COVERAGE_WORDS = {
+        "gap": "GAP", "self_ignition": "Самовозгорание", "terrorism": "Террористический акт",
+        "drone": "Ущерб от БПЛА", "tow_truck": "Эвакуация",
+    }
+
+    def test_lead_claim_decides_coverage_level_for_every_coverage_field(self):
+        for key, word in self.COVERAGE_WORDS.items():
+            with self.subTest(key=key):
+                text = f"{word} прямо включено в покрытие. Исключения: {word} при неосторожном обращении исключено."
+                self.assertEqual(SalesInsightsService._coverage_level_v2(key, text), 2)
+
+    def test_caveat_never_turns_a_neutral_lead_into_an_exclusion_for_every_coverage_field(self):
+        for key, word in self.COVERAGE_WORDS.items():
+            with self.subTest(key=key):
+                text = f"{word} описано в правилах. Исключения: {word} при неосторожном обращении исключено."
+                self.assertIsNone(SalesInsightsService._coverage_level_v2(key, text))
+
+    def test_exclusion_in_the_lead_is_still_an_exclusion_for_every_coverage_field(self):
+        for key, word in self.COVERAGE_WORDS.items():
+            with self.subTest(key=key):
+                text = f"{word} исключено из покрытия. Подробности см. в п. 4.5."
+                self.assertEqual(SalesInsightsService._coverage_level_v2(key, text), 0)
+
+    def test_hedged_may_be_covered_wording_is_not_a_level_for_every_coverage_field(self):
+        for key, word in self.COVERAGE_WORDS.items():
+            with self.subTest(key=key):
+                text = f"Повреждение может покрываться. При этом {word} исключено, если причина — брак."
+                self.assertIsNone(SalesInsightsService._coverage_level_v2(key, text))
+
+    def test_included_lead_beats_explicit_exclusion_for_every_coverage_field(self):
+        for key, word in self.COVERAGE.items():
+            with self.subTest(key=key):
+                own = f"{word} прямо включено в покрытие. Исключения: {word} при умысле исключено."
+                other = f"{word} исключено из покрытия."
+                result = self.analyze(key, own, other)
+                self.assertEqual(result["outcome"], "first_advantage")
+                self.assertEqual(result["comparison_basis"], f"{key}_coverage_level_2_vs_0")
+
+
+class SelfIgnitionLeadClaimTests(unittest.TestCase):
+    """Accepted РЕСО answer: inclusion first, caveats about careless fire later."""
+
+    RESO = (
+        "Самовозгорание ТС прямо включено в определение пожара и, следовательно, подпадает под риск «Ущерб». "
+        "Исключения: повреждения, полученные в результате возгорания, вызванного неосторожным обращением "
+        "водителя и пассажиров, и повреждения в результате взрыва газового баллона/бытовых приборов в салоне "
+        "указаны как нестраховые события (см. п. 4.1.1.1 п.14–15 на стр.7), то есть внутренние неисправности, "
+        "приведшие к возгоранию, покрываются (самовозгорание включено), но следы неосторожного обращения и "
+        "определённые взрывы прямо исключены."
+    )
+    SBER = (
+        "П. 4.3.1.3 исключает внутренние причины возгорания из стандартного покрытия по пожару, если договором "
+        "не предусмотрено иное. Требуется проверка включённых рисков и исключений конкретного полиса."
+    )
+
+    def compare(self, own, other):
+        return SalesInsightsService().analyze(
+            company="РЕСО-Гарантия", competitor="Другая", data={"self_ignition": own},
+            competitor_data={"self_ignition": other}, field_labels={"self_ignition": "Самовозгорание"},
+        )["comparisons"][0]
+
+    def test_reso_self_ignition_is_read_as_included(self):
+        self.assertEqual(SalesInsightsService._coverage_level_v2("self_ignition", self.RESO), 2)
+
+    def test_reso_wins_over_an_insurer_that_excludes_self_ignition(self):
+        result = self.compare(self.RESO, self.SBER)
+        self.assertEqual(result["outcome"], "first_advantage")
+        self.assertEqual(result["comparison_basis"], "self_ignition_coverage_level_2_vs_0")
+
+
+class StructuredFactsWiringTests(unittest.TestCase):
+    def setUp(self):
+        import web_app
+
+        self.web_app = web_app
+        self.snapshot = web_app.comparison_service.load_snapshot()
+
+    def test_prepared_company_data_carries_structured_facts(self):
+        prepared = self.web_app._prepare_company_data(self.snapshot, "РЕСО-Гарантия")
+        for key in self.web_app.FIELD_KEYS:
+            with self.subTest(key=key):
+                self.assertEqual(prepared[f"{key}_facts"]["field_key"], key)
+
+    def test_site_comparison_no_longer_calls_reso_and_vsk_self_ignition_both_excluded(self):
+        w = self.web_app
+        result = w.sales_insights_service.analyze(
+            company="РЕСО-Гарантия", competitor="ВСК",
+            data=w._prepare_company_data(self.snapshot, "РЕСО-Гарантия"),
+            competitor_data=w._prepare_company_data(self.snapshot, "ВСК"),
+            field_labels=w.FIELD_LABELS,
+        )
+        by_key = {item["field_key"]: item for item in result["comparisons"]}
+        self.assertNotEqual(by_key["self_ignition"]["outcome"], "equal")
+
+    def test_facts_decide_whether_a_condition_is_stated(self):
+        # The text alone reads as stated; the accepted facts say it is not.
+        own = {"payment_terms": "Срок выплаты — 15 рабочих дней.",
+               "payment_terms_facts": {"state": "described"}}
+        other = {"payment_terms": "Указаны сроки подачи заявления.",
+                 "payment_terms_facts": {"state": "not_established"}}
+        result = SalesInsightsService().analyze(
+            company="A", competitor="B", data=own, competitor_data=other,
+            field_labels={"payment_terms": "Срок выплаты"},
+        )["comparisons"][0]
+        self.assertEqual(result["comparison_basis"], "payment_terms_explicit_vs_not_stated_in_official_terms")
+        self.assertEqual(result["outcome"], "first_advantage")
