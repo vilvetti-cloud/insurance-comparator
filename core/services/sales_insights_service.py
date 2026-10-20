@@ -380,51 +380,62 @@ class SalesInsightsService:
                     client_phrase=f"В официальных условиях первой страховой параметр «{label}» прямо указан; в условиях второй компании он не указан.",
                 )
             return self._comparison(key, label, outcome, basis, own, other, reason)
-        if own_l == other_l:
-            if key in {"self_ignition", "terrorism", "drone"}:
-                level = self._coverage_level_v2(key, own_l)
-                if level is None:
-                    return self._comparison(
-                        key, label, "incomparable", f"{key}_same_text_unconfirmed",
-                        own, other,
-                        "Одинаковая формулировка не подтверждает сам факт покрытия: в принятом ответе нет прямого подтверждения соответствующего риска.",
-                    )
-                if level == 0:
-                    return self._comparison(
-                        key, label, "equal", f"{key}_both_explicitly_excluded",
-                        own, other,
-                        "В проверенных условиях обеих компаний это покрытие прямо исключено.",
-                    )
-            if key == "total_loss":
-                return self._compare_total_loss(label, own, other, own_l, other_l)
-            if key == "repair_type":
-                return self._compare_repair(label, own, other, own_l, other_l)
-            if key == "tow_truck":
-                return self._compare_tow_truck(label, own, other, own_l, other_l)
+        # Second step, also shared by all fields: both companies state the
+        # condition, so the values themselves are compared. Each field only
+        # supplies how its value is read (an amount, a threshold, a deadline,
+        # a coverage level); the decision rules are the same for every field.
+        comparator = self._FIELD_COMPARATORS.get(key)
+        if comparator is None:
+            return self._comparison(
+                key, label, "incomparable", "no_rule", own, other,
+                "Для этого поля не задано правило чтения значения.",
+            )
+        if own_l == other_l and comparator == "_compare_coverage":
+            level = self._coverage_level_v2(key, own_l)
+            if level is None:
+                return self._comparison(
+                    key, label, "incomparable", f"{key}_same_text_unconfirmed",
+                    own, other,
+                    "Одинаковая формулировка не подтверждает сам факт покрытия: в принятом ответе нет прямого подтверждения соответствующего риска.",
+                )
+            if level == 0:
+                return self._comparison(
+                    key, label, "equal", f"{key}_both_explicitly_excluded",
+                    own, other,
+                    "В проверенных условиях обеих компаний это покрытие прямо исключено.",
+                )
             return self._comparison(
                 key, label, "equal", "same_normalized_value", own, other,
                 "Принятые формулировки условий совпадают.",
             )
-        if key == "franchise":
-            return self._compare_franchise(label, own, other, own_l, other_l)
-        if key == "without_certificates":
-            return self._compare_without_certificates(label, own, other, own_l, other_l)
-        if key == "gap":
-            return self._compare_coverage(key, label, own, other, own_l, other_l)
-        if key == "total_loss":
-            return self._compare_total_loss(label, own, other, own_l, other_l)
-        if key in {"self_ignition", "terrorism", "drone"}:
-            return self._compare_coverage(key, label, own, other, own_l, other_l)
-        if key == "tow_truck":
-            return self._compare_tow_truck(label, own, other, own_l, other_l)
-        if key == "repair_type":
-            return self._compare_repair(label, own, other, own_l, other_l)
-        if key == "payment_terms":
-            return self._compare_payment_terms(label, own, other, own_l, other_l)
-        return self._comparison(
-            key, label, "incomparable", "no_rule", own, other,
-            "Для этого поля не задано детерминированное правило.",
-        )
+        if own_l == other_l and comparator not in self._TEXT_SENSITIVE_COMPARATORS:
+            return self._comparison(
+                key, label, "equal", "same_normalized_value", own, other,
+                "Принятые формулировки условий совпадают.",
+            )
+        method = getattr(self, comparator)
+        if comparator == "_compare_coverage":
+            return method(key, label, own, other, own_l, other_l)
+        return method(label, own, other, own_l, other_l)
+
+    # How each field's value is read when both companies state the condition.
+    # GAP, self-ignition, terrorism and drones are all "coverage" fields and
+    # are read identically: excluded < optional add-on < included.
+    _FIELD_COMPARATORS = {
+        "franchise": "_compare_franchise",
+        "without_certificates": "_compare_without_certificates",
+        "gap": "_compare_coverage",
+        "self_ignition": "_compare_coverage",
+        "terrorism": "_compare_coverage",
+        "drone": "_compare_coverage",
+        "total_loss": "_compare_total_loss",
+        "tow_truck": "_compare_tow_truck",
+        "repair_type": "_compare_repair",
+        "payment_terms": "_compare_payment_terms",
+    }
+    # Identical wording still needs reading for these: e.g. a threshold
+    # boundary or repair options must be parsed before calling it "equal".
+    _TEXT_SENSITIVE_COMPARATORS = {"_compare_total_loss", "_compare_repair", "_compare_tow_truck"}
 
     def _compare_franchise(self, label, own, other, own_l, other_l):
         own_none = self._franchise_none(own_l)
