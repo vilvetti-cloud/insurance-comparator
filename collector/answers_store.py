@@ -35,7 +35,8 @@ def update_cells(updates: dict[tuple[str, str], dict[str, Any]], *, created_date
 
     Raises if anything other than the requested values would change.
     """
-    text = path.read_text(encoding="utf-8", newline="")
+    with open(path, encoding="utf-8", newline="") as handle:  # Path.read_text(newline=) needs Python 3.13
+        text = handle.read()
     expected = json.loads(text)
     for (slug, key), attrs in updates.items():
         company_at = text.find(f'"slug": "{slug}"')
