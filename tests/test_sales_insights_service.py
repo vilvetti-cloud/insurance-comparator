@@ -331,3 +331,37 @@ class StructuredFactComparisonTests(unittest.TestCase):
         )
         self.assertEqual(result["advantages"], [])
         self.assertEqual(result["comparisons"][0]["outcome"], "competitor_advantage")
+
+
+class UnifiedRuleTests(unittest.TestCase):
+    """GAP follows exactly the same rules as the other coverage fields."""
+
+    COVERAGE = {"gap": "GAP", "self_ignition": "Самовозгорание", "terrorism": "Терроризм", "drone": "БПЛА"}
+
+    def analyze(self, key, own, other):
+        return SalesInsightsService().analyze(
+            company="A", competitor="B",
+            data={key: own}, competitor_data={key: other},
+            field_labels={key: self.COVERAGE[key]},
+        )["comparisons"][0]
+
+    def test_stated_vs_not_stated_gives_same_outcome_for_every_coverage_field(self):
+        stated = {
+            "gap": "GAP можно включить дополнительным соглашением.",
+            "self_ignition": "Самовозгорание можно включить дополнительным соглашением.",
+            "terrorism": "Террористический акт можно включить дополнительным соглашением.",
+            "drone": "Повреждения от БПЛА можно включить дополнительным соглашением.",
+        }
+        for key, text in stated.items():
+            with self.subTest(key=key):
+                result = self.analyze(key, text, "Условие не указано в принятом официальном источнике")
+                self.assertEqual(result["outcome"], "first_advantage")
+                self.assertEqual(result["comparison_basis"], f"{key}_explicit_vs_not_stated_in_official_terms")
+
+    def test_identical_unconfirmed_wording_is_not_called_equal_for_any_coverage_field(self):
+        for key, word in self.COVERAGE.items():
+            with self.subTest(key=key):
+                text = f"{word} упоминается в правилах как понятие."
+                result = self.analyze(key, text, text)
+                self.assertEqual(result["outcome"], "incomparable")
+                self.assertEqual(result["comparison_basis"], f"{key}_same_text_unconfirmed")
