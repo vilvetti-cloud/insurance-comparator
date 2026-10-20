@@ -130,6 +130,9 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertIn("83 цитаты отмечены как found, 23 — partial", page)
         self.assertIn("4 — not_found в проверенном фрагменте", page)
         self.assertIn("фиксируется как преимущество первой компании", page)
+        # Summary counters do not overlap: 48 + 57 + 5 = 110 cells.
+        self.assertNotIn("контекстных ответов ИИ на проверке", page)
+        self.assertIn("не подтверждено правилами", page)
 
 
 if __name__ == "__main__":

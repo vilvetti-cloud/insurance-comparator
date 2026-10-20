@@ -218,6 +218,18 @@ class OfficialRulesOmissionComparisonTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
 
 
+class ClientMessagePunctuationTests(unittest.TestCase):
+    def test_joined_phrases_do_not_produce_doubled_punctuation(self):
+        text = SalesInsightsService._tidy_punctuation(
+            "Условие зависит от полиса.. Если важно? . Проверим по договору."
+        )
+        self.assertEqual(text, "Условие зависит от полиса. Если важно? Проверим по договору.")
+
+    def test_abbreviations_are_kept(self):
+        text = SalesInsightsService._tidy_punctuation("Пожар, взрыв и т.п., по п. 4.2.")
+        self.assertEqual(text, "Пожар, взрыв и т.п., по п. 4.2.")
+
+
 class GeneralizedOmissionLanguageTests(unittest.TestCase):
     def test_unstated_classifier_recognizes_meaning_not_only_one_fixed_phrase(self):
         examples = [
