@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime
 from pathlib import Path
 
@@ -188,6 +189,31 @@ class GeminiPathTests(unittest.TestCase):
                              pages=self.PAGES, current_answer="25 рабочих дней", changed_sentences=[])
         self.assertFalse(draft.valid)
 
+
+    def test_overloaded_gemini_model_falls_back_to_the_next_one(self):
+        class Response:
+            def __init__(self, status, body=None):
+                self.status_code, self.body, self.text = status, body, json.dumps(body or {})
+
+            def json(self):
+                return self.body
+
+            def close(self):
+                pass
+
+        answer = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": '{"changed": false}'}]}}]}
+        asked = []
+
+        def fake_post(url, **kwargs):
+            model = url.split("/models/")[1].split(":")[0]
+            asked.append(model)
+            return Response(503) if model == "main" else Response(200, answer)
+
+        client = GeminiClient("key", model="main")
+        with patch.dict("os.environ", {"GEMINI_FALLBACK_MODELS": "spare"}),                 patch("collector.answer_writer.requests.post", fake_post),                 patch("collector.answer_writer.time.sleep"):
+            self.assertEqual(client.generate("prompt"), {"changed": False})
+        self.assertEqual(asked, ["main", "main", "main", "spare"])
+        self.assertEqual(client.used_model, "spare")
 
 if __name__ == "__main__":
     unittest.main()

@@ -178,7 +178,11 @@ class AutoUpdater:
                     f"{company_name} — {LABELS[key]}: автоматическая проверка не пройдена ({'; '.join(draft.problems)})")
             # A failed request (limits, a busy server) is retried with the next check;
             # an answer that failed the checks is not, until the file changes again.
-            if not request_failed:
+            if request_failed:
+                self.report.notes.append(
+                    f"{company_name}: ИИ был недоступен, разбор повторится при следующей проверке. "
+                    "Если файл клали в папку «Новые правила КАСКО» на рабочем столе, положите его туда ещё раз.")
+            else:
                 self.log["attempts"][attempt_key] = {"result": "manual", "at": self.now.isoformat(timespec="minutes")}
             return False
 

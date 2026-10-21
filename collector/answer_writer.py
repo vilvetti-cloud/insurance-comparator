@@ -20,6 +20,9 @@ from collector.rules_text import comparable, find_quote, with_page_markers
 
 MODEL = "claude-opus-5-5"
 GEMINI_DEFAULT_MODEL = "gemini-3.8-flash"
+# Tried in turn when the main model is overloaded (HTTP 503) or rate-limited;
+# override with GEMINI_FALLBACK_MODELS="model-a,model-b".
+GEMINI_FALLBACK_MODELS = ("gemini-3.8-flash-lite", "gemini-2.5-flash")
 # Free-tier friendly: Gemini gets only the pages about the parameter.
 GEMINI_MAX_CHARS = 60000
 
@@ -169,10 +172,31 @@ class GeminiClient:
         self.api_key = api_key
         self.model = model or os.environ.get("GEMINI_MODEL") or GEMINI_DEFAULT_MODEL
 
+    def models(self) -> list[str]:
+        configured = os.environ.get("GEMINI_FALLBACK_MODELS")
+        fallbacks = [m.strip() for m in configured.split(",")] if configured else list(GEMINI_FALLBACK_MODELS)
+        return list(dict.fromkeys([self.model, *(m for m in fallbacks if m)]))
+
     def generate(self, prompt: str) -> dict[str, Any]:
-        for attempt in range(4):
+        errors = []
+        for model in self.models():
+            response = self._request(model, prompt)
+            if response.status_code == 200:
+                candidate = response.json()["candidates"][0]
+                if candidate.get("finishReason") != "STOP":
+                    raise RuntimeError(f"Gemini {model} finishReason={candidate.get('finishReason')}")
+                self.used_model = model
+                return json.loads("".join(part.get("text", "") for part in candidate["content"]["parts"]))
+            errors.append(f"{model}: HTTP {response.status_code}: {response.text[:200]}")
+            # Overloaded, rate-limited or unknown model: the next model may answer.
+            if response.status_code not in (404, 429, 500, 502, 503, 504):
+                break
+        raise RuntimeError("Gemini " + " | ".join(errors))
+
+    def _request(self, model: str, prompt: str):
+        for attempt in range(3):
             response = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 headers={"x-goog-api-key": self.api_key},
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
@@ -185,17 +209,12 @@ class GeminiClient:
                 timeout=(15, 300),
             )
             # Free-tier limits and busy servers: wait and try again.
-            if response.status_code in (429, 500, 502, 503, 504) and attempt < 3:
+            if response.status_code in (429, 500, 502, 503, 504) and attempt < 2:
                 response.close()
                 time.sleep(30 * (attempt + 1))
                 continue
-            break
-        if response.status_code != 200:
-            raise RuntimeError(f"Gemini HTTP {response.status_code}: {response.text[:300]}")
-        candidate = response.json()["candidates"][0]
-        if candidate.get("finishReason") != "STOP":
-            raise RuntimeError(f"Gemini finishReason={candidate.get('finishReason')}")
-        return json.loads("".join(part.get("text", "") for part in candidate["content"]["parts"]))
+            return response
+        return response
 
 
 def relevant_pages(pages: list[str], field_key: str, changed_sentences: list[str],
