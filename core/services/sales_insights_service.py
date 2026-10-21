@@ -345,6 +345,13 @@ class SalesInsightsService:
         )
         return any(re.search(pattern, value) for pattern in patterns)
 
+    @classmethod
+    def _explicitly_excluded(cls, key: str, text: str, facts: Any) -> bool:
+        """The same test for every field: facts say excluded, or a coverage reads as level 0."""
+        if isinstance(facts, dict) and facts.get("state") == "excluded":
+            return True
+        return key in cls._COVERAGE_TERMS and cls._coverage_level_v2(key, text) == 0
+
     def _compare(self, *, key, label, company, competitor, own, other, own_facts=None, other_facts=None):
         own_l = self._normalized(own)
         other_l = self._normalized(other)
@@ -361,8 +368,15 @@ class SalesInsightsService:
         own_unstated = own_state == "not_established" if own_state else self._is_unstated_condition(own_l)
         other_unstated = other_state == "not_established" if other_state else self._is_unstated_condition(other_l)
         if own_unstated != other_unstated:
-            stated = other_l if own_unstated else own_l
-            unstated = own_l if own_unstated else other_l
+            # An explicit exclusion is not a benefit: excluded on one side and
+            # not stated on the other leaves both companies without the cover.
+            stated_text, stated_facts = (other, other_facts) if own_unstated else (own, own_facts)
+            if self._explicitly_excluded(key, stated_text, stated_facts):
+                return self._comparison(
+                    key, label, "equal", f"{key}_excluded_vs_not_stated", own, other,
+                    "У одной компании условие прямо исключено, у другой оно не указано в официальных правилах: "
+                    "по этому параметру преимущества нет ни у одной.",
+                )
             first_wins = other_unstated
             outcome = "first_advantage" if first_wins else "competitor_advantage"
             basis = f"{key}_explicit_vs_not_stated_in_official_terms"
@@ -415,7 +429,7 @@ class SalesInsightsService:
             )
         method = getattr(self, comparator)
         if comparator == "_compare_coverage":
-            return method(key, label, own, other, own_l, other_l)
+            return method(key, label, own, other, own_l, other_l, text_fallback=not (own_state and other_state))
         return method(label, own, other, own_l, other_l)
 
     # How each field's value is read when both companies state the condition.
@@ -548,14 +562,15 @@ class SalesInsightsService:
             "Покрытие есть у обеих или различаются наборы повреждений/лимиты без доказанного доминирования.",
         )
 
-    def _compare_coverage(self, key, label, own, other, own_l, other_l):
+    def _compare_coverage(self, key, label, own, other, own_l, other_l, text_fallback=True):
         own_level = self._coverage_level_v2(key, own)
         other_level = self._coverage_level_v2(key, other)
 
         # A condition that is absent from the official terms is handled by the
         # shared rule in _compare(). Here both sides state something; if one
         # statement cannot be graded, the texts are not safely comparable.
-        if own_level is not None and other_level is None and own_level > 0 and self._is_unstated_condition(other_l):
+        # The text check below only stands in for missing structured facts.
+        if own_level is not None and other_level is None and own_level > 0 and text_fallback and self._is_unstated_condition(other_l):
             advantage = self._advantage(
                 key=key, label=label, title=self._coverage_title(key, own_level),
                 own=own, other=other,
@@ -566,7 +581,7 @@ class SalesInsightsService:
             if own_level == 1:
                 advantage["conditional"] = True
             return advantage
-        if own_level is None and other_level is not None and other_level > 0 and self._is_unstated_condition(own_l):
+        if own_level is None and other_level is not None and other_level > 0 and text_fallback and self._is_unstated_condition(own_l):
             return self._comparison(
                 key, label, "competitor_advantage",
                 f"{key}_explicit_vs_not_stated_in_official_terms",
@@ -914,6 +929,14 @@ class SalesInsightsService:
         "tow_truck": r"эвакуац|эвакуатор",
     }
 
+    # "The risk is insured only if the contract explicitly includes it" is an
+    # opt-in condition (level 1), not an exclusion.
+    _INSURED_ONLY_IF_IN_CONTRACT = (
+        r"застрахован\w*\s+только[^.;]{0,20}"
+        r"(?:при\s+прям\w*\s+включени\w*\s+в\s+договор|"
+        r"если\s+(?:это\s+)?прямо\s+(?:указан|предусмотрен)\w*\s+в\s+договор)"
+    )
+
     @staticmethod
     def _coverage_level_v2(key: str, text: str) -> int | None:
         """Return a conservative availability level for a specific coverage.
@@ -969,8 +992,13 @@ class SalesInsightsService:
     @staticmethod
     def _coverage_grade(key: str, text: str) -> int | None:
         """Grade one stretch of lower-cased text: 0, 1, 2 or None."""
-        # "May be covered" is a hedge, not an explicit level either way.
-        if re.search(r"(?:может|могут)\s+(?:быть\s+)?покры(?:ва|т)", text):
+        # "May be covered" is a hedge, not an explicit level either way; so is
+        # a warning that a narrow exclusion must not be applied more broadly.
+        if re.search(
+            r"(?:может|могут)\s+(?:быть\s+)?покры(?:ва|т)|"
+            r"нельзя\s+(?:переносить|распространять)\s+исключени",
+            text,
+        ):
             return None
         negative_patterns = {
             "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
@@ -993,12 +1021,17 @@ class SalesInsightsService:
             r"отдельн\w*\s+(?:дополнительн\w*\s+)?риск|"
             r"(?:описан|предлага|оформля)\w*[^.;]{0,40}отдельн\w*\s+(?:дополнительн\w*\s+)?продукт|"
             r"если\s+(?:это\s+)?прямо\s+предусмотрен\w*\s+договор|"
-            r"дополнительн\w*\s+(?:страхов\w*\s+)?опци\w*",
+            r"дополнительн\w*\s+(?:страхов\w*\s+)?опци\w*|"
+            + SalesInsightsService._INSURED_ONLY_IF_IN_CONTRACT,
             text,
         ))
         # A specific opt-in exception takes precedence over broad exclusion
         # wording; all other explicit exclusions remain level 0.
-        if optional and re.search(r"кроме[^.;]{0,100}(?:соглашени|договор)|может\s+быть\s+включен|можно\s+включить|только\s+(?:при\s+)?(?:наличии|оформлении|включении)", text):
+        if optional and re.search(
+            r"кроме[^.;]{0,100}(?:соглашени|договор)|может\s+быть\s+включен|можно\s+включить|только\s+(?:при\s+)?(?:наличии|оформлении|включении)|"
+            + SalesInsightsService._INSURED_ONLY_IF_IN_CONTRACT,
+            text,
+        ):
             return 1
         pattern = negative_patterns.get(key)
         if pattern and re.search(pattern, text):

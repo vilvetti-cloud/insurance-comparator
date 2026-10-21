@@ -396,6 +396,38 @@ class UnifiedRuleTests(unittest.TestCase):
                 text = f"Повреждение может покрываться. При этом {word} исключено, если причина — брак."
                 self.assertIsNone(SalesInsightsService._coverage_level_v2(key, text))
 
+    def test_explicit_exclusion_vs_not_stated_is_equal_for_every_coverage_field(self):
+        # An exclusion is not a benefit: both companies are without the cover.
+        for key, word in self.COVERAGE.items():
+            with self.subTest(key=key):
+                for own, other in (
+                    (f"{word} исключено из покрытия.", "Условие не указано в принятом официальном источнике"),
+                    ("Условие не указано в принятом официальном источнике", f"{word} исключено из покрытия."),
+                ):
+                    result = self.analyze(key, own, other)
+                    self.assertEqual(result["outcome"], "equal")
+                    self.assertEqual(result["comparison_basis"], f"{key}_excluded_vs_not_stated")
+
+    def test_excluded_fact_vs_not_stated_is_equal_for_any_field(self):
+        result = SalesInsightsService().analyze(
+            company="A", competitor="B",
+            data={"payment_terms": "Выплата не производится.", "payment_terms_facts": {"state": "excluded"}},
+            competitor_data={"payment_terms": "Срок не указан.", "payment_terms_facts": {"state": "not_established"}},
+            field_labels={"payment_terms": "Срок выплаты"},
+        )["comparisons"][0]
+        self.assertEqual(result["outcome"], "equal")
+        self.assertEqual(result["comparison_basis"], "payment_terms_excluded_vs_not_stated")
+
+    def test_insured_only_if_contract_includes_it_is_an_add_on_for_every_coverage_field(self):
+        for key, word in self.COVERAGE_WORDS.items():
+            for wording in (
+                "риск застрахован только при прямом включении в договор",
+                "риск застрахован только «если это прямо указано в Договоре»",
+            ):
+                with self.subTest(key=key, wording=wording):
+                    text = f"{word}: {wording}. Исключения: {word} при неосторожном обращении исключено."
+                    self.assertEqual(SalesInsightsService._coverage_level_v2(key, text), 1)
+
     def test_included_lead_beats_explicit_exclusion_for_every_coverage_field(self):
         for key, word in self.COVERAGE.items():
             with self.subTest(key=key):
