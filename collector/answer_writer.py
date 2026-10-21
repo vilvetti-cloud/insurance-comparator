@@ -191,7 +191,7 @@ class GeminiClient:
                 continue
             break
         if response.status_code != 200:
-            raise RuntimeError(f"Gemini HTTP {response.status_code}")
+            raise RuntimeError(f"Gemini HTTP {response.status_code}: {response.text[:300]}")
         candidate = response.json()["candidates"][0]
         if candidate.get("finishReason") != "STOP":
             raise RuntimeError(f"Gemini finishReason={candidate.get('finishReason')}")

@@ -5,7 +5,7 @@ Runs after the nightly source check. For every insurer whose rules changed:
 1. The new file is compared with our copy as text. A re-upload of the same
    text only refreshes the copy.
 2. Only parameters whose wording is touched by the change are re-read.
-3. Claude writes each touched answer from the new rules (collector.answer_writer)
+3. The AI (Claude or free Gemini) writes each touched answer from the new rules (collector.answer_writer)
    and the answer is accepted only if its quotes are found word for word in
    the new rules and every amount is backed by them.
 4. Accepted answers, the new copy of the rules and the check status are saved;
@@ -159,6 +159,7 @@ class AutoUpdater:
             return False
 
         drafts: dict[str, Draft] = {}
+        request_failed = False
         for item in touched:
             try:
                 drafts[item["key"]] = self.writer(
@@ -167,13 +168,18 @@ class AutoUpdater:
                     changed_sentences=added + removed,
                 )
             except Exception as exc:  # noqa: BLE001 - network, limits, malformed output: keep the old answer
-                drafts[item["key"]] = Draft(False, "", [], "", problems=[f"ошибка запроса к Claude: {type(exc).__name__}"])
+                request_failed = True
+                problem = f"ошибка запроса к ИИ ({type(self.client).__name__}): {type(exc).__name__}: {str(exc)[:300]}"
+                drafts[item["key"]] = Draft(False, "", [], "", problems=[problem])
         failed = {key: draft for key, draft in drafts.items() if not draft.valid}
         if failed:
             for key, draft in failed.items():
                 self.report.manual.append(
                     f"{company_name} — {LABELS[key]}: автоматическая проверка не пройдена ({'; '.join(draft.problems)})")
-            self.log["attempts"][attempt_key] = {"result": "manual", "at": self.now.isoformat(timespec="minutes")}
+            # A failed request (limits, a busy server) is retried with the next check;
+            # an answer that failed the checks is not, until the file changes again.
+            if not request_failed:
+                self.log["attempts"][attempt_key] = {"result": "manual", "at": self.now.isoformat(timespec="minutes")}
             return False
 
         stamp = self.now.strftime("%d.%m.%Y")
