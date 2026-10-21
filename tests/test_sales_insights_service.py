@@ -646,3 +646,56 @@ class FranchiseFaultWaiverTests(unittest.TestCase):
         message = self.analyze(self.OPTION, self.NONE)["client_message"]
         self.assertIn("Можно выбрать франшизу, которая не вычитается", message)
         self.assertIn("у B этого нет", message)
+
+
+class GroupComparisonTests(unittest.TestCase):
+    """One insurer against several competitors: each pair as on its own, one shared message."""
+
+    LABELS = {"self_ignition": "Самовозгорание", "terrorism": "Терроризм"}
+    INCLUDED = "Самовозгорание включено в покрытие."
+    EXCLUDED = "Самовозгорание прямо исключено из покрытия."
+    TERROR_OPTION = "Террористический акт можно включить дополнительным соглашением."
+    TERROR_INCLUDED = "Террористический акт включён в покрытие."
+
+    def group(self, own, others):
+        return SalesInsightsService().analyze_group(
+            company="A", competitors=list(others), data=own,
+            competitor_data=others, field_labels=self.LABELS,
+        )
+
+    def test_shared_tail_names_all_competitors_once(self):
+        result = self.group({"self_ignition": self.INCLUDED},
+                            {"B": {"self_ignition": self.EXCLUDED}, "C": {"self_ignition": self.EXCLUDED}})
+        message = result["client_message"]
+        self.assertIn("Почему A лучше, чем B и C:", message)
+        self.assertIn("у B и C это исключено из покрытия", message)
+
+    def test_parameter_where_any_competitor_is_better_is_not_mentioned(self):
+        own = {"self_ignition": self.INCLUDED, "terrorism": self.TERROR_OPTION}
+        others = {
+            "B": {"self_ignition": self.EXCLUDED, "terrorism": "Террористический акт прямо исключён из покрытия."},
+            "C": {"self_ignition": self.EXCLUDED, "terrorism": self.TERROR_INCLUDED},
+        }
+        message = self.group(own, others)["client_message"]
+        self.assertIn("самовозгорания", message)
+        self.assertNotIn("террор", message.lower())
+
+    def test_each_pair_matches_the_two_company_analysis(self):
+        own = {"self_ignition": self.INCLUDED}
+        others = {"B": {"self_ignition": self.EXCLUDED}, "C": {"self_ignition": self.INCLUDED}}
+        result = self.group(own, others)
+        for name, data in others.items():
+            single = SalesInsightsService().analyze(
+                company="A", competitor=name, data=own, competitor_data=data, field_labels=self.LABELS,
+            )
+            self.assertEqual(
+                [item["outcome"] for item in result["pairs"][name]["comparisons"]],
+                [item["outcome"] for item in single["comparisons"]],
+            )
+
+    def test_single_competitor_message_is_unchanged(self):
+        single = SalesInsightsService().analyze(
+            company="A", competitor="B", data={"self_ignition": self.INCLUDED},
+            competitor_data={"self_ignition": self.EXCLUDED}, field_labels=self.LABELS,
+        )["client_message"]
+        self.assertTrue(single.startswith("Здравствуйте! Вот сравнение КАСКО A и B по официальным правилам страхования обеих компаний."))

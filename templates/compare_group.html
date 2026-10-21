@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ company1 }} vs {{ competitors|join(', ') }} — Страховой аналитик{% endblock %}
+{% block page_class %}result-page{% endblock %}
+
+{% block content %}
+<nav class="result-nav" aria-label="Навигация">
+  <a class="text-link text-link--back" href="/">← Новое сравнение</a>
+</nav>
+
+<section class="result-hero">
+  <div>
+    <p class="eyebrow">Подготовка к разговору</p>
+    <h1>{{ company1 }} <span class="vs">vs</span> {{ competitors|join(', ') }}</h1>
+    <p class="result-hero__lead">
+      Одно сообщение для клиента и сводка по 10 условиям КАСКО. В сообщение попадают только условия,
+      где ни один из выбранных конкурентов не сильнее.
+    </p>
+  </div>
+</section>
+
+<section class="insight-grid insight-grid--single" aria-label="Итоги сравнения">
+  <article class="insight-card insight-card--message">
+    <div class="message-head">
+      <div>
+        <p class="insight-card__eyebrow">Готовая формулировка</p>
+        <h2>Сообщение для клиента</h2>
+      </div>
+      <button class="copy-message" type="button" data-copy-target="#client-message">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8.75" y="8.75" width="11.5" height="11.5" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M15.25 5.5v-.25a1.5 1.5 0 0 0-1.5-1.5h-8.5a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h.25" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span class="copy-message__label">Скопировать сообщение</span>
+      </button>
+    </div>
+    <div class="message-bubble">
+      <p id="client-message" class="client-message">{{ client_message }}</p>
+    </div>
+    <p class="message-hint">Текст можно вставить в WhatsApp, Telegram или письмо без правок.</p>
+  </article>
+</section>
+
+<section class="details-panel" aria-labelledby="group-table-title">
+  <div class="details-panel__summary">
+    <div>
+      <h2 id="group-table-title">Где {{ company1 }} сильнее</h2>
+      <span>10 параметров · итог по каждому конкуренту</span>
+    </div>
+    <div class="outcome-legend" aria-hidden="true">
+      <span class="outcome-chip outcome-chip--win">Плюс {{ company1 }}</span>
+      <span class="outcome-chip outcome-chip--loss">Плюс конкурента</span>
+      <span class="outcome-chip outcome-chip--equal">Одинаково</span>
+    </div>
+  </div>
+
+  <div class="details-panel__body">
+    <div class="table-scroll">
+      <table class="comparison-table comparison-table--group">
+        <thead>
+          <tr>
+            <th scope="col">Параметр</th>
+            {% for competitor in competitors %}
+              <th scope="col">
+                <span class="company-head">
+                  <span>{{ competitor }}</span>
+                  <a class="company-head__tag" href="/compare?company1={{ company1|urlencode }}&company2={{ competitor|urlencode }}">Подробно →</a>
+                </span>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for key in fields %}
+            <tr>
+              <th scope="row" class="parameter-cell"><span class="parameter">{{ field_labels.get(key, key) }}</span></th>
+              {% for competitor in competitors %}
+                {% set outcome = outcomes[competitor].get(key) %}
+                <td>
+                  <span class="group-cell__company">{{ competitor }}</span>
+                  {% if outcome in ['first_advantage', 'conditional_first_advantage'] %}
+                    <span class="outcome-chip outcome-chip--win">Плюс {{ company1 }}{% if outcome == 'conditional_first_advantage' %} · опция{% endif %}</span>
+                  {% elif outcome in ['competitor_advantage', 'conditional_competitor_advantage'] %}
+                    <span class="outcome-chip outcome-chip--loss">Плюс {{ competitor }}</span>
+                  {% elif outcome == 'equal' %}
+                    <span class="outcome-chip outcome-chip--equal">Одинаково</span>
+                  {% else %}
+                    <span class="group-cell--unknown">Сравнить нельзя</span>
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="group-links">
+      Подробное сравнение с формулировками и источниками:
+      {% for competitor in competitors %}
+        <a class="text-link" href="/compare?company1={{ company1|urlencode }}&company2={{ competitor|urlencode }}">{{ company1 }} и {{ competitor }}</a>{% if not loop.last %} · {% endif %}
+      {% endfor %}
+    </p>
+  </div>
+</section>
+
+<footer class="page-footer">
+  <a class="button button--secondary" href="/">← Другое сравнение</a>
+  <p>Каждая пара сравнивается так же, как на странице двух компаний. Полные формулировки и источники — по ссылке «Подробно» у каждого конкурента.</p>
+</footer>
+{% endblock %}

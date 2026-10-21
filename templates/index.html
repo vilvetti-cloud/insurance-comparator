@@ -69,6 +69,9 @@
           </div>
         </div>
 
+        <div id="extra-competitors" class="form-stack"></div>
+        <button id="add-competitor" class="add-competitor" type="button">+ Добавить конкурента</button>
+
         <button id="submit-button" class="button" type="submit">
           <span>Сравнить условия</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -102,14 +105,47 @@
     const submitButton = document.getElementById('submit-button');
     const swapButton = document.getElementById('swap-button');
 
+    const extra = document.getElementById('extra-competitors');
+    const addButton = document.getElementById('add-competitor');
+    const maxExtra = 2;  // up to three competitors in total
+    const selects = () => [company1, company2, ...extra.querySelectorAll('select')];
+
+    // A company chosen in one list cannot be chosen in another.
     function syncCompanyOptions() {
-      [...company1.options].forEach(option => {
-        option.disabled = option.value === '' || option.value === company2.value;
+      const all = selects();
+      all.forEach(select => {
+        const taken = all.filter(other => other !== select).map(other => other.value);
+        [...select.options].forEach(option => {
+          option.disabled = option.value === '' || taken.includes(option.value);
+        });
       });
-      [...company2.options].forEach(option => {
-        option.disabled = option.value === '' || option.value === company1.value;
-      });
+      addButton.hidden = extra.children.length >= maxExtra;
     }
+
+    addButton.addEventListener('click', () => {
+      const group = company2.closest('.field-group').cloneNode(true);
+      const select = group.querySelector('select');
+      const label = group.querySelector('label');
+      const id = 'company-extra-' + (extra.children.length + 1);
+      select.id = id;
+      select.required = false;
+      select.value = '';
+      label.htmlFor = id;
+      label.textContent = 'Ещё конкурент';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'remove-competitor';
+      remove.textContent = 'Убрать';
+      remove.addEventListener('click', () => { group.remove(); syncCompanyOptions(); });
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      label.before(row);
+      row.append(label, remove);
+      select.addEventListener('change', syncCompanyOptions);
+      extra.appendChild(group);
+      syncCompanyOptions();
+      select.focus();
+    });
 
     company1.addEventListener('change', syncCompanyOptions);
     company2.addEventListener('change', syncCompanyOptions);

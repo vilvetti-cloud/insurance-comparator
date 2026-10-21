@@ -196,31 +196,6 @@
 {% block scripts %}
 <script>
   (function () {
-    // Copy the client message, with a fallback for browsers without the Clipboard API.
-    document.querySelectorAll('[data-copy-target]').forEach(button => {
-      const label = button.querySelector('.copy-message__label');
-      const initial = label.textContent;
-      button.addEventListener('click', async () => {
-        const text = document.querySelector(button.dataset.copyTarget).innerText;
-        try {
-          await navigator.clipboard.writeText(text);
-        } catch (error) {
-          const area = document.createElement('textarea');
-          area.value = text;
-          document.body.appendChild(area);
-          area.select();
-          document.execCommand('copy');
-          area.remove();
-        }
-        button.classList.add('is-copied');
-        label.textContent = 'Скопировано';
-        setTimeout(() => {
-          button.classList.remove('is-copied');
-          label.textContent = initial;
-        }, 2200);
-      });
-    });
-
     // Long rule wording is folded to a few lines with a toggle.
     document.querySelectorAll('[data-clamp]').forEach(block => {
       block.classList.add('is-clamped');

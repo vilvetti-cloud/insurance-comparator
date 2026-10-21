@@ -176,22 +176,112 @@ class SalesInsightsService:
             if feature and feature not in bonuses:
                 bonuses.append(feature)
 
+        return SalesInsightsService._compose_message(
+            company=company, competitors=[competitor], lines=lines, bonuses=bonuses,
+        )
+
+    def analyze_group(
+        self,
+        *,
+        company: str,
+        competitors: list[str],
+        data: dict[str, Any],
+        competitor_data: dict[str, dict[str, Any]],
+        field_labels: dict[str, str],
+    ) -> dict[str, Any]:
+        """Compare one insurer with several competitors at once.
+
+        Each pair is analysed exactly as on its own. The shared client message
+        names a parameter only when the first insurer beats at least one
+        competitor and no selected competitor is better on it.
+        """
+        pairs = {
+            competitor: self.analyze(
+                company=company, competitor=competitor, data=data,
+                competitor_data=competitor_data[competitor], field_labels=field_labels,
+            )
+            for competitor in competitors
+        }
+        lost = {
+            item["field_key"] for result in pairs.values() for item in result["comparisons"]
+            if item.get("outcome") in {"competitor_advantage", "conditional_competitor_advantage"}
+        }
+        lines: list[str] = []
+        used: set[str] = set()
+        for key in field_labels:
+            if key in lost:
+                continue
+            won = [
+                (competitor, item) for competitor, result in pairs.items()
+                for item in result["cards"] if item.get("field_key") == key
+            ]
+            parts = [self._advantage_line(item, company, competitor) for competitor, item in won]
+            split = [part.rstrip(".").split(" — ", 1) for part in parts if part]
+            if not split:
+                continue
+            used.add(key)
+            if all(len(piece) == 2 for piece in split) and len({piece[0] for piece in split}) == 1:
+                tails = [(competitor, piece[1]) for (competitor, _), piece in zip(won, split)]
+                lines.append(f"{split[0][0]} — {self._merge_tails(tails)}.")
+            else:
+                lines.extend(part for part in parts if part and part not in lines)
+
+        bonuses: list[str] = []
+        for result in pairs.values():
+            for item in result["comparisons"]:
+                key = str(item.get("field_key") or "")
+                if key in used or key in lost:
+                    continue
+                feature = self._client_feature(key, str(item.get("own_value") or ""))
+                if feature and feature not in bonuses:
+                    bonuses.append(feature)
+        return {
+            "pairs": pairs,
+            "client_message": self._compose_message(
+                company=company, competitors=competitors, lines=lines, bonuses=bonuses,
+            ),
+        }
+
+    @staticmethod
+    def _join_names(names: list[str]) -> str:
+        return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " и " + names[-1]
+
+    @staticmethod
+    def _merge_tails(tails: list[tuple[str, str]]) -> str:
+        """[(B, «у B этого нет»), (C, «у C этого нет»)] → «у B и C этого нет».
+
+        Tails that differ only in the competitor's name are merged; the others
+        are listed in order.
+        """
+        groups: dict[str, list[str]] = {}
+        for competitor, tail in tails:
+            groups.setdefault(tail.replace(competitor, "{}"), []).append(competitor)
+        return ", ".join(
+            template.replace("{}", SalesInsightsService._join_names(names))
+            for template, names in groups.items()
+        )
+
+    @staticmethod
+    def _compose_message(*, company: str, competitors: list[str], lines: list[str], bonuses: list[str]) -> str:
+        others = SalesInsightsService._join_names(competitors)
         if not lines and not bonuses:
             return (
                 f"В подтверждённых данных пока нет доказанного сравнительного преимущества {company} перед "
-                f"{competitor}. При этом окончательный выбор стоит делать по конкретной программе, "
+                f"{others}. При этом окончательный выбор стоит делать по конкретной программе, "
                 "составу покрытия и цене."
             )
 
+        names = SalesInsightsService._join_names([company, *competitors])
         parts = [
             # The agent writes in their own voice; the wording avoids
             # grammatical gender because the agent's is not known.
-            f"Здравствуйте! Вот сравнение КАСКО {company} и {competitor} "
-            "по официальным правилам страхования обеих компаний."
+            f"Здравствуйте! Вот сравнение КАСКО {names} "
+            + ("по официальным правилам страхования обеих компаний." if len(competitors) == 1
+               else "по официальным правилам страхования всех компаний.")
         ]
         if lines:
             parts.append(
-                f"Почему {company} лучше, чем {competitor}:\n"
+                f"Почему {company} лучше, чем {others}:\n"
                 + "\n".join(f"✅ {line}" for line in lines)
             )
         if bonuses:

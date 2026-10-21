@@ -630,6 +630,35 @@ input {
   transform: rotate(180deg);
 }
 
+.add-competitor,
+.remove-competitor {
+  justify-self: start;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--accent-ink, var(--accent));
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.remove-competitor {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.field-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.add-competitor[hidden] {
+  display: none;
+}
+
 .compare-card .button {
   width: 100%;
   margin-top: 8px;
@@ -731,6 +760,44 @@ input {
   align-items: start;
   gap: 20px;
   margin-bottom: 20px;
+}
+
+.insight-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.comparison-table--group td {
+  vertical-align: middle;
+}
+
+a.company-head__tag {
+  text-decoration: none;
+}
+
+.group-cell--unknown {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.group-links {
+  margin-top: 16px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+/* Shown only where the table turns into cards and the column headers are hidden. */
+.group-cell__company {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .group-cell__company {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--ink-3);
+    font-size: 12px;
+  }
 }
 
 .insight-card {

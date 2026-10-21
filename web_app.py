@@ -154,7 +154,10 @@ def index():
 @app.route("/compare", methods=["GET", "POST"])
 def compare():
     company1 = request.values.get("company1")
-    company2 = request.values.get("company2")
+    competitors = list(dict.fromkeys(c for c in request.values.getlist("company2") if c))
+    if len(competitors) > 1:
+        return _compare_group(company1, competitors)
+    company2 = competitors[0] if competitors else None
 
     if (
         not company1
@@ -246,6 +249,42 @@ def compare():
         comparison_by_field=comparison_by_field,
         found1=found1,
         found2=found2,
+        last_updated=snapshot.get("_last_updated", "Не обновлялось"),
+    )
+
+
+MAX_COMPETITORS = 3
+
+
+def _compare_group(company1: str | None, competitors: list[str]):
+    """One insurer against two or three competitors: a shared message and a summary table."""
+    if (
+        company1 not in COMPANIES
+        or len(competitors) > MAX_COMPETITORS
+        or any(c not in COMPANIES or c == company1 for c in competitors)
+    ):
+        return redirect("/")
+    snapshot = comparison_service.load_snapshot()
+    data1 = _prepare_company_data(snapshot, company1)
+    group = sales_insights_service.analyze_group(
+        company=company1,
+        competitors=competitors,
+        data=data1,
+        competitor_data={c: _prepare_company_data(snapshot, c) for c in competitors},
+        field_labels=FIELD_LABELS,
+    )
+    outcomes = {
+        competitor: {item["field_key"]: item.get("outcome") for item in result["comparisons"]}
+        for competitor, result in group["pairs"].items()
+    }
+    return render_template(
+        "compare_group.html",
+        company1=company1,
+        competitors=competitors,
+        fields=FIELD_KEYS,
+        field_labels=FIELD_LABELS,
+        outcomes=outcomes,
+        client_message=group["client_message"],
         last_updated=snapshot.get("_last_updated", "Не обновлялось"),
     )
 

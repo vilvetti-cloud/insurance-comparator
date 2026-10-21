@@ -146,3 +146,25 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GroupComparisonPageTests(unittest.TestCase):
+    def test_several_competitors_render_the_group_page(self):
+        response = app.test_client().get("/compare", query_string=[
+            ("company1", "Ингосстрах"), ("company2", "РЕСО-Гарантия"),
+            ("company2", "СберСтрахование"), ("company2", "ВСК"),
+        ])
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("comparison-table--group", html)
+        self.assertIn("Вот сравнение КАСКО Ингосстрах, РЕСО-Гарантия, СберСтрахование и ВСК", html)
+
+    def test_invalid_group_redirects_home(self):
+        client = app.test_client()
+        for query in (
+            [("company1", "Ингосстрах"), ("company2", "Ингосстрах"), ("company2", "ВСК")],
+            [("company1", "Ингосстрах"), ("company2", "ВСК"), ("company2", "Югория"),
+             ("company2", "РЕСО-Гарантия"), ("company2", "СберСтрахование")],
+        ):
+            with self.subTest(query=query):
+                self.assertEqual(client.get("/compare", query_string=query).status_code, 302)
