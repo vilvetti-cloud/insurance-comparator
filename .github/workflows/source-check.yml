@@ -85,7 +85,9 @@ jobs:
       - name: Email the owner about changes
         # A new issue sends an email to the repository owner.
         if: hashFiles('work/auto-update-summary.md') != ''
-        run: gh issue create --title "Правила КАСКО: изменения от $(date +%d.%m.%Y)" --body-file work/auto-update-summary.md
+        # A block scalar: the title has ": ", which YAML would read as a mapping.
+        run: |
+          gh issue create --title "Правила КАСКО: изменения от $(date +%d.%m.%Y)" --body-file work/auto-update-summary.md
       - name: Monthly reminder for sites closed to programs
         if: github.event_name == 'schedule'
         shell: bash
