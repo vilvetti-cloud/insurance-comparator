@@ -117,6 +117,18 @@ class AutoUpdateTests(unittest.TestCase):
         self.run_updater(NEW_TOW, second)
         self.assertEqual(second.calls, [])
 
+    def test_failed_ai_request_is_reported_in_detail_and_retried_next_time(self):
+        def broken(*args, **kwargs):
+            raise RuntimeError("Gemini HTTP 503: model overloaded")
+        report, status = self.run_updater(NEW_TOW, broken)
+        self.assertIn("Gemini HTTP 503: model overloaded", report.markdown("x"))
+        self.assertEqual(self.answer("tow_truck")[0]["key_conditions"], "Старый ответ tow_truck.")
+        self.assertEqual(status["companies"]["РЕСО-Гарантия"]["status"], "changed")
+        # Not logged as a failed file: the next check asks the AI again.
+        second = FakeWriter()
+        self.run_updater(NEW_TOW, second)
+        self.assertEqual(second.calls, ["tow_truck"])
+
     def test_without_api_key_change_is_reported_for_a_person(self):
         report, status = self.run_updater(NEW_TOW, FakeWriter(), client=None)
         self.assertTrue(report.manual)
