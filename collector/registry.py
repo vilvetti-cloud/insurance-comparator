@@ -22,6 +22,8 @@ INSURERS = (
         "https://reso.ru/",
         "https://reso.ru/individual/auto/kasko/",
         "https://reso.ru/export/sites/reso/individual/auto/kasko/sredstv-avtotransporta-03022025.pdf",
+        # The rules list shows a new edition even when the old PDF link still works.
+        official_doc_urls=("https://www.reso.ru/about/rules/",),
     ),
     InsurerConfig(
         "vsk",
@@ -78,6 +80,8 @@ INSURERS = (
         "https://www.rgs.ru/",
         "https://www.rgs.ru/auto/ekasko/kasko-ot-ugona-i-gibeli",
         "https://www-data.rgs.ru/upload/iblock/c24/g1xtpnmp9yuzbacb6jrcwrxd1wf7ljyv/171_-Pravila_24022026.pdf",
+        # The rules list shows a new edition even when the old PDF link still works.
+        official_doc_urls=("https://www.rgs.ru/about/dokumenty/pravila-strakhovaniya-i-strakhovye-tarify",),
     ),
     InsurerConfig(
         "t-insurance",
