@@ -29,7 +29,7 @@ INSURERS = (
         "ВСК",
         "https://vsk.ru/",
         "https://www.vsk.ru/klientam/avto/kasko-kompakt-minimum",
-        rules_url="https://www.vsk.ru/cms/assets/b10c0966-2061-4530-9a24-b72db6c5ee35",
+        rules_url="https://www.vsk.ru/cms/assets/1179953c-dc8f-45f9-9d46-8eaba56b9c10",
         official_doc_urls=(
             "https://www.vsk.ru/cms/assets/209bfe0b-8b20-474c-8428-82d51132f54b",
         ),
