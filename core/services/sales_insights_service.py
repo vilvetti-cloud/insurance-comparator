@@ -226,6 +226,14 @@ class SalesInsightsService:
             )
         elif basis == "franchise_none_vs_present":
             tail = f"у {competitor} франшиза предусмотрена"
+        elif basis.startswith("franchise_fault_waiver_"):
+            feature = SalesInsightsService._fault_waiver_feature(
+                SalesInsightsService._franchise_fault_waiver(own))
+            tail = (
+                f"у {competitor} это можно получить только по отдельному условию договора"
+                if SalesInsightsService._franchise_fault_waiver(other) == 1
+                else f"у {competitor} этого нет"
+            )
         elif basis.startswith("franchise_") and basis.endswith("_lower"):
             feature, tail = "Франшиза меньше", f"у {competitor} её размер выше"
         elif basis.startswith("payment_term_"):
@@ -258,6 +266,12 @@ class SalesInsightsService:
             r"конкретная форма)[^.]*\.", "", phrase,
         ).strip()
         return f"{label}: {SalesInsightsService._lower_first(phrase)}" if phrase else ""
+
+    @staticmethod
+    def _fault_waiver_feature(level: int) -> str:
+        if level == 2:
+            return "Франшиза не вычитается, если в аварии виноват другой участник и он установлен"
+        return "Можно выбрать франшизу, которая не вычитается, если в аварии виноват другой участник"
 
     @staticmethod
     def _lower_first(text: str) -> str:
@@ -304,6 +318,9 @@ class SalesInsightsService:
         if key == "franchise":
             if SalesInsightsService._franchise_none(lead):
                 return "Без франшизы: ущерб возмещается без вычета собственного участия"
+            waiver = SalesInsightsService._franchise_fault_waiver(full)
+            if waiver:
+                return SalesInsightsService._fault_waiver_feature(waiver)
             kinds = {
                 word[:6] for word in re.findall(r"[а-я]+", lead)
                 if word.startswith(("безусл", "условн", "динами", "агрега", "прогре", "пропор"))
@@ -651,6 +668,32 @@ class SalesInsightsService:
     _TEXT_SENSITIVE_COMPARATORS = {"_compare_total_loss", "_compare_repair", "_compare_tow_truck"}
 
     def _compare_franchise(self, label, own, other, own_l, other_l):
+        result = self._compare_franchise_amount(label, own, other, own_l, other_l)
+        if result["outcome"] not in {"equal", "incomparable"}:
+            return result
+        # The amount does not decide, so the culprit waiver does: read like
+        # coverage, applied by default > available by contract > not stated.
+        own_level = self._franchise_fault_waiver(own_l)
+        other_level = self._franchise_fault_waiver(other_l)
+        if own_level == other_level:
+            return result
+        basis = f"franchise_fault_waiver_{own_level}_vs_{other_level}"
+        if own_level > other_level:
+            advantage = self._advantage(
+                key="franchise", label=label, title="Без франшизы, если виноват другой",
+                own=own, other=other, basis=basis,
+                reason="У первой страховой франшиза не применяется, когда виновник ДТП — известное третье лицо.",
+                client_phrase="У первой страховой франшиза не вычитается, если в аварии виноват другой участник.",
+            )
+            if own_level == 1:
+                advantage["conditional"] = True
+            return advantage
+        return self._comparison(
+            "franchise", label, "competitor_advantage", basis, own, other,
+            "У конкурента франшиза не применяется, когда виновник ДТП — известное третье лицо.",
+        )
+
+    def _compare_franchise_amount(self, label, own, other, own_l, other_l):
         own_none = self._franchise_none(own_l)
         other_none = self._franchise_none(other_l)
         if own_none and other_none:
@@ -1062,6 +1105,23 @@ class SalesInsightsService:
     @staticmethod
     def _franchise_none(text: str) -> bool:
         return bool(re.search(r"без\s+франшиз|франшиз\w*\s+(?:отсутств|нет|не\s+предусмотр)", text))
+
+    @staticmethod
+    def _franchise_fault_waiver(text: str) -> int:
+        """2: the franchise is waived by default when a known third party is at fault;
+        1: such a franchise can be chosen in the contract; 0: not stated."""
+        text = text.lower().replace("ё", "е")
+        level = 0
+        for sentence in re.split(r"(?<=[.;])\s+", text):
+            if not re.search(r"франшиз", sentence) or not re.search(r"не\s+применя|не\s+вычита", sentence):
+                continue
+            if not re.search(r"виновник|по\s+вине|виновн\w*\s+лиц|суброгац", sentence):
+                continue
+            # "unless the contract says otherwise" keeps the waiver the default.
+            plain = re.sub(r"если\s+(?:иное\s+)?(?:договором\s+)?(?:не\s+предусмотрено|не\s+установлено)(?:\s+иное)?", "", sentence)
+            optional = re.search(r"можно|может\s+быть|по\s+выбору|вариант|выбрать", plain)
+            level = max(level, 1 if optional else 2)
+        return level
 
     @staticmethod
     def _franchise_amount(text: str):

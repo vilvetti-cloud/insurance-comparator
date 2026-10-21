@@ -596,3 +596,53 @@ class StructuredFactsWiringTests(unittest.TestCase):
         )["comparisons"][0]
         self.assertEqual(result["comparison_basis"], "payment_terms_explicit_vs_not_stated_in_official_terms")
         self.assertEqual(result["outcome"], "first_advantage")
+
+
+class FranchiseFaultWaiverTests(unittest.TestCase):
+    """No franchise when a known third party is at fault: default > by contract > not stated."""
+
+    BASE = "Предусмотрены франшизы «условная» и «безусловная»."
+    DEFAULT = BASE + " Если договором не предусмотрено иное, франшиза не применяется, когда авария произошла по вине известного третьего лица (ст. 32)."
+    OPTION = BASE + " Можно выбрать франшизу «Виновника»: она не применяется, если виновное лицо — не страхователь и оно установлено (п. 5.11.5)."
+    NONE = BASE + " Размер франшизы устанавливается в договоре."
+
+    def analyze(self, own, other):
+        return SalesInsightsService().analyze(
+            company="A", competitor="B",
+            data={"franchise": own}, competitor_data={"franchise": other},
+            field_labels={"franchise": "Франшиза"},
+        )
+
+    def test_levels(self):
+        read = lambda text: SalesInsightsService._franchise_fault_waiver(text.lower())
+        self.assertEqual(read(self.DEFAULT), 2)
+        self.assertEqual(read(self.OPTION), 1)
+        self.assertEqual(read(self.NONE), 0)
+
+    def test_higher_waiver_level_wins_both_ways(self):
+        cases = [
+            (self.DEFAULT, self.NONE, "first_advantage"),
+            (self.DEFAULT, self.OPTION, "first_advantage"),
+            (self.OPTION, self.NONE, "conditional_first_advantage"),
+            (self.NONE, self.DEFAULT, "competitor_advantage"),
+            (self.OPTION, self.DEFAULT, "competitor_advantage"),
+            (self.OPTION, self.OPTION, "equal"),
+        ]
+        for own, other, outcome in cases:
+            with self.subTest(own=own[-40:], other=other[-40:]):
+                self.assertEqual(self.analyze(own, other)["comparisons"][0]["outcome"], outcome)
+
+    def test_lower_amount_still_decides_first(self):
+        own = "Безусловная франшиза 10 000 руб." + self.DEFAULT[len(self.BASE):]
+        other = "Безусловная франшиза 5 000 руб."
+        result = self.analyze(own, other)["comparisons"][0]
+        self.assertEqual(result["outcome"], "competitor_advantage")
+        self.assertEqual(result["comparison_basis"], "franchise_rubles_lower")
+
+    def test_client_message_names_the_waiver(self):
+        message = self.analyze(self.DEFAULT, self.OPTION)["client_message"]
+        self.assertIn("Франшиза не вычитается, если в аварии виноват другой участник", message)
+        self.assertIn("у B это можно получить только по отдельному условию договора", message)
+        message = self.analyze(self.OPTION, self.NONE)["client_message"]
+        self.assertIn("Можно выбрать франшизу, которая не вычитается", message)
+        self.assertIn("у B этого нет", message)
