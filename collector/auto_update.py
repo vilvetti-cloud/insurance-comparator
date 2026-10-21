@@ -28,7 +28,7 @@ import re
 from typing import Any, Callable
 
 from collector import answers_store
-from collector.answer_writer import Draft, write_answer
+from collector.answer_writer import FIELD_PATTERNS, Draft, answer_client, write_answer
 from collector.rules_text import changed_sentences, comparable, pdf_pages, similarity
 from collector.source_watch import (
     MOSCOW, ROOT, SOURCES_DIR, SOURCES_TABLE, accept_new_documents, load_source_table,
@@ -37,22 +37,6 @@ from core.catalog import KASKO_FIELDS
 
 LOG_FILE = ROOT / "data" / "auto-update-log.json"
 LABELS = {item["key"]: item["label"] for item in KASKO_FIELDS}
-
-# Wording that belongs to each parameter; a changed sentence that matches it
-# means the parameter must be re-read.
-FIELD_PATTERNS = {
-    "franchise": r"франшиз",
-    "without_certificates": r"без\s+(?:предоставлени\w*\s+)?(?:документ|справ)",
-    "gap": r"\bgap\b|\bгэп\b|непредвиденн\w*\s+расход",
-    "total_loss": r"полн\w*\s+гибел|конструктивн\w*\s+гибел|тотальн",
-    "self_ignition": r"самовозгор|замыкани|пожар|возгоран",
-    "terrorism": r"террор|диверси",
-    "drone": r"беспилот|бпла|летательн|инородн",
-    "tow_truck": r"эвакуа|транспортировк|буксир",
-    "repair_type": r"стоа|направлени\w*\s+на\s+ремонт|(?:денежн|натуральн)\w*\s+форм|форм\w*\s+(?:страхового\s+)?возмещени",
-    "payment_terms": r"(?:рабоч|календарн)\w*\s+дн",
-}
-
 
 @dataclass
 class Report:
@@ -170,7 +154,7 @@ class AutoUpdater:
         if self.client is None:
             self.report.manual.append(
                 f"{company_name}: {file} — изменились пункты о параметрах "
-                f"({', '.join(LABELS[f['key']] for f in touched)}), но ключ Claude API не настроен")
+                f"({', '.join(LABELS[f['key']] for f in touched)}), но ключ ИИ (Claude или Gemini) не настроен")
             self.log["attempts"][attempt_key] = {"result": "manual", "at": self.now.isoformat(timespec="minutes")}
             return False
 
@@ -278,9 +262,5 @@ class AutoUpdater:
         return self.report
 
 
-def anthropic_client():
-    """Claude API client, or None when no key is configured."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return None
-    import anthropic
-    return anthropic.Anthropic(timeout=900, max_retries=3)
+# Kept for callers of the earlier name.
+anthropic_client = answer_client

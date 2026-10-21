@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from collector.answer_writer import Draft, validate
+from collector.answer_writer import Draft, GeminiClient, relevant_pages, validate, write_answer
 from collector.auto_update import AutoUpdater
 from collector.source_watch import MOSCOW
 from core.catalog import KASKO_FIELDS
@@ -137,6 +137,44 @@ class ValidateTests(unittest.TestCase):
         quote = "Выплата производится в течение 25 (двадцати пяти) рабочих дней со дня предоставления"
         self.assertTrue(self.draft("Страховая выплата производится в течение 25 рабочих дней со дня документов (п. 12.3.3).", quote).valid)
         self.assertFalse(self.draft("Страховая выплата производится в течение 15 рабочих дней со дня документов (п. 12.3.3).", quote).valid)
+
+
+class GeminiPathTests(unittest.TestCase):
+    PAGES = [
+        "Раздел о премии. Страховая премия уплачивается единовременно.",
+        "12.3.3. Страховая выплата производится в течение 20 (двадцати) рабочих дней со дня предоставления всех документов.",
+    ]
+
+    def test_only_pages_about_the_parameter_are_sent(self):
+        shown = relevant_pages(self.PAGES, "payment_terms", [])
+        self.assertEqual(shown[0], "")
+        self.assertEqual(shown[1], self.PAGES[1])
+
+    def test_gemini_answer_goes_through_the_same_checks(self):
+        class FakeGemini(GeminiClient):
+            def __init__(self, payload):
+                super().__init__("key", model="test")
+                self.payload, self.prompt = payload, None
+
+            def generate(self, prompt):
+                self.prompt = prompt
+                return self.payload
+
+        good = FakeGemini({
+            "changed": True,
+            "key_conditions": "Страховая выплата производится в течение 20 рабочих дней со дня предоставления всех документов (п. 12.3.3).",
+            "quotes": [{"page": 2, "text": "Страховая выплата производится в течение 20 (двадцати) рабочих дней"}],
+            "change_summary": "было 25, стало 20 рабочих дней",
+        })
+        draft = write_answer(good, company="РЕСО-Гарантия", field_key="payment_terms", field_label="Срок выплат",
+                             pages=self.PAGES, current_answer="25 рабочих дней", changed_sentences=[])
+        self.assertTrue(draft.valid, draft.problems)
+        self.assertNotIn("Раздел о премии", good.prompt)
+
+        invented = FakeGemini(dict(good.payload, key_conditions=good.payload["key_conditions"].replace("20", "15")))
+        draft = write_answer(invented, company="РЕСО-Гарантия", field_key="payment_terms", field_label="Срок выплат",
+                             pages=self.PAGES, current_answer="25 рабочих дней", changed_sentences=[])
+        self.assertFalse(draft.valid)
 
 
 if __name__ == "__main__":
