@@ -7,6 +7,8 @@
 # pushed to data/incoming; GitHub analyses it (source-check.yml), so the PC needs
 # no AI key. Runs in its own clone, never in a working copy.
 
+param([switch]$Updated)
+
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent $PSScriptRoot
 $Git = "C:\Program Files\Git\cmd\git.exe"
@@ -15,10 +17,24 @@ $Inbox = Join-Path ([Environment]::GetFolderPath("Desktop")) "Новые пра�
 $Log = Join-Path $Repo "work\local-check.log"
 Set-Location $Repo
 New-Item -ItemType Directory -Force (Join-Path $Repo "work") | Out-Null
+
+# PowerShell has already read this file, so after pulling a new version the
+# rest of the check runs in a fresh process that reads the updated script.
+if (-not $Updated) {
+    Start-Transcript -Path $Log -Append | Out-Null
+    try {
+        & $Git checkout -q main
+        & $Git pull -q --ff-only origin main
+    }
+    finally {
+        Stop-Transcript | Out-Null
+    }
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Updated
+    exit $LASTEXITCODE
+}
+
 Start-Transcript -Path $Log -Append | Out-Null
 try {
-    & $Git checkout -q main
-    & $Git pull -q --ff-only origin main
     & $Python -m pip install -q -r requirements.txt
 
     # A changed file goes to data/incoming; pushing it starts the analysis on GitHub,
