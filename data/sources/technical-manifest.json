@@ -31,8 +31,8 @@
     "insurer": "rgs",
     "role": "canonical_level_1",
     "path": "data/sources/rgs/technical.pdf",
-    "sha256": "f234abc20e12c7451cee99eee0875ee088ee40ac486d4cd933656ab2c5cd56ad",
-    "bytes": 1741907
+    "sha256": "383896efd81a01c376368289cbf036716139972c8b71d1b5caeeb0fb1f3e89d3",
+    "bytes": 5183220
   },
   {
     "insurer": "sber",
