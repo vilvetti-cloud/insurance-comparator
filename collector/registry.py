@@ -39,7 +39,7 @@ INSURERS = (
         "Ингосстрах",
         "Ингосстрах",
         "https://www.ingos.ru/",
-        rules_url="https://www.ingos.ru/docs/prav_strakh_ats-2025.pdf",
+        rules_url="https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf",
     ),
     InsurerConfig(
         "renins",

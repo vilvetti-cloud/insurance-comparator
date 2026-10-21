@@ -10,8 +10,8 @@
     "insurer": "ingos",
     "role": "canonical_level_1",
     "path": "data/sources/ingos/technical.pdf",
-    "sha256": "b1a47b9ec2989f561c73804f3c654c6a04fa186606d35845f33b4057329803e6",
-    "bytes": 747315
+    "sha256": "c774c69573e3945b995e805397e4fa8e4f317e707add4aa164a6f6a5c522c2d5",
+    "bytes": 916832
   },
   {
     "insurer": "renins",
@@ -82,13 +82,6 @@
     "path": "data/sources/alfa/supporting/alfa-gap.pdf",
     "sha256": "6586d51dde172002bf597ef965453a3a3fdcf3c83c68be5c7778ed5575a03ba0",
     "bytes": 518600
-  },
-  {
-    "insurer": "ingos",
-    "role": "supporting_official_pdf",
-    "path": "data/sources/ingos/supporting/ingos-ts-13-05-2025.pdf",
-    "sha256": "c774c69573e3945b995e805397e4fa8e4f317e707add4aa164a6f6a5c522c2d5",
-    "bytes": 916832
   },
   {
     "insurer": "renins",

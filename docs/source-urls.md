@@ -6,8 +6,7 @@
 |---|---|---|
 | РЕСО-Гарантия | `reso/technical.pdf` | https://reso.ru/export/sites/reso/individual/auto/kasko/sredstv-avtotransporta-03022025.pdf |
 | ВСК | `vsk/technical.pdf` | https://www.vsk.ru/cms/assets/b10c0966-2061-4530-9a24-b72db6c5ee35 |
-| Ингосстрах | `ingos/technical.pdf` | https://www.ingos.ru/docs/prav_strakh_ats-2025.pdf |
-| Ингосстрах | `ingos/supporting/ingos-ts-13-05-2025.pdf` | https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf |
+| Ингосстрах | `ingos/technical.pdf` | https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf |
 | Ингосстрах | `ingos/supporting/ingos-gap-2025.pdf` | https://www.ingos.ru/docs/pravila_strahovania_dop_rashodov_gap-2025.pdf |
 | Ренессанс Страхование | `renins/technical.pdf` | https://www.renins.ru/Media/Default/doc/rules_new/49.pdf |
 | Ренессанс Страхование | `renins/supporting/ren-2.pdf` | https://www.renins.ru/Media/Default/doc/rules_new/50.pdf |
