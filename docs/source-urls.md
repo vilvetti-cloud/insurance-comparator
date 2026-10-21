@@ -8,6 +8,7 @@
 | ВСК | `vsk/technical.pdf` | https://www.vsk.ru/cms/assets/b10c0966-2061-4530-9a24-b72db6c5ee35 |
 | Ингосстрах | `ingos/technical.pdf` | https://www.ingos.ru/docs/prav_strakh_ats-2025.pdf |
 | Ингосстрах | `ingos/supporting/ingos-ts-13-05-2025.pdf` | https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf |
+| Ингосстрах | `ingos/supporting/ingos-gap-2025.pdf` | https://www.ingos.ru/docs/pravila_strahovania_dop_rashodov_gap-2025.pdf |
 | Ренессанс Страхование | `renins/technical.pdf` | https://www.renins.ru/Media/Default/doc/rules_new/49.pdf |
 | Ренессанс Страхование | `renins/supporting/ren-2.pdf` | https://www.renins.ru/Media/Default/doc/rules_new/50.pdf |
 | Ренессанс Страхование | `renins/supporting/ren-3-accident.pdf` | https://www.renins.ru/Media/Default/doc/rules_new/133.pdf |
@@ -19,6 +20,7 @@
 | Т-Страхование | `t-insurance/technical.pdf` | https://cdn.tinsurance.ru/static/documents/kasko_15072024.pdf |
 | СберСтрахование | `sber/technical.pdf` | https://sberbankins.ru/upload/iblock/257/Pravila-dobrovolnogo-strakhovaniya-transportnykh-sredstv-_-85.1.pdf |
 | СберСтрахование | `sber/supporting/sber-349-2020.pdf` | https://sberbankins.ru/upload/iblock/750/-349-ot-25.11.2020.pdf |
+| СберСтрахование | `sber/supporting/sber-gap-16-1.pdf` | https://sberbankins.ru/upload/iblock/c2c/zjn30vv4p5vsvvmr88nfnm5vne7amz1t/Pravila-strakhovaniya-finansovykh-riskov-vladeltsev-transportnykh-sredstv-GAP-_-16.1.pdf |
 | Совкомбанк Страхование | `sovcom/technical.pdf` | https://sovcomins.ru/upload/pravila/kasko_11_23.pdf |
 | Югория | `yugoria/technical.pdf` | https://ugsk.ru/pravila/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%D0%9A%D0%90%D0%A1%D0%9A%D0%9E_04_%D1%80%D0%B5%D0%B4.9.0.pdf |
 

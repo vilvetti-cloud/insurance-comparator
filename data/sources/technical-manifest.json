@@ -117,5 +117,19 @@
     "path": "data/sources/sber/supporting/sber-349-2020.pdf",
     "sha256": "77752a63355f6976ace4ac78aaaf3617721a19ea2e1636753323da8384d5bb2f",
     "bytes": 1127765
+  },
+  {
+    "insurer": "ingos",
+    "role": "supporting_official_pdf",
+    "path": "data/sources/ingos/supporting/ingos-gap-2025.pdf",
+    "sha256": "afa36d691281a3885e9515b814c893837a60a1fdf401385a798194e5402e44a3",
+    "bytes": 537784
+  },
+  {
+    "insurer": "sber",
+    "role": "supporting_official_pdf",
+    "path": "data/sources/sber/supporting/sber-gap-16-1.pdf",
+    "sha256": "34a21cc1a6aa120b90e82dba5f1fcfdce936af71aacbaa342723902790f2a104",
+    "bytes": 390791
   }
 ]
