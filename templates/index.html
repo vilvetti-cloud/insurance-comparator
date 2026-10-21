@@ -70,7 +70,7 @@
         </div>
 
         <div id="extra-competitors" class="form-stack"></div>
-        <button id="add-competitor" class="add-competitor" type="button">+ Добавить конкурента</button>
+        <button id="add-competitor" class="add-competitor" type="button" {% if not group_compare %}hidden data-disabled{% endif %}>+ Добавить конкурента</button>
 
         <button id="submit-button" class="button" type="submit">
           <span>Сравнить условия</span>
@@ -119,7 +119,7 @@
           option.disabled = option.value === '' || taken.includes(option.value);
         });
       });
-      addButton.hidden = extra.children.length >= maxExtra;
+      addButton.hidden = addButton.hasAttribute('data-disabled') || extra.children.length >= maxExtra;
     }
 
     addButton.addEventListener('click', () => {

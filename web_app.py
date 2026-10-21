@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 
 from flask import Flask, jsonify, redirect, render_template, request
 
@@ -147,6 +148,7 @@ def index():
     return render_template(
         "index.html",
         companies=COMPANIES,
+        group_compare=GROUP_COMPARE,
         last_updated=snapshot.get("_last_updated", "Не обновлялось"),
     )
 
@@ -155,7 +157,7 @@ def index():
 def compare():
     company1 = request.values.get("company1")
     competitors = list(dict.fromkeys(c for c in request.values.getlist("company2") if c))
-    if len(competitors) > 1:
+    if len(competitors) > 1 and GROUP_COMPARE:
         return _compare_group(company1, competitors)
     company2 = competitors[0] if competitors else None
 
@@ -254,6 +256,9 @@ def compare():
 
 
 MAX_COMPETITORS = 3
+# Several competitors at once is kept for a future paid plan (owner's decision,
+# 21.10.2026); turned on with the environment variable GROUP_COMPARE=1.
+GROUP_COMPARE = os.environ.get("GROUP_COMPARE") == "1"
 
 
 def _compare_group(company1: str | None, competitors: list[str]):
