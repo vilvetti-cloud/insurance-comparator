@@ -1624,22 +1624,22 @@ input {
     font-size: 12.5px;
   }
 
+  /* On a phone the comparison form must be on the first screen. */
+  .hero {
+    gap: 24px;
+  }
+
+  .hero h1 {
+    font-size: 34px;
+  }
+
   .hero__lead {
+    margin-top: 14px;
     font-size: 16px;
   }
 
   .hero__points {
-    grid-template-columns: 1fr 1fr;
-    row-gap: 20px;
-  }
-
-  .point:nth-child(2) {
-    border-right: 0;
-    margin-right: 0;
-  }
-
-  .point:last-child {
-    grid-column: 1 / -1;
+    display: none;
   }
 
   .compare-card,
