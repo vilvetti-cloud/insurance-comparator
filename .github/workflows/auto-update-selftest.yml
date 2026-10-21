@@ -1,0 +1,31 @@
+name: Auto-update self-test
+# Real AI request on a copy of RESO's rules with two edited clauses.
+# Changes nothing in the repository; results appear as annotations.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "collector/answer_writer.py"
+      - "scripts/auto_update_selftest.py"
+      - ".github/workflows/auto-update-selftest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt anthropic
+      - run: python scripts/auto_update_selftest.py

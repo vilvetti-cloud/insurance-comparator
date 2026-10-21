@@ -9,12 +9,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 import re
+import time
 from typing import Any
 
-from collector.rules_text import find_quote, with_page_markers
+import requests
+
+from collector.rules_text import comparable, find_quote, with_page_markers
 
 MODEL = "claude-opus-5-5"
+GEMINI_DEFAULT_MODEL = "gemini-3.8-flash"
+# Free-tier friendly: Gemini gets only the pages about the parameter.
+GEMINI_MAX_CHARS = 60000
+
+# Wording that belongs to each parameter. Used to find the pages and the
+# changed sentences that concern it.
+FIELD_PATTERNS = {
+    "franchise": r"франшиз",
+    "without_certificates": r"без\s+(?:предоставлени\w*\s+)?(?:документ|справ)",
+    "gap": r"\bgap\b|\bгэп\b|непредвиденн\w*\s+расход",
+    "total_loss": r"полн\w*\s+гибел|конструктивн\w*\s+гибел|тотальн",
+    "self_ignition": r"самовозгор|замыкани|пожар|возгоран",
+    "terrorism": r"террор|диверси",
+    "drone": r"беспилот|бпла|летательн|инородн",
+    "tow_truck": r"эвакуа|транспортировк|буксир",
+    "repair_type": r"стоа|направлени\w*\s+на\s+ремонт|(?:денежн|натуральн)\w*\s+форм|форм\w*\s+(?:страхового\s+)?возмещени",
+    "payment_terms": r"(?:рабоч|календарн)\w*\s+дн",
+}
 
 FIELD_HINTS = {
     "franchise": "Франшиза: какие виды предусмотрены (условная, безусловная, динамическая и т. п.), как задаётся размер, когда не применяется.",
@@ -120,16 +142,92 @@ def validate(draft: Draft, pages: list[str]) -> Draft:
     return draft
 
 
-def write_answer(client, *, company: str, field_key: str, field_label: str, pages: list[str],
-                 current_answer: str, changed_sentences: list[str]) -> Draft:
-    """Ask Claude for the answer to one parameter under the new rules, then validate it."""
-    rules = with_page_markers(pages)
-    task = (
+def _task(company: str, field_key: str, field_label: str, current_answer: str,
+          changed_sentences: list[str]) -> str:
+    return (
         f"Компания: {company}\nПараметр: {field_label}\nЧто нужно ответить: {FIELD_HINTS[field_key]}\n\n"
         f"Действующий ответ (по прежней редакции правил):\n{current_answer}\n\n"
         "Фрагменты, которые изменились в новой редакции (для ориентира, проверяй по всему тексту):\n"
         + "\n".join(f"- {sentence[:400]}" for sentence in changed_sentences[:40])
     )
+
+
+def _draft(payload: dict[str, Any], pages: list[str]) -> Draft:
+    draft = Draft(
+        changed=bool(payload["changed"]),
+        key_conditions=str(payload["key_conditions"]).strip(),
+        quotes=[quote for quote in payload["quotes"] if isinstance(quote, dict)],
+        change_summary=str(payload["change_summary"]).strip(),
+    )
+    return validate(draft, pages)
+
+
+class GeminiClient:
+    """Free alternative to the Claude API: Google Gemini with the same task and checks."""
+
+    def __init__(self, api_key: str, model: str | None = None):
+        self.api_key = api_key
+        self.model = model or os.environ.get("GEMINI_MODEL") or GEMINI_DEFAULT_MODEL
+
+    def generate(self, prompt: str) -> dict[str, Any]:
+        for attempt in range(4):
+            response = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+                headers={"x-goog-api-key": self.api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0,
+                        "responseMimeType": "application/json",
+                        "responseJsonSchema": SCHEMA,
+                    },
+                },
+                timeout=(15, 300),
+            )
+            # Free-tier limits and busy servers: wait and try again.
+            if response.status_code in (429, 500, 502, 503, 504) and attempt < 3:
+                response.close()
+                time.sleep(30 * (attempt + 1))
+                continue
+            break
+        if response.status_code != 200:
+            raise RuntimeError(f"Gemini HTTP {response.status_code}")
+        candidate = response.json()["candidates"][0]
+        if candidate.get("finishReason") != "STOP":
+            raise RuntimeError(f"Gemini finishReason={candidate.get('finishReason')}")
+        return json.loads("".join(part.get("text", "") for part in candidate["content"]["parts"]))
+
+
+def relevant_pages(pages: list[str], field_key: str, changed_sentences: list[str],
+                   max_chars: int = GEMINI_MAX_CHARS) -> list[str]:
+    """Pages about the parameter (changed ones first); other pages blank to keep page numbers."""
+    pattern = re.compile(FIELD_PATTERNS[field_key], re.IGNORECASE)
+    changed = [sentence[:120] for sentence in changed_sentences]
+    scored = []
+    for number, page in enumerate(pages):
+        text = comparable(page)
+        score = (2 if any(part and part in text for part in changed) else 0) + (1 if pattern.search(text) else 0)
+        if score:
+            scored.append((-score, number))
+    keep, total = set(), 0
+    for _, number in sorted(scored):
+        if total + len(pages[number]) > max_chars:
+            continue
+        keep.add(number)
+        total += len(pages[number])
+    return [page if number in keep else "" for number, page in enumerate(pages)]
+
+
+def write_answer(client, *, company: str, field_key: str, field_label: str, pages: list[str],
+                 current_answer: str, changed_sentences: list[str]) -> Draft:
+    """Ask Claude (or free Gemini) for the answer to one parameter, then validate it."""
+    task = _task(company, field_key, field_label, current_answer, changed_sentences)
+    if isinstance(client, GeminiClient):
+        shown = with_page_markers(relevant_pages(pages, field_key, changed_sentences))
+        prompt = SYSTEM + "\n\nТекст новой редакции правил (страницы о параметре):\n" + shown + "\n\n" + task
+        return _draft(client.generate(prompt), pages)
+
+    rules = with_page_markers(pages)
     response = client.beta.messages.create(
         model=MODEL,
         max_tokens=16000,
@@ -146,10 +244,14 @@ def write_answer(client, *, company: str, field_key: str, field_label: str, page
     if response.stop_reason != "end_turn":
         return Draft(False, "", [], "", problems=[f"модель не дала ответ (stop_reason={response.stop_reason})"])
     payload = json.loads(next(block.text for block in response.content if block.type == "text"))
-    draft = Draft(
-        changed=bool(payload["changed"]),
-        key_conditions=payload["key_conditions"].strip(),
-        quotes=payload["quotes"],
-        change_summary=payload["change_summary"].strip(),
-    )
-    return validate(draft, pages)
+    return _draft(payload, pages)
+
+
+def answer_client():
+    """Claude API client when its key is set, else free Gemini, else None (changes go to a person)."""
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        import anthropic
+        return anthropic.Anthropic(timeout=900, max_retries=3)
+    if os.environ.get("GEMINI_API_KEY"):
+        return GeminiClient(os.environ["GEMINI_API_KEY"])
+    return None

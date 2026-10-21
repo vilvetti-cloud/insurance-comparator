@@ -4,6 +4,10 @@ on:
     # 06:00 Moscow time.
     - cron: "0 3 * * *"
   workflow_dispatch:
+  # Rules downloaded by the owner's PC (sites closed to servers abroad).
+  push:
+    branches: [main]
+    paths: ["data/incoming/**"]
 
 permissions:
   contents: write
@@ -19,6 +23,10 @@ jobs:
     timeout-minutes: 45
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Free alternative used when no Claude key is set.
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      DOWNLOADS: ${{ github.event_name == 'push' && 'data/incoming' || 'work/downloads' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
@@ -29,11 +37,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt anthropic pytest
       - name: Download rules from insurer sites and compare with our copies
+        if: github.event_name != 'push'
         run: python scripts/check_sources.py --downloads work/downloads
       - name: Update answers from changed rules
         # A failure here must not stop the nightly date from being published.
         continue-on-error: true
-        run: python scripts/auto_update.py --downloads work/downloads --summary work/auto-update-summary.md
+        run: python scripts/auto_update.py --downloads "$DOWNLOADS" --summary work/auto-update-summary.md
       - name: Verify updated answers
         # The site's own tests must still pass with the new answers;
         # otherwise the answers are rolled back and the owner is told.
@@ -59,6 +68,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Files handed over by the PC are analysed now; the copy lives in data/sources.
+          rm -rf data/incoming
           git add -A -- data docs/source-urls.md
           if git diff --cached --quiet; then
             echo "Nothing to publish"
