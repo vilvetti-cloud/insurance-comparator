@@ -762,8 +762,7 @@
           "url": "https://ugsk.ru/",
           "status": "unavailable",
           "reason": "страница не открылась для проверки",
-          "known_links": [],
-          "new_documents": []
+          "known_links": []
         }
       ]
     },
@@ -793,5 +792,5 @@
       ]
     }
   },
-  "rechecked_at": "2026-10-21T15:58+03:00"
+  "rechecked_at": "2026-10-21T19:13+03:00"
 }
