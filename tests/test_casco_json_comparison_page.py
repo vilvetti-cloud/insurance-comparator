@@ -148,6 +148,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
+@patch("web_app.GROUP_COMPARE", True)
 class GroupComparisonPageTests(unittest.TestCase):
     def test_several_competitors_render_the_group_page(self):
         response = app.test_client().get("/compare", query_string=[
@@ -168,3 +169,17 @@ class GroupComparisonPageTests(unittest.TestCase):
         ):
             with self.subTest(query=query):
                 self.assertEqual(client.get("/compare", query_string=query).status_code, 302)
+
+
+class GroupComparisonSwitchedOffTests(unittest.TestCase):
+    """Owner's decision: one-on-one only for now; several competitors wait for a paid plan."""
+
+    def test_extra_competitors_are_ignored_and_the_button_is_hidden(self):
+        client = app.test_client()
+        html = client.get("/compare", query_string=[
+            ("company1", "Ингосстрах"), ("company2", "РЕСО-Гарантия"), ("company2", "ВСК"),
+        ]).get_data(as_text=True)
+        self.assertNotIn("comparison-table--group", html)
+        self.assertIn("Ингосстрах <span class=\"vs\">vs</span> РЕСО-Гарантия", html)
+        home = client.get("/").get_data(as_text=True)
+        self.assertIn('id="add-competitor" class="add-competitor" type="button" hidden', home)

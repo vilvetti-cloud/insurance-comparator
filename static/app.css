@@ -780,7 +780,8 @@ a.company-head__tag {
 }
 
 .group-links {
-  margin-top: 16px;
+  margin: 0;
+  padding: 16px 28px 24px;
   color: var(--ink-2);
   font-size: 13.5px;
   line-height: 1.7;
