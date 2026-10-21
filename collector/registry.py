@@ -77,7 +77,7 @@ INSURERS = (
         "РГС",
         "https://www.rgs.ru/",
         "https://www.rgs.ru/auto/ekasko/kasko-ot-ugona-i-gibeli",
-        "https://www-data.rgs.ru/upload/iblock/c91/9j54j63k00f9ui0uyemnb5wesgfmcuy6/Pravila-KASKO-_-171.pdf",
+        "https://www-data.rgs.ru/upload/iblock/c24/g1xtpnmp9yuzbacb6jrcwrxd1wf7ljyv/171_-Pravila_24022026.pdf",
     ),
     InsurerConfig(
         "t-insurance",

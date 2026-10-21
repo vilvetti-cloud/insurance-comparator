@@ -15,7 +15,7 @@
 | АльфаСтрахование | `alfa/supporting/alfa-gap.pdf` | https://www.alfastrah.ru/upload/iblock/464/464485b507cb3ecec4aa8cb7c87f932f.pdf |
 | АльфаСтрахование | `alfa/technical.pdf` | https://www.alfastrah.ru/upload/iblock/da8/6hxelk9vq4cnlhue3okjcluz1lowk2k0.pdf |
 | Согласие | `soglasie/technical.pdf` | https://api.soglasie.ru/storage/managed/pravila_strahovania/4/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20%D1%81%D1%82%D1%80%D0%B0%D1%85%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F.pdf |
-| Росгосстрах | `rgs/technical.pdf` | https://www-data.rgs.ru/upload/iblock/c91/9j54j63k00f9ui0uyemnb5wesgfmcuy6/Pravila-KASKO-_-171.pdf |
+| Росгосстрах | `rgs/technical.pdf` | https://www-data.rgs.ru/upload/iblock/c24/g1xtpnmp9yuzbacb6jrcwrxd1wf7ljyv/171_-Pravila_24022026.pdf |
 | Т-Страхование | `t-insurance/technical.pdf` | https://cdn.tinsurance.ru/static/documents/kasko_15072024.pdf |
 | СберСтрахование | `sber/technical.pdf` | https://sberbankins.ru/upload/iblock/257/Pravila-dobrovolnogo-strakhovaniya-transportnykh-sredstv-_-85.1.pdf |
 | СберСтрахование | `sber/supporting/sber-349-2020.pdf` | https://sberbankins.ru/upload/iblock/750/-349-ot-25.11.2020.pdf |
