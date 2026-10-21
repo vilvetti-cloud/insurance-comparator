@@ -215,5 +215,25 @@ class GeminiPathTests(unittest.TestCase):
         self.assertEqual(asked, ["main", "main", "main", "spare"])
         self.assertEqual(client.used_model, "spare")
 
+    def test_fallback_models_come_from_the_account_model_list_newest_first(self):
+        class Listing:
+            status_code = 200
+
+            def json(self):
+                return {"models": [
+                    {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/gemini-3.5-flash", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/gemini-3.5-flash-image", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/gemini-3.5-pro", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/text-embedding", "supportedGenerationMethods": ["embedContent"]},
+                ]}
+
+        with patch.dict("os.environ", {}, clear=False),                 patch("collector.answer_writer.requests.get", lambda *a, **k: Listing()):
+            import os
+            os.environ.pop("GEMINI_FALLBACK_MODELS", None)
+            models = GeminiClient("key", model="gemini-3.8-flash").models()
+        self.assertEqual(models, ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-2.5-flash"])
+
 if __name__ == "__main__":
     unittest.main()

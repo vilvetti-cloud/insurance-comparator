@@ -169,7 +169,7 @@ class AutoUpdater:
                 )
             except Exception as exc:  # noqa: BLE001 - network, limits, malformed output: keep the old answer
                 request_failed = True
-                problem = f"ошибка запроса к ИИ ({type(self.client).__name__}): {type(exc).__name__}: {str(exc)[:300]}"
+                problem = f"ошибка запроса к ИИ ({type(self.client).__name__}): {type(exc).__name__}: {str(exc)[:900]}"
                 drafts[item["key"]] = Draft(False, "", [], "", problems=[problem])
         failed = {key: draft for key, draft in drafts.items() if not draft.valid}
         if failed:

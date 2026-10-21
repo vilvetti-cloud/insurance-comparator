@@ -20,9 +20,10 @@ from collector.rules_text import comparable, find_quote, with_page_markers
 
 MODEL = "claude-opus-5-5"
 GEMINI_DEFAULT_MODEL = "gemini-3.8-flash"
-# Tried in turn when the main model is overloaded (HTTP 503) or rate-limited;
-# override with GEMINI_FALLBACK_MODELS="model-a,model-b".
-GEMINI_FALLBACK_MODELS = ("gemini-3.8-flash-lite", "gemini-2.5-flash")
+# When the main model is overloaded (HTTP 503) or rate-limited, other "flash"
+# models from the account's model list are tried, newest first; set
+# GEMINI_FALLBACK_MODELS="model-a,model-b" to fix the list instead.
+GEMINI_FALLBACKS_TO_TRY = 3
 # Free-tier friendly: Gemini gets only the pages about the parameter.
 GEMINI_MAX_CHARS = 60000
 
@@ -174,8 +175,25 @@ class GeminiClient:
 
     def models(self) -> list[str]:
         configured = os.environ.get("GEMINI_FALLBACK_MODELS")
-        fallbacks = [m.strip() for m in configured.split(",")] if configured else list(GEMINI_FALLBACK_MODELS)
-        return list(dict.fromkeys([self.model, *(m for m in fallbacks if m)]))
+        fallbacks = [m.strip() for m in configured.split(",")] if configured else self._available_flash_models()
+        return list(dict.fromkeys([self.model, *(m for m in fallbacks if m)]))[:1 + GEMINI_FALLBACKS_TO_TRY]
+
+    def _available_flash_models(self) -> list[str]:
+        """Flash models this key can call, newest version first."""
+        try:
+            response = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                                    headers={"x-goog-api-key": self.api_key}, params={"pageSize": 200},
+                                    timeout=(15, 60))
+            listed = response.json().get("models", []) if response.status_code == 200 else []
+        except (requests.RequestException, ValueError):
+            return []
+        names = [
+            item["name"].removeprefix("models/") for item in listed
+            if "generateContent" in item.get("supportedGenerationMethods", [])
+            and "flash" in item.get("name", "") and not re.search(r"image|tts|live|audio|exp|preview", item["name"])
+        ]
+        version = lambda name: [int(n) for n in re.findall(r"\d+", name)[:2]]
+        return sorted(names, key=version, reverse=True)
 
     def generate(self, prompt: str) -> dict[str, Any]:
         errors = []
@@ -187,7 +205,7 @@ class GeminiClient:
                     raise RuntimeError(f"Gemini {model} finishReason={candidate.get('finishReason')}")
                 self.used_model = model
                 return json.loads("".join(part.get("text", "") for part in candidate["content"]["parts"]))
-            errors.append(f"{model}: HTTP {response.status_code}: {response.text[:200]}")
+            errors.append(f"{model}: HTTP {response.status_code} {_gemini_error(response)}")
             # Overloaded, rate-limited or unknown model: the next model may answer.
             if response.status_code not in (404, 429, 500, 502, 503, 504):
                 break
@@ -215,6 +233,13 @@ class GeminiClient:
                 continue
             return response
         return response
+
+
+def _gemini_error(response) -> str:
+    try:
+        return str(response.json()["error"]["message"])[:160]
+    except (ValueError, KeyError, TypeError):
+        return response.text[:160]
 
 
 def relevant_pages(pages: list[str], field_key: str, changed_sentences: list[str],
