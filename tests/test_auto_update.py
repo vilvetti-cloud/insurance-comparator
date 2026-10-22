@@ -6,7 +6,8 @@ from datetime import datetime
 from pathlib import Path
 
 from collector.answer_writer import Draft, GeminiClient, relevant_pages, validate, write_answer
-from collector.auto_update import AutoUpdater
+from collector.auto_update import AutoUpdater, _lost_condition, affected_fields
+from collector.rules_text import changed_sentences
 from collector.source_watch import MOSCOW
 from core.catalog import KASKO_FIELDS
 
@@ -135,6 +136,40 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertTrue(report.manual)
         self.assertEqual(status["companies"]["РЕСО-Гарантия"]["status"], "changed")
 
+
+class AffectedFieldsTests(unittest.TestCase):
+    """Only real changes of the rules send an answer to the AI (VSK, 22.10.2026)."""
+
+    RULES = ("Расходы на эвакуацию ТС возмещаются, но не более 5 000 рублей по одному страховому случаю. "
+             "Решение о выплате принимается в течение 30 рабочих дней.")
+    APPENDIX = ("ПРАВИЛА СТРАХОВАНИЯ ОТ ПОЛОМОК. Расходы, связанные с эвакуацией ТС после поломки, "
+                "не покрываются. Ремонт производится на СТОА по направлению страховщика.")
+
+    def company(self):
+        return {"main_pdf": "vsk/technical.pdf", "fields": [
+            {"key": "tow_truck", "source_pdfs": ["vsk/technical.pdf"], "text_search_pages": [1],
+             "evidence_quote": "Расходы на эвакуацию ТС возмещаются, но не более 5 000 рублей"},
+            {"key": "repair_type", "source_pdfs": ["vsk/technical.pdf"], "text_search_pages": [1],
+             "evidence_quote": "Решение о выплате принимается в течение 30 рабочих дней"},
+        ]}
+
+    def touched(self, old, new):
+        added, removed = changed_sentences(old, new)
+        return [f["key"] for f in affected_fields(self.company(), "vsk/technical.pdf", new, added, removed, old)]
+
+    def test_dropped_appendix_touches_nothing(self):
+        self.assertEqual(self.touched([self.RULES, self.APPENDIX], [self.RULES]), [])
+
+    def test_changed_amount_after_the_first_words_is_noticed(self):
+        self.assertEqual(self.touched([self.RULES], [self.RULES.replace("5 000", "7 000")]), ["tow_truck"])
+
+    def test_answer_that_loses_a_quoted_condition_is_rejected(self):
+        item = {"key_conditions": "Решение о выплате — в течение 30 рабочих дней.",
+                "evidence_quote": "Решение о выплате принимается в течение 30 рабочих дней"}
+        lost = Draft(True, "В правилах прямо не указаны сроки страховой выплаты.", [], "")
+        kept = Draft(True, "Решение о выплате принимается в течение 30 рабочих дней.", [], "")
+        self.assertTrue(_lost_condition(item, lost, [self.RULES]))
+        self.assertFalse(_lost_condition(item, kept, [self.RULES]))
 
 class ValidateTests(unittest.TestCase):
     PAGES = ["Выплата производится в течение 25 (двадцати пяти) рабочих дней со дня предоставления всех документов."]

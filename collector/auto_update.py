@@ -80,17 +80,65 @@ def affected_fields(company: dict[str, Any], file: str, new_pages: list[str],
     """Parameters that cite this file and whose wording the change touches."""
     new_text = comparable(" ".join(new_pages))
     old_text = comparable(" ".join(old_pages)) if old_pages is not None else None
-    changed = added + removed
+    old_page_text = [comparable(page) for page in old_pages] if old_pages is not None else None
+    # A sentence that still occurs somewhere (e.g. a duplicate in a dropped
+    # appendix) did not really change.
+    added = [s for s in added if old_text is None or comparable(s) not in old_text]
+    removed = [s for s in removed if comparable(s) not in new_text]
     result = []
     for item in _fields_citing(company, file):
         quote = comparable(item.get("evidence_quote") or "")[:160]
         # A quoted clause that disappeared from the rules: the answer lost its basis.
         was_there = old_text is None or quote in old_text
         quote_gone = bool(quote) and was_there and quote not in new_text
-        touched = any(re.search(FIELD_PATTERNS[item["key"]], sentence) for sentence in changed)
+        # A removed sentence matters only on the pages the answer is based on:
+        # a dropped appendix elsewhere (VSK, 22.10.2026) must not rewrite answers.
+        cited = set(item.get("text_search_pages") or [])
+        removed_here = [
+            sentence for sentence in removed
+            if not cited or old_page_text is None
+            or any(comparable(sentence) in old_page_text[page - 1]
+                   for page in cited if 0 < page <= len(old_page_text))
+        ]
+        pattern = FIELD_PATTERNS[item["key"]]
+        touched = any(re.search(pattern, part) for part in _changed_parts(added, removed_here))
         if quote_gone or touched:
             result.append(item)
     return result
+
+
+def _changed_parts(added: list[str], removed: list[str]) -> list[str]:
+    """Changed sentences; when one is the start of another, only the differing tail.
+
+    A sentence glued to the next document's header ("…суток). www.vsk.ru …
+    ПРАВИЛА № 156.3 …") changes only in that tail, which says nothing about
+    the parameter.
+    """
+    parts = []
+    for sentence in added + removed:
+        own = comparable(sentence)
+        others = [comparable(other) for other in (removed if sentence in added else added)]
+        prefix = max((other for other in others if len(other) >= 80
+                      and (own.startswith(other) or other.startswith(own))), key=len, default=None)
+        if prefix is None:
+            parts.append(sentence)
+        elif len(own) > len(prefix):
+            parts.append(own[len(prefix):])
+    return parts
+
+
+def _lost_condition(item: dict[str, Any], draft: Draft, new_pages: list[str]) -> bool:
+    """The AI says the condition is absent although the old answer's quotes are still in the rules."""
+    from core.services.sales_insights_service import SalesInsightsService as reader
+
+    old_answer = item.get("key_conditions") or ""
+    if reader._is_unstated_condition(reader._normalized(old_answer)):
+        return False
+    if not reader._is_unstated_condition(reader._normalized(draft.key_conditions)):
+        return False
+    new_text = comparable(" ".join(new_pages))
+    quotes = [comparable(part)[:160] for part in (item.get("evidence_quote") or "").split("...") if len(part.strip()) > 25]
+    return bool(quotes) and all(quote in new_text for quote in quotes)
 
 
 def _load_log(path: Path) -> dict[str, Any]:
@@ -171,6 +219,11 @@ class AutoUpdater:
                 request_failed = True
                 problem = f"ошибка запроса к ИИ ({type(self.client).__name__}): {type(exc).__name__}: {str(exc)[:900]}"
                 drafts[item["key"]] = Draft(False, "", [], "", problems=[problem])
+        for item in touched:
+            draft = drafts[item["key"]]
+            if draft.valid and _lost_condition(item, draft, new_pages):
+                draft.problems.append(
+                    "новый ответ говорит, что условия нет, хотя цитаты прежнего ответа остались в правилах")
         failed = {key: draft for key, draft in drafts.items() if not draft.valid}
         if failed:
             for key, draft in failed.items():
