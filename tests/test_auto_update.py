@@ -250,6 +250,30 @@ class GeminiPathTests(unittest.TestCase):
         self.assertEqual(asked, ["main", "main", "main", "spare"])
         self.assertEqual(client.used_model, "spare")
 
+    def test_timed_out_gemini_model_gives_way_to_the_next_one(self):
+        import requests
+
+        answer = {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": '{"changed": false}'}]}}]}
+        asked = []
+
+        class Response:
+            status_code, text = 200, ""
+
+            def json(self):
+                return answer
+
+        def fake_post(url, **kwargs):
+            model = url.split("/models/")[1].split(":")[0]
+            asked.append(model)
+            if model == "slow":
+                raise requests.ReadTimeout("read timed out")
+            return Response()
+
+        client = GeminiClient("key", model="slow")
+        with patch.dict("os.environ", {"GEMINI_FALLBACK_MODELS": "quick"}),                 patch("collector.answer_writer.requests.post", fake_post),                 patch("collector.answer_writer.time.sleep"):
+            self.assertEqual(client.generate("prompt"), {"changed": False})
+        self.assertEqual(asked, ["slow", "quick"])
+
     def test_fallback_models_come_from_the_account_model_list_newest_first(self):
         class Listing:
             status_code = 200
