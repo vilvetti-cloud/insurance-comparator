@@ -198,7 +198,11 @@ class GeminiClient:
     def generate(self, prompt: str) -> dict[str, Any]:
         errors = []
         for model in self.models():
-            response = self._request(model, prompt)
+            try:
+                response = self._request(model, prompt)
+            except requests.RequestException as exc:  # a timeout or a dropped connection
+                errors.append(f"{model}: {type(exc).__name__}")
+                continue
             if response.status_code == 200:
                 candidate = response.json()["candidates"][0]
                 if candidate.get("finishReason") != "STOP":
@@ -212,7 +216,11 @@ class GeminiClient:
         raise RuntimeError("Gemini " + " | ".join(errors))
 
     def _request(self, model: str, prompt: str):
+        """One model: a few tries while it is busy. A timeout is raised at once,
+        so a slow model gives way to the next one instead of three long waits."""
         for attempt in range(3):
+            if attempt:
+                time.sleep(30 * attempt)
             response = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 headers={"x-goog-api-key": self.api_key},
@@ -224,12 +232,11 @@ class GeminiClient:
                         "responseJsonSchema": SCHEMA,
                     },
                 },
-                timeout=(15, 300),
+                timeout=(15, 240),
             )
             # Free-tier limits and busy servers: wait and try again.
             if response.status_code in (429, 500, 502, 503, 504) and attempt < 2:
                 response.close()
-                time.sleep(30 * (attempt + 1))
                 continue
             return response
         return response
