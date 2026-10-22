@@ -66,8 +66,8 @@
     "insurer": "vsk",
     "role": "canonical_level_1",
     "path": "data/sources/vsk/technical.pdf",
-    "sha256": "864261efb0f34b2c1265b4e1f3a2b0fad90c60904af4d859afe45419c80f7a92",
-    "bytes": 701130
+    "sha256": "055c5e4de14d8d8d0b49747c90970997c00e4a6898f7feae5b4d5acbf449f5d3",
+    "bytes": 473898
   },
   {
     "insurer": "yugoria",
