@@ -1753,7 +1753,8 @@
           "url": "https://ugsk.ru/",
           "status": "unavailable",
           "reason": "страница не открылась для проверки",
-          "known_links": []
+          "known_links": [],
+          "new_documents": []
         }
       ]
     },
