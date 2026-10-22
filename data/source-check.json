@@ -1735,16 +1735,17 @@
       ]
     },
     "Югория": {
-      "status": "ok",
+      "status": "changed",
       "verified_at": "2026-10-22T13:49+03:00",
       "files": [
         {
           "file": "yugoria/technical.pdf",
           "url": "https://ugsk.ru/pravila/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%D0%9A%D0%90%D0%A1%D0%9A%D0%9E_04_%D1%80%D0%B5%D0%B4.9.0.pdf",
           "via": "manual",
-          "status": "unchanged",
-          "remote_sha256": "19c5e8fcedf1972b81505d1a91ff9f8bbdff7a233451e30fa0a3871cd837b3a4",
-          "remote_size": 2086347
+          "status": "changed",
+          "reason": "файл на сайте отличается от сохранённой копии",
+          "remote_sha256": "7610af1b1977116fb24ccb4713b8bd22d62cf9fae885782854b0e9f6db22e37e",
+          "remote_size": 1160598
         }
       ],
       "pages": [
@@ -1752,11 +1753,9 @@
           "url": "https://ugsk.ru/",
           "status": "unavailable",
           "reason": "страница не открылась для проверки",
-          "known_links": [],
-          "new_documents": []
+          "known_links": []
         }
-      ],
-      "auto_updated_at": "2026-10-22T13:49+03:00"
+      ]
     },
     "Совкомбанк Страхование": {
       "status": "ok",
@@ -1784,5 +1783,5 @@
       ]
     }
   },
-  "rechecked_at": "2026-10-22T13:39+03:00"
+  "rechecked_at": "2026-10-22T14:02+03:00"
 }
