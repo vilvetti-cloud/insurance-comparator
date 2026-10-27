@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "checked_at": "2026-10-26T11:29+03:00",
+  "checked_at": "2026-10-27T11:37+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "ok",
-      "verified_at": "2026-10-26T11:29+03:00",
+      "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
@@ -361,7 +361,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-10-26T11:29+03:00",
+      "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -380,7 +380,7 @@
     },
     "Ингосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-26T11:29+03:00",
+      "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "ingos/technical.pdf",
@@ -447,7 +447,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-26T11:29+03:00",
+      "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -470,20 +470,21 @@
       ]
     },
     "Согласие": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-10-27T07:32+03:00",
       "files": [
         {
           "file": "soglasie/technical.pdf",
           "url": "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20%D1%81%D1%82%D1%80%D0%B0%D1%85%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки"
         }
       ],
       "pages": [
         {
           "url": "https://www.soglasie.ru/individuals/avto/kasko/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки",
           "known_links": [
             "https://api.soglasie.ru/storage/managed/upload/docs/Personal_data_processing_consent.pdf",
             "https://api.soglasie.ru/storage/managed/upload/docs/Privacy_policy.pdf",
@@ -493,8 +494,8 @@
         },
         {
           "url": "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки",
           "known_links": [
             "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/Правила страхования.pdf",
             "https://api.soglasie.ru/storage/managed/upload/docs/Personal_data_processing_consent.pdf",
@@ -507,7 +508,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-26T11:29+03:00",
+      "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -1177,7 +1178,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-26T11:29+03:00",
+      "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1205,7 +1206,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-26T11:29+03:00",
+      "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1606,6 +1607,7 @@
             "https://sberbankins.ru/upload/iblock/baa/lbtybbjxe92a954m4la98e4ah5ffelb7/PS-14-_s-01.09.2026_.pdf",
             "https://sberbankins.ru/upload/iblock/bb1/8f7e42c8f4024959d251eb803b0a1d88.pdf",
             "https://sberbankins.ru/upload/iblock/bb5/Pravila-strakhovaniya-sudov-_116.pdf",
+            "https://sberbankins.ru/upload/iblock/bbb/ube7vsafr85005g8wzg0ooivgmkyd5wz/Uvedomlenie_o_sobytii_i_zayavlenie_na_vyplatu_final.pdf",
             "https://sberbankins.ru/upload/iblock/bbc/1qqbjhvzvb363e0akops7iikfa64yq38/Pavila-20_1-ot-300625.pdf",
             "https://sberbankins.ru/upload/iblock/bbc/9iejmigdtpno0b9bw72zj6pw4mo5cmvq/Pravila-130.1_-uvtrezhdeny-prikazom-_372-ot-08.08.2025_-prilozhenie-_5-prikazom-_401-ot-27.08.2025.pdf",
             "https://sberbankins.ru/upload/iblock/bbe/Pravila-kompleksnogo-ipotechnogo-strakhovaniya-_82.1.pdf",
@@ -1731,13 +1733,14 @@
       ]
     },
     "Югория": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-10-27T07:32+03:00",
       "files": [
         {
           "file": "yugoria/technical.pdf",
           "url": "https://ugsk.ru/pravila/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%D0%9A%D0%90%D0%A1%D0%9A%D0%9E_04_%D1%80%D0%B5%D0%B4.9.0.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт отдал страницу вместо файла правил"
         }
       ],
       "pages": [
@@ -1751,7 +1754,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-26T11:29+03:00",
+      "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
@@ -1774,6 +1777,5 @@
         }
       ]
     }
-  },
-  "rechecked_at": "2026-10-27T07:32+03:00"
+  }
 }
