@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Регистрация — Страховой аналитик{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% set active_section = 'account' %}
+
+{% block content %}
+<section class="card auth-card">
+  <p class="eyebrow">Регистрация</p>
+  <h1>Минута — и сравнения снова доступны</h1>
+  <p class="auth-card__lead">Основную страховую подставим в сравнение автоматически.</p>
+  {% include "_messages.html" %}
+  <form method="POST" action="/register?next={{ next|urlencode }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <div class="form-stack">
+      <div class="field-pair">
+        <div class="field-group">
+          <label class="field-label" for="first_name">Имя</label>
+          <input class="text-input" id="first_name" name="first_name" autocomplete="given-name" required value="{{ form.get('first_name', '') }}">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="last_name">Фамилия</label>
+          <input class="text-input" id="last_name" name="last_name" autocomplete="family-name" required value="{{ form.get('last_name', '') }}">
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="main_insurer">Основная страховая</label>
+        <div class="select-wrap">
+          <select id="main_insurer" name="main_insurer" required>
+            <option value="" disabled {% if not form.get('main_insurer') %}selected{% endif %}>Выберите компанию</option>
+            {% for company in companies %}
+            <option value="{{ company }}" {% if form.get('main_insurer') == company %}selected{% endif %}>{{ company }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="email">Почта</label>
+        <input class="text-input" id="email" name="email" type="email" autocomplete="email" required value="{{ form.get('email', '') }}">
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="password">Пароль</label>
+        <input class="text-input" id="password" name="password" type="password" autocomplete="new-password" minlength="6" required>
+      </div>
+      <button class="button" type="submit"><span>Зарегистрироваться</span></button>
+    </div>
+  </form>
+  <p class="auth-switch">Уже есть аккаунт? <a class="text-link" href="/login?next={{ next|urlencode }}">Войти</a></p>
+</section>
+{% endblock %}

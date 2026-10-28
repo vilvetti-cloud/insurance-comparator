@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Оплата — Страховой аналитик{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<section class="card auth-card">
+  <p class="eyebrow">Тестовая оплата</p>
+  <h1>{{ plan.title }} — {{ purchase.amount }} ₽</h1>
+  <p class="auth-card__lead">Это тестовая страница: деньги не списываются. Когда подключим платёжную систему,
+    здесь будет настоящая форма оплаты картой.</p>
+  <form method="POST">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="button" type="submit"><span>Оплатить (тест)</span></button>
+  </form>
+  <p class="auth-switch"><a class="text-link" href="/account">Отмена</a></p>
+</section>
+{% endblock %}

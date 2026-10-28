@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 import os
 
-from flask import Flask, jsonify, redirect, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request
 
 from collector.registry import INSURERS
 from collector.source_watch import load_status as load_source_status
@@ -11,9 +11,13 @@ from core.catalog import KASKO_FIELDS
 from core.services.comparison_service import ComparisonService
 from core.services.sales_insights_service import SalesInsightsService
 from core.services.data_quality_report_service import DataQualityReportService
+import web_accounts
 
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
+app.register_blueprint(web_accounts.bp)
 
 SOURCE_STATUS_LABELS = {
     "ok": "правила на сайте не менялись",
@@ -145,9 +149,11 @@ def _prepare_company_data(snapshot: dict, company: str, contextual: dict | None 
 @app.route("/")
 def index():
     snapshot = comparison_service.load_snapshot()
+    user = web_accounts.current_user()
     return render_template(
         "index.html",
         companies=COMPANIES,
+        main_insurer=user["main_insurer"] if user else None,
         group_compare=GROUP_COMPARE,
         last_updated=snapshot.get("_last_updated", "Не обновлялось"),
     )
@@ -169,6 +175,10 @@ def compare():
         or company1 == company2
     ):
         return redirect("/")
+    # 3 free comparisons, then registration and a subscription.
+    blocked = web_accounts.comparison_gate(company1, company2)
+    if blocked is not None:
+        return blocked
 
     snapshot = comparison_service.load_snapshot()
     if snapshot.get("_data_source") == "normalized_json":
@@ -376,6 +386,9 @@ def _json_data_report(snapshot: dict) -> dict:
 
 @app.route("/data-report")
 def data_report():
+    # Service menu: only the owner sees how the answers are filled in.
+    if web_accounts.enabled() and not web_accounts.is_admin():
+        abort(404)
     snapshot = comparison_service.load_snapshot()
     report = (_json_data_report(snapshot) if snapshot.get("_data_source") == "normalized_json"
               else data_quality_report_service.load())
