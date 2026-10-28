@@ -1,0 +1,15 @@
+<div class="plan-grid">
+  {% for key, plan in plans.items() %}
+  <div class="plan-card">
+    <strong>{{ plan.title }}</strong>
+    <div class="plan-card__price">{{ plan.price }} ₽{% if plan.days %}<small> / {{ plan.days }} дней</small>{% endif %}</div>
+    <p>{{ plan.description }}</p>
+    {% if current_user %}
+    <form method="POST" action="/buy/{{ key }}{% if next %}?next={{ next|urlencode }}{% endif %}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button class="button {% if key != 'monthly' %}button--secondary{% endif %}" type="submit"><span>Купить</span></button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>

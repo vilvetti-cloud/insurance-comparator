@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Кабинет — Страховой аналитик{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% set active_section = 'account' %}
+
+{% block content %}
+<section class="card auth-card">
+  <p class="eyebrow">Кабинет</p>
+  <h1>{{ user.first_name }} {{ user.last_name }}</h1>
+  <p class="auth-card__lead">{{ user.email }} · основная страховая: {{ user.main_insurer }}</p>
+  {% include "_messages.html" %}
+
+  <div class="account-status">
+    {% if monthly_until %}
+      <span>Подписка на месяц: <strong>действует до {{ monthly_until }}</strong></span>
+    {% endif %}
+    {% if oneoff_left %}
+      <span>Разовая подписка: <strong>осталось сравнений — {{ oneoff_left }}</strong></span>
+    {% endif %}
+    {% if not monthly_until and not oneoff_left %}
+      <span>Бесплатных сравнений осталось: <strong>{{ free_left }}</strong></span>
+    {% endif %}
+  </div>
+
+  <p><a class="button account-start" href="/"><span>Перейти к сравнению</span></a></p>
+
+  <h2 class="account-heading">Подписка</h2>
+  {% if payments_test %}<p class="auth-switch">Оплата работает в тестовом режиме: деньги не списываются.</p>{% endif %}
+  {% include "_plans.html" %}
+
+  {% if purchases %}
+  <ul class="history">
+    {% for item in purchases %}
+      <li>{{ plans[item.plan].title }} — {{ item.amount }} ₽, оплачено {{ item.paid_at[:10] }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <form method="POST" action="/logout" class="auth-switch">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="link-button" type="submit">Выйти</button>
+  </form>
+</section>
+{% endblock %}

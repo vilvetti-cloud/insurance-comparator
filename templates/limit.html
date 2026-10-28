@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Бесплатные сравнения закончились — Страховой аналитик{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<section class="card auth-card">
+  <p class="eyebrow">Доступ</p>
+  {% if current_user %}
+    <h1>Бесплатные сравнения закончились</h1>
+    <p class="auth-card__lead">Выберите подписку, чтобы продолжить. После оплаты сравнение откроется сразу.</p>
+    {% include "_plans.html" %}
+  {% else %}
+    <h1>{{ free }} бесплатных сравнения уже использованы</h1>
+    <p class="auth-card__lead">Зарегистрируйтесь — это минута: имя, основная страховая, почта и пароль.
+      Дальше можно выбрать подписку.</p>
+    <a class="button" href="/register?next={{ next|urlencode }}"><span>Зарегистрироваться</span></a>
+    <p class="auth-switch">Уже есть аккаунт? <a class="text-link" href="/login?next={{ next|urlencode }}">Войти</a></p>
+    {% include "_plans.html" %}
+  {% endif %}
+</section>
+{% endblock %}

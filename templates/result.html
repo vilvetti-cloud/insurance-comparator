@@ -37,6 +37,7 @@
 <nav class="result-nav" aria-label="Навигация">
   <a class="text-link text-link--back" href="/">← Новое сравнение</a>
 </nav>
+{% include "_messages.html" %}
 
 <section class="result-hero">
   <div>
@@ -66,7 +67,7 @@
   {% set check = source_check.companies.get(name) %}
   {% if check and check.status != 'ok' %}{% set _ = notices.append((name, check)) %}{% endif %}
 {% endfor %}
-{% if notices %}
+{% if notices and is_admin %}
 <section class="source-notices" aria-label="Проверка правил на сайтах">
   {% for name, check in notices %}
     <p class="source-notice source-notice--{{ check.status }}">

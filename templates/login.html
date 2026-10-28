@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Вход — Страховой аналитик{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% set active_section = 'account' %}
+
+{% block content %}
+<section class="card auth-card">
+  <p class="eyebrow">Вход</p>
+  <h1>С возвращением</h1>
+  <p class="auth-card__lead">Войдите, чтобы продолжить сравнения.</p>
+  {% include "_messages.html" %}
+  <form method="POST" action="/login?next={{ next|urlencode }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <div class="form-stack">
+      <div class="field-group">
+        <label class="field-label" for="email">Почта</label>
+        <input class="text-input" id="email" name="email" type="email" autocomplete="email" required>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="password">Пароль</label>
+        <input class="text-input" id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="button" type="submit"><span>Войти</span></button>
+    </div>
+  </form>
+  <p class="auth-switch">Нет аккаунта? <a class="text-link" href="/register?next={{ next|urlencode }}">Зарегистрироваться</a></p>
+</section>
+{% endblock %}
