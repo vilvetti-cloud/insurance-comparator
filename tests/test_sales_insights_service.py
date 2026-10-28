@@ -717,3 +717,28 @@ class ReadingFixesTests(unittest.TestCase):
             "Исключение относится к пожару по внутренним причинам, в том числе неисправности штатных систем ТС.",
         )
         self.assertEqual(level, 0)
+
+    def test_decision_then_payment_after_the_act_add_up(self):
+        term = SalesInsightsService._payment_term(
+            "решение по заявлению — в течение 15 рабочих дней после передачи всех документов (п. 11.4), "
+            "выплата — в течение 7 рабочих дней после утверждения акта о страховом случае (п. 11.5)."
+        )
+        self.assertEqual((term.amount, term.unit, term.context), (22, "working_days", "payment"))
+
+    def test_stages_in_different_units_are_not_added(self):
+        self.assertIsNone(SalesInsightsService._payment_term(
+            "решение — в течение 30 календарных дней после получения документов, "
+            "денежная выплата — в течение 15 рабочих дней со дня решения."
+        ))
+
+    def test_total_loss_threshold_as_a_coefficient(self):
+        threshold = SalesInsightsService._total_loss_threshold(
+            "тотальная конструктивная гибель — если ремонт превышает рв = 0,75 × расчётная страховая сумма."
+        )
+        self.assertEqual(threshold.amount, 75.0)
+
+    def test_money_and_natural_forms_of_compensation(self):
+        options = SalesInsightsService._repair_options_v2(
+            "статья 68 допускает денежную, натуральную или комбинированную форму возмещения."
+        )
+        self.assertEqual(options, {"cash", "stoa"})
