@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Новый пароль — Страховой аналитик{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% set active_section = 'account' %}
+
+{% block content %}
+<section class="card auth-card">
+  <p class="eyebrow">Пароль</p>
+  <h1>Новый пароль</h1>
+  {% include "_messages.html" %}
+  <form method="POST">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <div class="form-stack">
+      <div class="field-group">
+        <label class="field-label" for="password">Новый пароль (не короче 6 символов)</label>
+        <input class="text-input" id="password" name="password" type="password" autocomplete="new-password"
+               minlength="6" required>
+      </div>
+      <button class="button" type="submit"><span>Сохранить и войти</span></button>
+    </div>
+  </form>
+</section>
+{% endblock %}

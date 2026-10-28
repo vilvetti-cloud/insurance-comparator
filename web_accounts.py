@@ -16,8 +16,11 @@ import secrets
 from functools import wraps
 from urllib.parse import urlsplit
 
-from flask import (Blueprint, abort, flash, g, redirect, render_template, request, session, url_for)
+from flask import (Blueprint, abort, current_app, flash, g, redirect, render_template, request, session,
+                   url_for)
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
+from core import mailer
 from core.accounts import FREE_COMPARISONS, PLANS, AccountStore
 
 bp = Blueprint("accounts", __name__)
@@ -197,6 +200,62 @@ def login():
             return redirect(_safe_next(request.args.get("next")))
         flash("Неверная почта или пароль.")
     return render_template("login.html", next=request.args.get("next", ""))
+
+
+RESET_MAX_AGE = 3600  # a reset link works for one hour
+
+
+def _reset_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(os.environ["SECRET_KEY"], salt="password-reset")
+
+
+@bp.route("/forgot", methods=["GET", "POST"])
+def forgot():
+    if not enabled():
+        abort(404)
+    if request.method == "POST":
+        _check_csrf()
+        email = request.form.get("email", "").strip()
+        user_id = store().user_id_by_email(email) if mailer.enabled() else None
+        if user_id:
+            token = _reset_serializer().dumps({"u": user_id, "s": store().password_stamp(user_id)})
+            link = url_for("accounts.reset", token=token, _external=True)
+            try:
+                mailer.send(email, "Новый пароль — Страховой аналитик",
+                            "Здравствуйте!\n\nЧтобы задать новый пароль, откройте ссылку (она действует 1 час):\n"
+                            f"{link}\n\nЕсли вы не просили сменить пароль, просто удалите это письмо.\n")
+            except Exception:  # noqa: BLE001 - a mail failure must not show who is registered
+                current_app.logger.exception("Password reset e-mail was not sent")
+        # The same answer for any address: the page does not reveal who is registered.
+        flash("Если эта почта зарегистрирована, мы отправили на неё письмо со ссылкой. "
+              "Проверьте и папку «Спам».")
+        return redirect(url_for("accounts.forgot"))
+    return render_template("forgot.html", mail=mailer.enabled())
+
+
+@bp.route("/reset/<token>", methods=["GET", "POST"])
+def reset(token):
+    if not enabled():
+        abort(404)
+    try:
+        data = _reset_serializer().loads(token, max_age=RESET_MAX_AGE)
+    except (BadSignature, SignatureExpired):
+        data = None
+    if not data or store().password_stamp(data.get("u")) != data.get("s"):
+        flash("Ссылка устарела или уже использована. Запросите новую.")
+        return redirect(url_for("accounts.forgot"))
+    if request.method == "POST":
+        _check_csrf()
+        password = request.form.get("password", "")
+        if len(password) < 6:
+            flash("Пароль — не короче 6 символов.")
+        else:
+            store().set_password(data["u"], password)
+            session.clear()
+            session["user_id"] = data["u"]
+            flash("Пароль изменён.")
+            return redirect("/account")
+    return render_template("reset.html")
 
 
 @bp.route("/logout", methods=["POST"])

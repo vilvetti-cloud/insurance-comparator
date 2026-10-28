@@ -146,6 +146,15 @@ class AccountStore:
         return [dict(zip(("id", "email", "first_name", "last_name", "main_insurer", "created_at"), row))
                 for row in rows]
 
+    def user_id_by_email(self, email: str) -> int | None:
+        row = self._run("SELECT id FROM casco_users WHERE email = ?", (email.strip().lower(),), fetch="one")
+        return row[0] if row else None
+
+    def password_stamp(self, user_id: int) -> str | None:
+        """Changes with the password, so a reset link works only once."""
+        row = self._run("SELECT password_hash FROM casco_users WHERE id = ?", (user_id,), fetch="one")
+        return row[0][-16:] if row else None
+
     def set_password(self, user_id: int, password: str) -> None:
         self._run("UPDATE casco_users SET password_hash = ? WHERE id = ?", (generate_password_hash(password), user_id))
 
