@@ -28,6 +28,7 @@
       <nav class="header-actions" aria-label="Разделы">
         {% set section = active_section | default('compare') %}
         <a class="header-link {% if section == 'compare' %}header-link--active{% endif %}" href="/" {% if section == 'compare' %}aria-current="page"{% endif %}>Сравнение</a>
+        <a class="header-link {% if section == 'about' %}header-link--active{% endif %}" href="/about" {% if section == 'about' %}aria-current="page"{% endif %}>О сервисе</a>
         {% if is_admin %}
         <a class="header-link {% if section == 'report' %}header-link--active{% endif %}" href="/data-report" {% if section == 'report' %}aria-current="page"{% endif %}>Контроль данных</a>
         {% endif %}
