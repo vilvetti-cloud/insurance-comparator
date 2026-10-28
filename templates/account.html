@@ -23,6 +23,7 @@
   </div>
 
   <p><a class="button account-start" href="/"><span>Перейти к сравнению</span></a></p>
+  {% if is_admin %}<p class="auth-switch"><a class="text-link" href="/admin">Админка: пользователи и подписки →</a></p>{% endif %}
 
   <h2 class="account-heading">Подписка</h2>
   {% if payments_test %}<p class="auth-switch">Оплата работает в тестовом режиме: деньги не списываются.</p>{% endif %}

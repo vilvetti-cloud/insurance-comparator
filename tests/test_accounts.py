@@ -45,11 +45,21 @@ class AccountsTests(unittest.TestCase):
             "csrf": token, "first_name": "Анна", "last_name": "Иванова", "main_insurer": "РЕСО-Гарантия",
             "email": email, "password": "secret1"})
 
-    def buy(self, plan):
-        token = self.csrf("/account")
-        response = self.client.post(f"/buy/{plan}", data={"csrf": token}, headers={"X-Forwarded-For": self.ip})
-        checkout = response.headers["Location"]
-        self.client.post(checkout, data={"csrf": token}, headers={"X-Forwarded-For": self.ip})
+    def buy(self, plan, email="agent@example.com"):
+        """The owner gives the subscription by hand (no card payments yet)."""
+        owner = app.test_client()
+        html = owner.get("/register").get_data(as_text=True)
+        token = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
+        owner.post("/register", data={"csrf": token, "first_name": "В", "last_name": "О",
+                                      "main_insurer": "ВСК", "email": "owner@example.com", "password": "secret1"})
+        if owner.get("/admin").status_code != 200:  # already registered: sign in
+            html = owner.get("/login").get_data(as_text=True)
+            token = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
+            owner.post("/login", data={"csrf": token, "email": "owner@example.com", "password": "secret1"})
+        user_id = web_accounts.store().check_login(email, "secret1")
+        html = owner.get("/admin").get_data(as_text=True)
+        token = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
+        self.assertEqual(owner.post(f"/admin/grant/{user_id}/{plan}", data={"csrf": token}).status_code, 302)
 
     def test_three_free_comparisons_then_registration(self):
         for pair in PAIRS[:3]:
@@ -107,6 +117,41 @@ class AccountsTests(unittest.TestCase):
         self.register(email="owner@example.com")
         for pair in PAIRS:
             self.assertEqual(self.compare(pair).status_code, 200)
+
+    def test_card_payment_is_not_open_to_users_yet(self):
+        self.register()
+        token = self.csrf("/account")
+        response = self.client.post("/buy/monthly", data={"csrf": token}, headers={"X-Forwarded-For": self.ip})
+        self.assertTrue(response.headers["Location"].endswith("/account"))
+        self.assertIn("получить у владельца", self.client.get("/account").get_data(as_text=True))
+        self.assertEqual(self.client.get("/checkout/test/1").status_code, 404)
+
+    def test_owner_can_try_the_test_checkout(self):
+        self.register(email="owner@example.com")
+        token = self.csrf("/account")
+        checkout = self.client.post("/buy/oneoff", data={"csrf": token}).headers["Location"]
+        self.assertIn("/checkout/test/", checkout)
+        self.client.post(checkout, data={"csrf": token})
+        self.assertIn("осталось сравнений", self.client.get("/account").get_data(as_text=True))
+
+    def test_admin_page_lists_users_and_resets_a_password(self):
+        self.register()
+        self.assertEqual(self.client.get("/admin").status_code, 404)  # not for users
+        self.buy("monthly")
+        owner = app.test_client()
+        html = owner.get("/login").get_data(as_text=True)
+        token = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
+        owner.post("/login", data={"csrf": token, "email": "owner@example.com", "password": "secret1"})
+        page = owner.get("/admin").get_data(as_text=True)
+        self.assertIn("agent@example.com", page)
+        self.assertIn("Месяц до", page)
+        user_id = web_accounts.store().check_login("agent@example.com", "secret1")
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        owner.post(f"/admin/password/{user_id}", data={"csrf": token})
+        message = owner.get("/admin").get_data(as_text=True)
+        new_password = re.search(r"Новый пароль для agent@example.com: (\S+) —", message).group(1)
+        self.assertIsNone(web_accounts.store().check_login("agent@example.com", "secret1"))
+        self.assertEqual(web_accounts.store().check_login("agent@example.com", new_password), user_id)
 
     def test_wrong_password_and_duplicate_email(self):
         self.register()

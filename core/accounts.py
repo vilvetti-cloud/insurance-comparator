@@ -135,6 +135,16 @@ class AccountStore:
                         (email.strip().lower(),), fetch="one")
         return row[0] if row and check_password_hash(row[1], password) else None
 
+    def users(self) -> list[dict[str, Any]]:
+        """Everyone registered, newest first (for the owner's admin page)."""
+        rows = self._run("SELECT id, email, first_name, last_name, main_insurer, created_at FROM casco_users "
+                         "ORDER BY id DESC", fetch="all")
+        return [dict(zip(("id", "email", "first_name", "last_name", "main_insurer", "created_at"), row))
+                for row in rows]
+
+    def set_password(self, user_id: int, password: str) -> None:
+        self._run("UPDATE casco_users SET password_hash = ? WHERE id = ?", (generate_password_hash(password), user_id))
+
     # --- purchases -------------------------------------------------------
     def create_purchase(self, user_id: int, plan: str, provider: str) -> int:
         return self._insert(
@@ -180,6 +190,13 @@ class AccountStore:
         return bought * PLANS["oneoff"]["comparisons"] - used
 
     # --- comparisons -----------------------------------------------------
+    def comparisons_made(self, user_id: int) -> int:
+        return self._run("SELECT COUNT(*) FROM casco_usage WHERE user_id = ?", (user_id,), fetch="one")[0]
+
+    def grant(self, user_id: int, plan: str) -> None:
+        """A subscription the owner gives by hand (paid by transfer, a gift)."""
+        self.mark_paid(self.create_purchase(user_id, plan, provider="manual"), provider_id="manual")
+
     def free_used(self, *, user_id: int | None, ip: str, visitor: str) -> int:
         return self._run(
             "SELECT COUNT(*) FROM casco_usage WHERE kind = 'free' AND (ip = ? OR visitor = ? OR user_id = ?)",

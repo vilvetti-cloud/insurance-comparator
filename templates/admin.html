@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Админка — Страховой аналитик{% endblock %}
+{% block page_class %}admin-page{% endblock %}
+
+{% block content %}
+<section class="admin-head">
+  <p class="eyebrow">Админка</p>
+  <h1>Пользователи и подписки</h1>
+  <p class="auth-card__lead">Зарегистрировано: {{ users|length }}. Подписку можно подключить вручную —
+    например, тем, кто заплатил переводом, пока нет оплаты картой.</p>
+  {% include "_messages.html" %}
+</section>
+
+{% if users %}
+<div class="admin-list">
+  {% for user in users %}
+  <article class="card admin-user">
+    <div class="admin-user__main">
+      <strong>{{ user.first_name }} {{ user.last_name }}</strong>
+      <span>{{ user.email }}</span>
+      <span>Основная страховая: {{ user.main_insurer }} · с {{ user.registered }}</span>
+    </div>
+    <div class="admin-user__status">
+      {% if user.monthly_until %}<span class="outcome-chip outcome-chip--win">Месяц до {{ user.monthly_until }}</span>{% endif %}
+      {% if user.oneoff_left %}<span class="outcome-chip outcome-chip--win">Разовая: осталось {{ user.oneoff_left }}</span>{% endif %}
+      {% if not user.monthly_until and not user.oneoff_left %}<span class="outcome-chip outcome-chip--equal">Без подписки</span>{% endif %}
+      <span class="admin-user__count">Сравнений сделано: {{ user.comparisons }}</span>
+    </div>
+    <div class="admin-user__actions">
+      {% for key, plan in plans.items() %}
+      <form method="POST" action="/admin/grant/{{ user.id }}/{{ key }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <button class="button button--secondary" type="submit"><span>Выдать: {{ plan.title|lower }}</span></button>
+      </form>
+      {% endfor %}
+      <form method="POST" action="/admin/password/{{ user.id }}"
+            onsubmit="return confirm('Сбросить пароль? Старый пароль перестанет работать.')">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <button class="link-button" type="submit">Сбросить пароль</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p class="auth-card__lead">Пока никто не зарегистрировался.</p>
+{% endif %}
+{% endblock %}

@@ -1958,3 +1958,63 @@ a.company-head__tag {
   font: inherit;
   cursor: pointer;
 }
+
+/* ---------- Admin ---------- */
+
+.admin-head h1 {
+  font-size: clamp(26px, 4vw, 34px);
+  letter-spacing: -0.03em;
+}
+
+.admin-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-user {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.admin-user__main,
+.admin-user__status {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.admin-user__main strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.admin-user__status {
+  justify-items: start;
+}
+
+.admin-user__count {
+  color: var(--ink-3);
+}
+
+.admin-user__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-user__actions .button {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .admin-user {
+    grid-template-columns: 1fr;
+  }
+}
