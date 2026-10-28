@@ -153,6 +153,24 @@ class AccountsTests(unittest.TestCase):
         self.assertIsNone(web_accounts.store().check_login("agent@example.com", "secret1"))
         self.assertEqual(web_accounts.store().check_login("agent@example.com", new_password), user_id)
 
+    def test_admin_page_shows_statistics(self):
+        for pair in PAIRS[:3]:
+            self.compare(pair)
+        self.compare(PAIRS[0], client=app.test_client(), ip="198.51.100.9")
+        self.register()
+        stats = web_accounts.store().stats()
+        self.assertEqual((stats["visitors"], stats["free_used_up"], stats["registered"]), (2, 1, 1))
+        self.assertEqual(stats["comparisons"], 4)
+        self.assertEqual(stats["top_pairs"][0], ("РЕСО-Гарантия против ВСК", 2))
+        self.buy("monthly")
+        owner = app.test_client()
+        html = owner.get("/login").get_data(as_text=True)
+        token = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
+        owner.post("/login", data={"csrf": token, "email": "owner@example.com", "password": "secret1"})
+        page = owner.get("/admin").get_data(as_text=True)
+        self.assertIn("Чаще всего сравнивают", page)
+        self.assertIn("использовали все 3 бесплатных", page)
+
     def test_health_queries_the_database(self):
         self.assertEqual(self.client.get("/health/accounts").get_json(), {"accounts": "ok"})
         with patch.object(web_accounts.store(), "ping", side_effect=OSError("paused")):
