@@ -159,6 +159,34 @@ def index():
     )
 
 
+ABOUT_EXAMPLE = ("Ренессанс Страхование", "ВСК")
+
+
+@app.route("/about")
+def about():
+    """What the service is, for people who have not used it yet."""
+    snapshot = comparison_service.load_snapshot()
+    first, second = ABOUT_EXAMPLE
+    example = sales_insights_service.analyze(
+        company=first,
+        competitor=second,
+        data=_prepare_company_data(snapshot, first),
+        competitor_data=_prepare_company_data(snapshot, second),
+        field_labels=FIELD_LABELS,
+    )
+    return render_template(
+        "about.html",
+        active_section="about",
+        companies=COMPANIES,
+        fields=[field["label"] for field in KASKO_FIELDS],
+        example=example["client_message"],
+        example_pair=ABOUT_EXAMPLE,
+        plans=web_accounts.PLANS,
+        free=web_accounts.FREE_COMPARISONS,
+        last_updated=snapshot.get("_last_updated", "Не обновлялось"),
+    )
+
+
 @app.route("/compare", methods=["GET", "POST"])
 def compare():
     company1 = request.values.get("company1")

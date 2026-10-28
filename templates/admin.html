@@ -11,6 +11,31 @@
   {% include "_messages.html" %}
 </section>
 
+<section class="admin-stats" aria-label="Статистика">
+  <div class="card admin-stat"><strong>{{ stats.visitors }}</strong><span>человек сделали хотя бы одно сравнение</span></div>
+  <div class="card admin-stat"><strong>{{ stats.free_used_up }}</strong><span>использовали все {{ free }} бесплатных</span></div>
+  <div class="card admin-stat"><strong>{{ stats.registered }}</strong><span>зарегистрировались</span></div>
+  <div class="card admin-stat"><strong>{{ stats.subscribed }}</strong><span>с действующей подпиской</span></div>
+  <div class="card admin-stat"><strong>{{ stats.comparisons }}</strong><span>сравнений всего · {{ stats.week }} за 7 дней · {{ stats.today }} за сутки</span></div>
+</section>
+
+{% if stats.top_pairs %}
+<section class="admin-tops">
+  <article class="card admin-top">
+    <h2>Чаще всего сравнивают</h2>
+    <ol>{% for pair, count in stats.top_pairs %}<li>{{ pair }} <span>{{ count }}</span></li>{% endfor %}</ol>
+  </article>
+  {% if stats.top_users %}
+  <article class="card admin-top">
+    <h2>Самые активные за 30 дней</h2>
+    <ol>{% for name, count in stats.top_users %}<li>{{ name }} <span>{{ count }}</span></li>{% endfor %}</ol>
+  </article>
+  {% endif %}
+</section>
+{% endif %}
+
+<h2 class="admin-subtitle">Пользователи</h2>
+
 {% if users %}
 <div class="admin-list">
   {% for user in users %}

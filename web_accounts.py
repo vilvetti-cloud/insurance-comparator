@@ -345,7 +345,8 @@ def admin():
             oneoff_left=max(store().oneoff_left(user["id"]), 0),
             comparisons=store().comparisons_made(user["id"]),
         ))
-    return render_template("admin.html", users=rows, plans=PLANS, active_section="admin")
+    return render_template("admin.html", users=rows, plans=PLANS, stats=store().stats(), free=FREE_COMPARISONS,
+                           active_section="admin")
 
 
 @bp.route("/admin/grant/<int:user_id>/<plan>", methods=["POST"])

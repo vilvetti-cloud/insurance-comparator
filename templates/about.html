@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}О сервисе — Страховой аналитик{% endblock %}
+{% block subtitle %}Сравнение условий КАСКО{% endblock %}
+{% block page_class %}about-page{% endblock %}
+
+{% block content %}
+<section class="about-hero">
+  <p class="eyebrow">О сервисе</p>
+  <h1>Сравнение КАСКО для&nbsp;страхового агента</h1>
+  <p class="about-lead">
+    Клиент спрашивает: «А чем ваша страховая лучше?» Сервис за несколько секунд сравнивает
+    условия КАСКО {{ companies|length }} страховых компаний по их официальным правилам страхования
+    и пишет готовый ответ клиенту — только о том, где ваша компания действительно сильнее.
+  </p>
+  <a class="button" href="/"><span>Сравнить компании</span></a>
+</section>
+
+<section class="about-steps" aria-label="Как это работает">
+  <article class="card about-step">
+    <span class="about-step__number">1</span>
+    <h2>Выберите две компании</h2>
+    <p>Свою страховую и ту, с которой клиент сравнивает.</p>
+  </article>
+  <article class="card about-step">
+    <span class="about-step__number">2</span>
+    <h2>Посмотрите сравнение</h2>
+    <p>{{ fields|length }} ключевых условий рядом, у каждого — пункт и цитата из правил.</p>
+  </article>
+  <article class="card about-step">
+    <span class="about-step__number">3</span>
+    <h2>Отправьте сообщение</h2>
+    <p>Скопируйте готовый текст в WhatsApp, Telegram или письмо.</p>
+  </article>
+</section>
+
+<section class="about-grid">
+  <article class="card about-block">
+    <h2>Что сравнивается</h2>
+    <ul class="about-list">
+      {% for field in fields %}<li>{{ field }}</li>{% endfor %}
+    </ul>
+  </article>
+  <article class="card about-block">
+    <h2>Какие компании</h2>
+    <ul class="about-list">
+      {% for company in companies %}<li>{{ company }}</li>{% endfor %}
+    </ul>
+  </article>
+</section>
+
+<section class="card about-block">
+  <h2>Почему этому можно доверять</h2>
+  <ul class="about-list about-list--plain">
+    <li><strong>Только официальные правила.</strong> Каждое условие взято из правил страхования, опубликованных
+      на сайте страховой, с номером пункта и дословной цитатой — без рекламы и пересказов.</li>
+    <li><strong>Правила проверяются каждый день.</strong> Когда страховая выпускает новую редакцию, ответы
+      обновляются по новому тексту: каждая цитата и каждое число сверяются с ним.</li>
+    <li><strong>Честное сообщение.</strong> Если условие у конкурента лучше, сервис о нём не упоминает,
+      но и не приписывает вашей компании того, чего нет в её правилах.</li>
+  </ul>
+</section>
+
+<section class="card about-block about-example" aria-labelledby="example-title">
+  <h2 id="example-title">Пример сообщения клиенту</h2>
+  <p class="about-note">{{ example_pair[0] }} против {{ example_pair[1] }} — так выглядит готовый текст:</p>
+  <div class="message-bubble">
+    <p class="client-message">{{ example }}</p>
+  </div>
+</section>
+
+{% if accounts_enabled %}
+<section class="card about-block">
+  <h2>Сколько стоит</h2>
+  <ul class="about-list about-list--plain">
+    <li><strong>Первые {{ free }} сравнения — бесплатно</strong>, без регистрации.</li>
+    {% for plan in plans.values() %}
+    <li><strong>{{ plan.title }} — {{ plan.price }} ₽</strong>:
+      {% if plan.comparisons %}{{ plan.comparisons }} сравнения{% else %}{{ plan.days }} дней без ограничений{% endif %}.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="about-cta">
+  <a class="button" href="/"><span>Попробовать бесплатно</span></a>
+</section>
+{% endblock %}

@@ -206,6 +206,46 @@ class AccountStore:
     def comparisons_made(self, user_id: int) -> int:
         return self._run("SELECT COUNT(*) FROM casco_usage WHERE user_id = ?", (user_id,), fetch="one")[0]
 
+    def stats(self, top: int = 5) -> dict[str, Any]:
+        """Figures for the owner's admin page (the owner's own comparisons are not recorded)."""
+        rows = self._run("SELECT user_id, ip, visitor, pair, kind, created_at FROM casco_usage", fetch="all")
+        now = _now()
+        visitors: dict[str, int] = {}
+        pairs: dict[str, int] = {}
+        by_user: dict[int, int] = {}
+        week = today = 0
+        for user_id, ip, visitor, pair, kind, created_at in rows:
+            who = visitor or ip or ""
+            if kind == "free":
+                visitors[who] = visitors.get(who, 0) + 1
+            else:
+                visitors.setdefault(who, 0)
+            pairs[pair] = pairs.get(pair, 0) + 1
+            age = now - datetime.fromisoformat(created_at)
+            week += age <= timedelta(days=7)
+            today += age <= timedelta(days=1)
+            if user_id is not None and age <= timedelta(days=30):
+                by_user[user_id] = by_user.get(user_id, 0) + 1
+        users = self.users()
+        names = {user["id"]: f"{user['first_name']} {user['last_name']}" for user in users}
+        subscribed = sum(
+            1 for user in users
+            if (self.monthly_until(user["id"]) or now) > now or self.oneoff_left(user["id"]) > 0
+        )
+        return {
+            "comparisons": len(rows),
+            "week": week,
+            "today": today,
+            "visitors": len(visitors),
+            "free_used_up": sum(1 for count in visitors.values() if count >= FREE_COMPARISONS),
+            "registered": len(users),
+            "subscribed": subscribed,
+            "top_pairs": [(pair.replace("|", " против "), count) for pair, count in
+                          sorted(pairs.items(), key=lambda item: -item[1])[:top]],
+            "top_users": [(names.get(user_id, "—"), count) for user_id, count in
+                          sorted(by_user.items(), key=lambda item: -item[1])[:top]],
+        }
+
     def grant(self, user_id: int, plan: str) -> None:
         """A subscription the owner gives by hand (paid by transfer, a gift)."""
         self.mark_paid(self.create_purchase(user_id, plan, provider="manual"), provider_id="manual")

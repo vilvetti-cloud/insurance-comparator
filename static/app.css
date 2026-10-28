@@ -2018,3 +2018,173 @@ a.company-head__tag {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- About ---------- */
+
+.about-page .app-shell {
+  display: grid;
+  gap: 20px;
+}
+
+.about-hero {
+  max-width: 760px;
+  padding-bottom: 12px;
+}
+
+.about-hero h1 {
+  margin-bottom: 16px;
+}
+
+.about-lead {
+  margin-bottom: 24px;
+  color: var(--ink-2);
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.about-steps,
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.about-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.about-step,
+.about-block {
+  padding: 24px;
+}
+
+.about-step h2,
+.about-block h2 {
+  margin-bottom: 10px;
+  font-size: 19px;
+}
+
+.about-step p,
+.about-note {
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.about-note {
+  margin-bottom: 14px;
+}
+
+.about-step__number {
+  margin-bottom: 14px;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.about-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.about-list--plain {
+  gap: 12px;
+}
+
+.about-list strong {
+  color: var(--ink);
+}
+
+.about-cta {
+  padding-top: 8px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .about-steps,
+  .about-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .about-lead {
+    font-size: 16px;
+  }
+
+  .about-step,
+  .about-block {
+    padding: 20px;
+  }
+}
+
+/* ---------- Admin statistics ---------- */
+
+.admin-stats {
+  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.admin-stat {
+  padding: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-stat strong {
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.admin-stat span,
+.admin-top li span {
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.admin-tops {
+  margin-bottom: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.admin-top {
+  padding: 18px 20px;
+}
+
+.admin-top h2,
+.admin-subtitle {
+  margin-bottom: 10px;
+  font-size: 18px;
+}
+
+.admin-top ol {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+
+/* Four or more header links (the owner's view) wrap below the name on phones. */
+@media (max-width: 520px) {
+  .site-header__inner:has(.header-actions > :nth-child(4)) {
+    height: auto;
+    padding-block: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-actions:has(> :nth-child(4)) {
+    flex-wrap: wrap;
+    border-radius: 18px;
+  }
+}
