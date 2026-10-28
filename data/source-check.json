@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "checked_at": "2026-10-27T11:37+03:00",
+  "checked_at": "2026-10-28T12:17+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "ok",
-      "verified_at": "2026-10-27T11:37+03:00",
+      "verified_at": "2026-10-28T12:17+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
@@ -361,7 +361,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-10-27T11:37+03:00",
+      "verified_at": "2026-10-28T12:17+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -379,18 +379,20 @@
       ]
     },
     "Ингосстрах": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-10-27T11:37+03:00",
       "files": [
         {
           "file": "ingos/technical.pdf",
           "url": "https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "файл по ссылке удалён — возможно, вышла новая редакция"
         },
         {
           "file": "ingos/supporting/ingos-gap-2025.pdf",
           "url": "https://www.ingos.ru/docs/pravila_strahovania_dop_rashodov_gap-2025.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "файл по ссылке удалён — возможно, вышла новая редакция"
         }
       ],
       "pages": [
@@ -406,7 +408,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-28T09:04+03:00",
+      "verified_at": "2026-10-28T12:17+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -446,7 +448,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-27T11:37+03:00",
+      "verified_at": "2026-10-28T12:17+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -469,20 +471,21 @@
       ]
     },
     "Согласие": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-10-28T09:04+03:00",
       "files": [
         {
           "file": "soglasie/technical.pdf",
           "url": "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20%D1%81%D1%82%D1%80%D0%B0%D1%85%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки"
         }
       ],
       "pages": [
         {
           "url": "https://www.soglasie.ru/individuals/avto/kasko/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки",
           "known_links": [
             "https://api.soglasie.ru/storage/managed/upload/docs/Personal_data_processing_consent.pdf",
             "https://api.soglasie.ru/storage/managed/upload/docs/Privacy_policy.pdf",
@@ -492,8 +495,8 @@
         },
         {
           "url": "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки",
           "known_links": [
             "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/Правила страхования.pdf",
             "https://api.soglasie.ru/storage/managed/upload/docs/Personal_data_processing_consent.pdf",
@@ -506,7 +509,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-27T11:37+03:00",
+      "verified_at": "2026-10-28T12:17+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -1176,7 +1179,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-27T11:37+03:00",
+      "verified_at": "2026-10-28T12:17+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1204,7 +1207,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-27T11:37+03:00",
+      "verified_at": "2026-10-28T12:17+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1369,6 +1372,7 @@
             "https://sberbankins.ru/upload/iblock/353/Pravila-NSiB_DMS-_114.pdf",
             "https://sberbankins.ru/upload/iblock/357/153-ot-23.06.2020.pdf",
             "https://sberbankins.ru/upload/iblock/359/i3i7c73grdwz8u0rzcbhuq5q7pv0opx5/Ustav_-Sberbank-strakhovanie_utv.-13.05.2025_registratsiya-03.06.2025_.pdf",
+            "https://sberbankins.ru/upload/iblock/36e/wi253819a77uejqhjep9w0za8hgwdv1h/Bazovye-strakhovye-tarify-i-popravochnye-koeffitsienty-k-pravilam-_-117.pdf",
             "https://sberbankins.ru/upload/iblock/37e/3h1g45nm9g12vihfryz5bgx395n5m9jd/Pravila-62_2-ot-26-08-2025.pdf",
             "https://sberbankins.ru/upload/iblock/37f/Pravila-strakhovaniya-_93.pdf",
             "https://sberbankins.ru/upload/iblock/38d/71d6def4d96053b5e76931f7108a3aba.pdf",
@@ -1752,7 +1756,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-27T11:37+03:00",
+      "verified_at": "2026-10-28T12:17+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
@@ -1775,6 +1779,5 @@
         }
       ]
     }
-  },
-  "rechecked_at": "2026-10-28T09:04+03:00"
+  }
 }
