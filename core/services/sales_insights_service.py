@@ -538,16 +538,20 @@ class SalesInsightsService:
                 contexts.append("repair_direction")
             if re.search(
                 r"денежн\w*\s+(?:выплат|возмещ)|страхов\w*\s+выплат|"
-                r"выплат\w*\s+страхов\w*\s+возмещ",
+                r"выплат\w*\s+страхов\w*\s+возмещ|перечисл\w*\s+(?:деньг|денежн|страхов|выплат)",
                 sentence,
             ):
                 contexts.append("payment")
             if re.search(
-                r"принят\w*\s+решен|рассмотрен\w*\s+(?:заяв|обращ)",
+                r"принят\w*\s+решен|решени\w*[^.;]{0,40}принима|рассмотрен\w*\s+(?:заяв|обращ)",
                 sentence,
             ):
                 contexts.append("claim_decision")
 
+            # One deadline that also covers the payment («решение принимается
+            # и деньги перечисляются в течение 30 дней») is the payment term.
+            if "payment" in contexts:
+                return PaymentTerm(amount=amount, unit=unit, context="payment")
             if len(set(contexts)) != 1:
                 continue
             return PaymentTerm(amount=amount, unit=unit, context=contexts[0])
@@ -1261,7 +1265,8 @@ class SalesInsightsService:
 
     _COVERAGE_TERMS = {
         "gap": r"\bgap\b|гэп|сохран\w*\s+стоим",
-        "self_ignition": r"самовозгор|возгоран",
+        # Rules often name self-ignition as "fire from internal causes".
+        "self_ignition": r"самовозгор|возгоран|пожар\w*\s+(?:в\s+силу\s+|по\s+)внутренн\w*",
         "terrorism": r"террор",
         "drone": r"бпла|дрон|беспилот",
         "tow_truck": r"эвакуац|эвакуатор",
@@ -1327,7 +1332,7 @@ class SalesInsightsService:
             return None
         negative_patterns = {
             "gap": r"(?:\bgap\b|гэп)[^.;]{0,100}(?:отсутств|не\s+предусмотр|не\s+включ|исключ)|(?:отсутств|не\s+предусмотр|не\s+включ|исключ)[^.;]{0,100}(?:\bgap\b|гэп)",
-            "self_ignition": r"(?:самовозгор|возгоран)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран)",
+            "self_ignition": r"(?:самовозгор|возгоран|пожар\w*\s+(?:в\s+силу\s+|по\s+)внутренн)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ)|(?:не\s+покрыв|не\s+включ|исключ)[^.;]{0,100}(?:самовозгор|возгоран|пожар\w*\s+(?:в\s+силу\s+|по\s+)внутренн)",
             "terrorism": r"террор[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,100}террор",
             "drone": r"(?:бпла|дрон|беспилот)[^.;]{0,100}(?:не\s+покрыв|не\s+включ|исключ|отсутств)|(?:не\s+покрыв|не\s+включ|исключ|отсутств)[^.;]{0,100}(?:бпла|дрон|беспилот)",
             "tow_truck": r"эвакуац\w*[^.;]{0,100}(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)|(?:не\s+предусмотр|не\s+предостав|исключ|отсутств)[^.;]{0,100}эвакуац",

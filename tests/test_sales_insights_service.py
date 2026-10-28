@@ -699,3 +699,21 @@ class GroupComparisonTests(unittest.TestCase):
             competitor_data={"self_ignition": self.EXCLUDED}, field_labels=self.LABELS,
         )["client_message"]
         self.assertTrue(single.startswith("Здравствуйте! Вот сравнение КАСКО A и B по официальным правилам страхования обеих компаний."))
+
+
+class ReadingFixesTests(unittest.TestCase):
+    """Wording found in real rules that the readers used to miss (28.10.2026)."""
+
+    def test_one_deadline_for_decision_and_payment_is_the_payment_term(self):
+        term = SalesInsightsService._payment_term(
+            "решение о выплате принимается в течение 30 рабочих дней после подачи документов, "
+            "и в эти же 30 рабочих дней перечисляются деньги (пп. 11.2, 11.5)."
+        )
+        self.assertEqual((term.amount, term.unit, term.context), (30, "working_days", "payment"))
+
+    def test_fire_from_internal_causes_reads_as_self_ignition(self):
+        level = SalesInsightsService._coverage_level_v2(
+            "self_ignition",
+            "Исключение относится к пожару по внутренним причинам, в том числе неисправности штатных систем ТС.",
+        )
+        self.assertEqual(level, 0)
