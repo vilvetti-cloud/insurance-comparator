@@ -98,7 +98,7 @@ def login_required(view):
 
 def comparison_gate(company1: str, company2: str):
     """None when the comparison may be shown (and is counted), otherwise a redirect."""
-    if not enabled():
+    if not enabled() or is_admin():  # the owner compares without a limit
         return None
     user = current_user()
     user_id = user["id"] if user else None
