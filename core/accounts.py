@@ -7,8 +7,7 @@ Owner's decisions (28.10.2026):
 - one-off purchase: 99 RUB for 3 more comparisons; monthly: 399 RUB for 30 days
   without a limit.
 
-Opening the same pair of companies again within a day does not use up a
-comparison. Storage is Postgres (DATABASE_URL, Supabase) on the site and
+Every opening of a comparison counts, the same pair too. Storage is Postgres (DATABASE_URL, Supabase) on the site and
 SQLite in tests and local runs.
 """
 from __future__ import annotations
@@ -27,7 +26,6 @@ PLANS = {
     "monthly": {"title": "Месяц", "price": 399, "comparisons": None, "days": 30,
                 "description": "30 дней без ограничений"},
 }
-REPEAT_WINDOW = timedelta(days=1)
 
 SCHEMA = (
     """CREATE TABLE IF NOT EXISTS casco_users (
@@ -70,7 +68,7 @@ def _now() -> datetime:
 @dataclass
 class Access:
     allowed: bool
-    kind: str = ""          # free / oneoff / monthly / repeat
+    kind: str = ""          # free / oneoff / monthly
     reason: str = ""        # register / pay, when not allowed
 
 
@@ -187,21 +185,11 @@ class AccountStore:
             "SELECT COUNT(*) FROM casco_usage WHERE kind = 'free' AND (ip = ? OR visitor = ? OR user_id = ?)",
             (ip, visitor, user_id if user_id is not None else -1), fetch="one")[0]
 
-    def _seen_recently(self, *, user_id: int | None, ip: str, visitor: str, pair: str) -> bool:
-        since = (_now() - REPEAT_WINDOW).isoformat()
-        if user_id is not None:
-            row = self._run("SELECT 1 FROM casco_usage WHERE pair = ? AND user_id = ? AND created_at > ?",
-                            (pair, user_id, since), fetch="one")
-        else:
-            row = self._run("SELECT 1 FROM casco_usage WHERE pair = ? AND user_id IS NULL "
-                            "AND (ip = ? OR visitor = ?) AND created_at > ?",
-                            (pair, ip, visitor, since), fetch="one")
-        return bool(row)
-
     def check(self, *, user_id: int | None, ip: str, visitor: str, pair: str) -> Access:
-        """Whether this comparison may be shown; does not use anything up."""
-        if self._seen_recently(user_id=user_id, ip=ip, visitor=visitor, pair=pair):
-            return Access(True, "repeat")
+        """Whether this comparison may be shown; does not use anything up.
+
+        Every opening counts, the same pair too (owner's decision, 28.10.2026).
+        """
         if user_id is not None:
             until = self.monthly_until(user_id)
             if until and until > _now():
@@ -213,6 +201,6 @@ class AccountStore:
         return Access(False, reason="pay" if user_id is not None else "register")
 
     def use(self, access: Access, *, user_id: int | None, ip: str, visitor: str, pair: str) -> None:
-        if access.allowed and access.kind != "repeat":
+        if access.allowed:
             self._insert("INSERT INTO casco_usage (user_id, ip, visitor, pair, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                          (user_id, ip, visitor, pair, access.kind, _now().isoformat()))

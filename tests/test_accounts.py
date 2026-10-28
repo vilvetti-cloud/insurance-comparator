@@ -54,8 +54,8 @@ class AccountsTests(unittest.TestCase):
     def test_three_free_comparisons_then_registration(self):
         for pair in PAIRS[:3]:
             self.assertEqual(self.compare(pair).status_code, 200)
-        self.assertEqual(self.compare(PAIRS[0]).status_code, 200)  # the same pair again is free
-        blocked = self.compare(PAIRS[3])
+        # The same pair again is not free: three comparisons in total.
+        blocked = self.compare(PAIRS[0])
         self.assertEqual(blocked.status_code, 302)
         self.assertIn("/limit", blocked.headers["Location"])
         self.assertIn("Зарегистрироваться", self.client.get(blocked.headers["Location"]).get_data(as_text=True))

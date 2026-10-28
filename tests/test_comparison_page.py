@@ -36,8 +36,9 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("Повреждение от БПЛА зависит от договора.", page)
         self.assertNotIn("Общий порядок выплаты установлен", page)
-        self.assertIn("Цитата модели не совпала", page)
-        self.assertIn("Требует проверки", page)
+        # The review note is a service note: users do not see it (owner's decision, 28.10.2026).
+        self.assertNotIn("Цитата модели не совпала", page)
+        self.assertNotIn("Требует проверки", page)
         self.assertIn("не найдено доказанных преимуществ", page)
         self.assertNotIn("Результат сравнения", page)
         for label in FIELD_LABELS.values():

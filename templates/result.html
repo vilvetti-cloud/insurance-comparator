@@ -16,7 +16,7 @@
   <div class="value-block">
     <span class="value-block__company">{{ company }}</span>
     <div class="value-block__text {% if value == 'Не найдено' %}value-block__text--empty{% endif %}" data-clamp>{{ value }}</div>
-    {% if data.get(key + '_review_note') %}
+    {% if is_admin and data.get(key + '_review_note') %}
       <div class="value-block__contextual">
         <span class="quality-badge quality-badge--review">Требует проверки</span>
         <p>{{ data.get(key + '_review_note') }}</p>
