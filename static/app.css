@@ -192,21 +192,6 @@ input {
   text-decoration: none;
 }
 
-.brand__mark {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  border-radius: 12px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), var(--shadow-sm);
-}
-
 .brand__copy {
   min-width: 0;
 }
@@ -1680,13 +1665,6 @@ a.company-head__tag {
     display: none;
   }
 
-  .brand__mark {
-    width: 36px;
-    height: 36px;
-    border-radius: 11px;
-    font-size: 11px;
-  }
-
   .header-link {
     padding: 6px 10px;
     font-size: 12.5px;
@@ -1814,8 +1792,8 @@ a.company-head__tag {
 }
 
 @media (max-width: 520px) {
-  .brand__copy {
-    display: none;
+  .brand__title {
+    font-size: 14px;
   }
 }
 
