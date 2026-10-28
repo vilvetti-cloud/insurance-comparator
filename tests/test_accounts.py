@@ -103,6 +103,11 @@ class AccountsTests(unittest.TestCase):
         self.assertEqual(self.client.get("/data-report").status_code, 200)
         self.assertIn("Контроль данных", self.client.get("/").get_data(as_text=True))
 
+    def test_owner_compares_without_a_limit(self):
+        self.register(email="owner@example.com")
+        for pair in PAIRS:
+            self.assertEqual(self.compare(pair).status_code, 200)
+
     def test_wrong_password_and_duplicate_email(self):
         self.register()
         self.client.post("/logout", data={"csrf": self.csrf("/account")})
