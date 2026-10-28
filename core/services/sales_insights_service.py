@@ -512,7 +512,11 @@ class SalesInsightsService:
         for sentence in sentences:
             # Several different deadlines in one sentence describe stages
             # (decision, then payment); none of them alone is comparable.
-            if len(set(re.findall(term_pattern, sentence))) > 1:
+            terms = re.findall(term_pattern, sentence)
+            if len(set(terms)) > 1:
+                staged = SalesInsightsService._staged_payment_term(sentence, terms)
+                if staged:
+                    return staged
                 continue
             match = re.search(
                 r"(?:до\s+|в\s+течение\s+)?(\d{1,3})\s*"
@@ -538,7 +542,8 @@ class SalesInsightsService:
                 contexts.append("repair_direction")
             if re.search(
                 r"денежн\w*\s+(?:выплат|возмещ)|страхов\w*\s+выплат|"
-                r"выплат\w*\s+страхов\w*\s+возмещ|перечисл\w*\s+(?:деньг|денежн|страхов|выплат)",
+                r"выплат\w*\s+страхов\w*\s+возмещ|перечисл\w*\s+(?:деньг|денежн|страхов|выплат)|"
+                r"срок\w*\s+[^.;]{0,40}\bи\s+выплат",
                 sentence,
             ):
                 contexts.append("payment")
@@ -557,6 +562,29 @@ class SalesInsightsService:
             return PaymentTerm(amount=amount, unit=unit, context=contexts[0])
 
         return None
+
+    @staticmethod
+    def _staged_payment_term(sentence: str, terms: list[tuple[str, str]]) -> PaymentTerm | None:
+        """«Decision within 15 working days, payment within 7 after the act» = 22 working days.
+
+        Only two stages in the same unit, the second counted from the decision
+        (or the act that records it), add up to the deadline for the money.
+        """
+        if len(terms) != 2 or not re.search(r"решени\w*", sentence):
+            return None
+        if not re.search(
+            r"выплат\w*[^.;]{0,60}(?:после|со\s+дня|с\s+даты)\s+(?:утвержден\w*\s+акт|принят\w*\s+решени|решени)",
+            sentence,
+        ):
+            return None
+        units = {
+            "working_days" if unit.startswith("рабоч") else "calendar_days" if unit.startswith("календар")
+            else "hours" if unit.startswith("час") else "days"
+            for _, unit in terms
+        }
+        if len(units) != 1:
+            return None
+        return PaymentTerm(amount=sum(int(amount) for amount, _ in terms), unit=units.pop(), context="payment")
 
 
     # Deterministic, field-specific comparison rules.
@@ -1444,9 +1472,13 @@ class SalesInsightsService:
         if not re.search(r"тотал|(?:полн|конструктивн)\w*\s+гибел", text):
             return None
         match = re.search(r"(\d+(?:[.,]\d+)?)\s*%", text)
-        if not match:
-            return None
-        return NumericValue(float(match.group(1).replace(",", ".")), "percent")
+        if match:
+            return NumericValue(float(match.group(1).replace(",", ".")), "percent")
+        # A formula such as «РВ = 0,75 × страховая сумма» is the same 75%.
+        match = re.search(r"\b0[.,](\d{2})\s*[×x*]|[×x*]\s*0[.,](\d{2})\b", text)
+        if match:
+            return NumericValue(float(match.group(1) or match.group(2)), "percent")
+        return None
 
     @staticmethod
     def _total_loss_operator(text: str) -> str | None:
@@ -1505,13 +1537,14 @@ class SalesInsightsService:
             return set()
         options: set[str] = set()
         if re.search(
-            r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж|"
+            r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж|денежн\w*,[^.;]{0,40}форм|"
             r"(?:а\s+также|или|либо)[^.;]{0,60}выплат\w*\s+возмещен|"
             r"выплат\w*\s+возмещен[^.;]{0,60}(?:а\s+также|или|либо)",
             text,
         ):
             options.add("cash")
-        if re.search(r"стоа|станци\w*\s+техническ|направлен\w*\s+на\s+ремонт", text):
+        # «Натуральная форма» of the law is repair arranged by the insurer.
+        if re.search(r"стоа|станци\w*\s+техническ|направлен\w*\s+на\s+ремонт|натуральн\w*", text):
             options.add("stoa")
         if re.search(
             r"(?:ремонт|направлен\w*)[^.;]{0,80}(?:у\s+официальн\w*\s+дилер|"
