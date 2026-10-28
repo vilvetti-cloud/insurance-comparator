@@ -4,9 +4,10 @@ Switched on when ACCOUNTS_DATABASE_URL and SECRET_KEY are set (on Vercel the
 first one is the Supabase connection string). Without them the site works as
 before, without limits.
 
-Payments: PAYMENTS_TEST=1 shows a test checkout that marks a purchase paid;
-a real payment provider is connected later (the owner has to register first).
-ADMIN_EMAILS (comma separated) see the service menu «Контроль данных».
+Payments: until a real provider is connected, users are told to get a
+subscription from the owner, who grants it on /admin. The owner can try the
+test checkout (PAYMENTS_TEST=1). ADMIN_EMAILS (comma separated) see the
+service menu «Контроль данных» and the admin page.
 """
 from __future__ import annotations
 
@@ -208,8 +209,13 @@ def account():
         free_left=max(FREE_COMPARISONS - store().free_used(user_id=user["id"], ip=client_ip(),
                                                            visitor=visitor_id()), 0),
         purchases=store().purchases(user["id"]),
-        payments_test=os.environ.get("PAYMENTS_TEST") == "1",
+        payments_test=_test_payments(),
     )
+
+
+def _test_payments() -> bool:
+    # Test payments are open to the owner only: partners use the live site (28.10.2026).
+    return os.environ.get("PAYMENTS_TEST") == "1" and is_admin()
 
 
 @bp.route("/buy/<plan>", methods=["POST"])
@@ -218,8 +224,9 @@ def buy(plan):
     _check_csrf()
     if plan not in PLANS:
         abort(404)
-    if os.environ.get("PAYMENTS_TEST") != "1":
-        flash("Оплата скоро заработает. Пока подписку можно получить у владельца сервиса.")
+    if not _test_payments():
+        flash("Оплата картой скоро заработает. Пока подписку можно получить у владельца сервиса: "
+              "напишите ему, и он подключит её в вашем кабинете.")
         return redirect(url_for("accounts.account"))
     purchase_id = store().create_purchase(current_user()["id"], plan, provider="test")
     return redirect(url_for("accounts.test_checkout", purchase_id=purchase_id, next=request.args.get("next")))
@@ -228,7 +235,7 @@ def buy(plan):
 @bp.route("/checkout/test/<int:purchase_id>", methods=["GET", "POST"])
 @login_required
 def test_checkout(purchase_id):
-    if os.environ.get("PAYMENTS_TEST") != "1":
+    if not _test_payments():
         abort(404)
     purchase = store().purchase(purchase_id)
     if not purchase or purchase["user_id"] != current_user()["id"]:
@@ -240,3 +247,57 @@ def test_checkout(purchase_id):
         # Back to the comparison the visitor wanted, if there was one.
         return redirect(_safe_next(request.args.get("next")))
     return render_template("test_checkout.html", purchase=purchase, plan=PLANS[purchase["plan"]])
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not enabled() or not is_admin():
+            abort(404)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@bp.route("/admin")
+@admin_required
+def admin():
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    rows = []
+    for user in store().users():
+        until = store().monthly_until(user["id"])
+        rows.append(dict(
+            user,
+            registered=datetime.fromisoformat(user["created_at"]).astimezone().strftime("%d.%m.%Y"),
+            monthly_until=until.astimezone().strftime("%d.%m.%Y") if until and until > now else None,
+            oneoff_left=max(store().oneoff_left(user["id"]), 0),
+            comparisons=store().comparisons_made(user["id"]),
+        ))
+    return render_template("admin.html", users=rows, plans=PLANS, active_section="admin")
+
+
+@bp.route("/admin/grant/<int:user_id>/<plan>", methods=["POST"])
+@admin_required
+def admin_grant(user_id, plan):
+    _check_csrf()
+    user = store().user(user_id)
+    if not user or plan not in PLANS:
+        abort(404)
+    store().grant(user_id, plan)
+    flash(f"{user['first_name']} {user['last_name']}: подключена подписка «{PLANS[plan]['title']}».")
+    return redirect(url_for("accounts.admin"))
+
+
+@bp.route("/admin/password/<int:user_id>", methods=["POST"])
+@admin_required
+def admin_password(user_id):
+    _check_csrf()
+    user = store().user(user_id)
+    if not user:
+        abort(404)
+    password = secrets.token_urlsafe(6)
+    store().set_password(user_id, password)
+    flash(f"Новый пароль для {user['email']}: {password} — передайте его пользователю, "
+          "он сможет войти с ним.")
+    return redirect(url_for("accounts.admin"))

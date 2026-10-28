@@ -54,7 +54,7 @@
         Условия согласованы: {{ source_check.agreed or last_updated or "—" }}
         {% if source_check.checked %} · Правила страховых проверены: {{ source_check.checked }}{% endif %}
       </span>
-      {% if is_admin %}<a class="text-link" href="/data-report">Источники и проверка данных</a>{% endif %}
+      {% if is_admin %}<span><a class="text-link" href="/admin">Админка</a> · <a class="text-link" href="/data-report">Источники и проверка данных</a></span>{% endif %}
     </div>
   </footer>
 
