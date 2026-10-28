@@ -1,0 +1,24 @@
+name: Keep accounts database awake
+
+# The free Supabase project pauses after 7 days without queries; then sign-in
+# and registration stop working. Once a day the site runs one query (/health/accounts).
+# If the database does not answer, this run fails and GitHub emails the owner.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the accounts database through the site
+        run: |
+          for attempt in 1 2 3; do
+            if curl -fsS --max-time 60 https://insurance-comparator-eta.vercel.app/health/accounts; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Accounts database did not answer"
+          exit 1

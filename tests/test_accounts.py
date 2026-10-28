@@ -153,6 +153,11 @@ class AccountsTests(unittest.TestCase):
         self.assertIsNone(web_accounts.store().check_login("agent@example.com", "secret1"))
         self.assertEqual(web_accounts.store().check_login("agent@example.com", new_password), user_id)
 
+    def test_health_queries_the_database(self):
+        self.assertEqual(self.client.get("/health/accounts").get_json(), {"accounts": "ok"})
+        with patch.object(web_accounts.store(), "ping", side_effect=OSError("paused")):
+            self.assertEqual(self.client.get("/health/accounts").status_code, 503)
+
     def test_wrong_password_and_duplicate_email(self):
         self.register()
         self.client.post("/logout", data={"csrf": self.csrf("/account")})
@@ -170,6 +175,7 @@ class AccountsSwitchedOffTests(unittest.TestCase):
                 response = client.get("/compare", query_string={"company1": pair[0], "company2": pair[1]})
                 self.assertEqual(response.status_code, 200)
             self.assertEqual(client.get("/register").status_code, 404)
+            self.assertEqual(client.get("/health/accounts").get_json(), {"accounts": "off"})
 
 
 if __name__ == "__main__":

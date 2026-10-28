@@ -122,6 +122,10 @@ class AccountStore:
              main_insurer, _now().isoformat()),
         )
 
+    def ping(self) -> None:
+        """A real query, so the free Supabase project does not pause after 7 quiet days."""
+        self._run("SELECT COUNT(*) FROM casco_users", fetch="one")
+
     def user(self, user_id: int) -> dict[str, Any] | None:
         row = self._run("SELECT id, email, first_name, last_name, main_insurer FROM casco_users WHERE id = ?",
                         (user_id,), fetch="one")

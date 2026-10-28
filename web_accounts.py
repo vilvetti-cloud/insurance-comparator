@@ -131,6 +131,18 @@ def remember_visitor(response):
     return response
 
 
+@bp.route("/health/accounts")
+def accounts_health():
+    """Called daily by keep-alive.yml; a failure (503) makes GitHub email the owner."""
+    if not enabled():
+        return {"accounts": "off"}
+    try:
+        store().ping()
+    except Exception:  # noqa: BLE001 - any database error means sign-in is down
+        return {"accounts": "error"}, 503
+    return {"accounts": "ok"}
+
+
 @bp.route("/limit")
 def limit():
     if not enabled():
