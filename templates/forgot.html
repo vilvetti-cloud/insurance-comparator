@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Забыли пароль — Страховой аналитик{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% set active_section = 'account' %}
+
+{% block content %}
+<section class="card auth-card">
+  <p class="eyebrow">Пароль</p>
+  <h1>Забыли пароль?</h1>
+  {% include "_messages.html" %}
+  {% if mail %}
+  <p class="auth-card__lead">Укажите почту, с которой регистрировались, — пришлём ссылку, чтобы задать новый пароль.</p>
+  <form method="POST" action="/forgot">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <div class="form-stack">
+      <div class="field-group">
+        <label class="field-label" for="email">Почта</label>
+        <input class="text-input" id="email" name="email" type="email" autocomplete="email" required>
+      </div>
+      <button class="button" type="submit"><span>Прислать ссылку</span></button>
+    </div>
+  </form>
+  {% else %}
+  <p class="auth-card__lead">Напишите владельцу сервиса — он сбросит пароль и сообщит вам новый.</p>
+  {% endif %}
+  <p class="auth-switch"><a class="text-link" href="/login">Вернуться ко входу</a></p>
+</section>
+{% endblock %}

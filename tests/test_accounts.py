@@ -158,6 +158,31 @@ class AccountsTests(unittest.TestCase):
         with patch.object(web_accounts.store(), "ping", side_effect=OSError("paused")):
             self.assertEqual(self.client.get("/health/accounts").status_code, 503)
 
+    def test_forgotten_password_by_email(self):
+        self.register()
+        self.client.post("/logout", data={"csrf": self.csrf("/account")})
+        sent = []
+        with patch.dict(os.environ, {"SMTP_USER": "site@example.com", "SMTP_PASSWORD": "x"}), \
+                patch("core.mailer.send", side_effect=lambda to, subject, text: sent.append((to, text))):
+            self.assertIn("Забыли пароль?", self.client.get("/login").get_data(as_text=True))
+            for email in ("agent@example.com", "nobody@example.com"):
+                answer = self.client.post("/forgot", data={"csrf": self.csrf("/forgot"), "email": email},
+                                          follow_redirects=True).get_data(as_text=True)
+                self.assertIn("Если эта почта зарегистрирована", answer)  # the same for both
+        self.assertEqual([to for to, _ in sent], ["agent@example.com"])
+        link = re.search(r"http://localhost(/reset/\S+)", sent[0][1]).group(1)
+        self.client.post(link, data={"csrf": self.csrf(link), "password": "newpass"})
+        user_id = web_accounts.store().check_login("agent@example.com", "newpass")
+        self.assertIsNotNone(user_id)
+        self.assertEqual(self.client.get("/account").status_code, 200)  # signed in
+        # The link works once.
+        self.assertIn("/forgot", self.client.get(link).headers["Location"])
+
+    def test_without_mail_the_owner_resets_the_password(self):
+        html = self.client.get("/forgot").get_data(as_text=True)
+        self.assertIn("Напишите владельцу", html)
+        self.assertNotIn('name="email"', html)
+
     def test_wrong_password_and_duplicate_email(self):
         self.register()
         self.client.post("/logout", data={"csrf": self.csrf("/account")})
