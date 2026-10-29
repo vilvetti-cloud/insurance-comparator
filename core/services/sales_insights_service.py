@@ -335,7 +335,7 @@ class SalesInsightsService:
             tail = f"обращений без справок больше, чем у {competitor}"
         elif "higher_limit" in basis:
             tail = f"лимит выше, чем у {competitor}"
-        elif basis == "repair_option_set_superset":
+        elif basis in ("repair_option_set_superset", "repair_more_options"):
             tail = f"у {competitor} вариантов меньше"
         elif basis == "without_documents_default_vs_option":
             tail = f"у {competitor} это только дополнительная опция"
@@ -809,6 +809,14 @@ class SalesInsightsService:
         own_level = self._franchise_fault_waiver(own_l)
         other_level = self._franchise_fault_waiver(other_l)
         if own_level == other_level:
+            no_amounts = self._franchise_amount(own_l)[0] is None and self._franchise_amount(other_l)[0] is None
+            if result["outcome"] == "incomparable" and no_amounts:
+                # Owner's rule (29.10.2026): same kind of condition, details that
+                # cannot be ranked — the companies are equal (РЕСО — Росгосстрах).
+                return self._comparison(
+                    "franchise", label, "equal", "franchise_same_waiver_details_differ", own, other,
+                    "Франшиза и её отмена при известном виновнике устроены одинаково; размер в правилах не сравнить.",
+                )
             return result
         basis = f"franchise_fault_waiver_{own_level}_vs_{other_level}"
         if own_level > other_level:
@@ -950,6 +958,13 @@ class SalesInsightsService:
                         f"without_documents_higher_limit_{own_limit.unit}", own, other,
                         "У конкурента указан более высокий сопоставимый лимит урегулирования без справок.",
                     )
+        if own_state == other_state == "positive":
+            # Owner's rule (29.10.2026, Ингосстрах — РЕСО): both settle without
+            # certificates and nothing above ranks them — equal.
+            return self._comparison(
+                "without_certificates", label, "equal", "without_documents_same_level_details_differ",
+                own, other, "Урегулирование без справок есть у обеих; различия в перечне повреждений не решающие.",
+            )
         return self._comparison(
             "without_certificates", label, "incomparable", "without_documents_details_diff",
             own, other,
@@ -1023,8 +1038,8 @@ class SalesInsightsService:
             and own_level >= 1 and (own_limit or other_limit) and variants_differ
         ):
             return self._comparison(
-                key, label, "incomparable", f"{key}_same_level_variants_not_comparable", own, other,
-                "Лимит зависит от выбранного варианта, поэтому цифры лимитов нельзя сравнивать напрямую.",
+                key, label, "equal", f"{key}_same_level_variants_not_comparable", own, other,
+                "Уровень покрытия одинаковый; лимит зависит от выбранного варианта, поэтому цифры не сравниваются.",
             )
         if (
             own_level is not None and other_level is not None and own_level == other_level
@@ -1053,10 +1068,12 @@ class SalesInsightsService:
                     key, label, "equal", f"{key}_same_accepted_condition", own, other,
                     "Принятые формулировки условий совпадают.",
                 )
+            # Owner's rule (29.10.2026, GAP Ингосстрах — Ренессанс): the same
+            # level of coverage with different details is equal.
             return self._comparison(
-                key, label, "incomparable", f"{key}_same_level_terms_differ_or_unverified",
+                key, label, "equal", f"{key}_same_level_terms_differ",
                 own, other,
-                "Одинаковый общий уровень доступности не доказывает совпадение условий, исключений и порядка включения в договор.",
+                "Уровень покрытия одинаковый; подробности условий различаются, но не дают явного преимущества.",
             )
         return self._comparison(
             key, label, "incomparable", f"{key}_insufficient_data", own, other,
@@ -1120,10 +1137,12 @@ class SalesInsightsService:
         own_operator = self._total_loss_operator(own_l)
         other_operator = self._total_loss_operator(other_l)
         if own_operator is None or other_operator is None or own_operator != other_operator:
+            # Owner's rule (29.10.2026, РЕСО — Росгосстрах): «свыше 75%» and
+            # «75% и более» differ only at exactly 75% — equal.
             return self._comparison(
-                "total_loss", label, "incomparable", "total_loss_boundary_condition_differs_or_unestablished",
+                "total_loss", label, "equal", "total_loss_same_threshold_boundary_differs",
                 own, other,
-                "Числовой порог и база расчёта совпадают, но условие на границе порога различается или не установлено: «свыше 75%» и «75% или более» не равнозначны.",
+                "Порог и база расчёта совпадают; «свыше» и «равно или более» различаются только ровно на пороге.",
             )
         return self._comparison(
             "total_loss", label, "equal", "total_loss_same_threshold_and_boundary", own, other,
@@ -1182,8 +1201,8 @@ class SalesInsightsService:
                     own, other, "Принятые формулировки условий эвакуации совпадают.",
                 )
             return self._comparison(
-                "tow_truck", label, "incomparable", "tow_truck_same_level_terms_differ_or_unverified",
-                own, other, "Одинаковый общий уровень доступности не доказывает совпадение лимитов, маршрута и условий организации эвакуации.",
+                "tow_truck", label, "equal", "tow_truck_same_level_terms_differ",
+                own, other, "Уровень доступности эвакуации одинаковый; подробности не дают явного преимущества.",
             )
         return self._comparison(
             "tow_truck", label, "incomparable", "tow_truck_context_differs",
@@ -1219,6 +1238,20 @@ class SalesInsightsService:
             return self._comparison(
                 "repair_type", label, "competitor_advantage", "repair_option_set_superset",
                 own, other, "У конкурента набор доступных вариантов ремонта/выплаты шире.",
+            )
+        # Owner's rule (29.10.2026, Альфа — ВСК): when the sets cross, more ways
+        # to settle the claim is better for the client.
+        if len(own_options) > len(other_options):
+            return self._advantage(
+                key="repair_type", label=label, title="Больше вариантов урегулирования",
+                own=own, other=other, basis="repair_more_options",
+                reason="У первой страховой больше вариантов ремонта/выплаты.",
+                client_phrase="У первой страховой больше вариантов ремонта и выплаты.",
+            )
+        if len(own_options) < len(other_options):
+            return self._comparison(
+                "repair_type", label, "competitor_advantage", "repair_more_options",
+                own, other, "У конкурента больше вариантов ремонта/выплаты.",
             )
         return self._comparison(
             "repair_type", label, "incomparable", "repair_option_sets_cross",
@@ -1623,7 +1656,8 @@ class SalesInsightsService:
             return set()
         options: set[str] = set()
         if re.search(
-            r"денежн\w*\s+(?:выплат|форма|возмещ)|выплат\w*\s+денеж|денежн\w*,[^.;]{0,40}форм|"
+            r"денежн\w*\s+(?:выплат|форм|возмещ)|выплат\w*\s+денеж|денежн\w*,[^.;]{0,40}форм|"
+            r"форм\w*\s+возмещен\w*[^.;]{0,40}денежн|"
             r"(?:а\s+также|или|либо)[^.;]{0,60}выплат\w*\s+возмещен|"
             r"выплат\w*\s+возмещен[^.;]{0,60}(?:а\s+также|или|либо)",
             text,

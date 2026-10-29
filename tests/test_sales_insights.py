@@ -143,17 +143,18 @@ class SalesInsightsTests(unittest.TestCase):
             "repair_type_both_not_stated_in_official_terms",
         )
 
-    def test_total_loss_same_percentage_with_strict_vs_inclusive_boundary_is_incomparable(self):
+    def test_total_loss_same_percentage_with_strict_vs_inclusive_boundary_is_equal(self):
+        # Owner's rule (29.10.2026): «свыше 75%» and «75% и более» are the same.
         result = self.analyze(
             "total_loss",
             field_data("total_loss", "Полная гибель признаётся, если стоимость ремонта превышает 75% действительной стоимости ТС."),
             field_data("total_loss", "Полная гибель признаётся, если стоимость ремонта равна или превышает 75% действительной стоимости ТС."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
         self.assertEqual(
             result["comparisons"][0]["comparison_basis"],
-            "total_loss_boundary_condition_differs_or_unestablished",
+            "total_loss_same_threshold_boundary_differs",
         )
 
     def test_same_coverage_level_with_different_exceptions_is_not_called_equal(self):
@@ -181,14 +182,15 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(basis, "actual_value")
 
-    def test_total_loss_mixed_basis_is_incomparable(self):
+    def test_total_loss_mixed_basis_same_threshold_is_equal(self):
+        # Sum insured and insured value both mean the value of the car.
         result = self.analyze(
             "total_loss",
             field_data("total_loss", "Конструктивная гибель — порог 75% страховой суммы или 75% полной страховой стоимости при неполном страховании."),
             field_data("total_loss", "Полная гибель — 75% страховой суммы."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
     def test_total_loss_different_basis_is_incomparable(self):
         result = self.analyze(
@@ -404,14 +406,15 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(level, 1)
 
-    def test_same_optional_gap_level_is_incomparable_without_variant_and_limit_match(self):
+    def test_same_optional_gap_level_with_variant_limit_is_equal(self):
+        # Owner's rule (29.10.2026): the same level with different details is equal.
         result = self.analyze(
             "gap",
             field_data("gap", "GAP предусмотрен как отдельный дополнительный риск; лимит 25% от страховой суммы по КАСКО."),
             field_data("gap", "GAP — отдельный дополнительный риск по отдельному договору; вариант лимита зависит от выбранной программы."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
         self.assertEqual(
             result["comparisons"][0]["comparison_basis"],
             "gap_same_level_variants_not_comparable",
