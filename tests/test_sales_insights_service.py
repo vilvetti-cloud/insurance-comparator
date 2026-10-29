@@ -742,3 +742,13 @@ class ReadingFixesTests(unittest.TestCase):
             "статья 68 допускает денежную, натуральную или комбинированную форму возмещения."
         )
         self.assertEqual(options, {"cash", "stoa"})
+
+    def test_without_certificates_default_beats_option_then_unlimited_glass(self):
+        service = SalesInsightsService()
+        default = "Без документов из компетентных органов возмещается повреждение стёкол неограниченное количество раз."
+        limited = "Без документов из компетентных органов один раз за срок договора возмещается повреждение фары."
+        option = "Выплата без справок — опция договора: стёкла без ограничения количества обращений."
+        self.assertFalse(service._without_documents_option(default))
+        self.assertTrue(service._without_documents_option(option))
+        self.assertTrue(service._glass_unlimited(default.lower()))
+        self.assertFalse(service._glass_unlimited(limited.lower()))

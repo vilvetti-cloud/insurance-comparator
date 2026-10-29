@@ -101,25 +101,15 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(result["advantages"][0]["comparison_basis"], "gap_coverage_level_2_vs_1")
 
-    def test_total_loss_higher_threshold_is_not_universal_advantage(self):
-        result = self.analyze(
-            "total_loss",
-            field_data("total_loss", "Полная гибель — 75% от страховой суммы."),
-            field_data("total_loss", "Полная гибель — 70% от страховой суммы."),
-        )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
-
-    def test_total_loss_actual_value_thresholds_are_compared_without_ranking(self):
-        result = self.analyze(
-            "total_loss",
-            field_data("total_loss", "Полная гибель — 75% действительной стоимости ТС."),
-            field_data("total_loss", "Полная гибель — 70% действительной стоимости ТС."),
-        )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
+    def test_total_loss_higher_threshold_wins(self):
+        # Owner's rule (29.10.2026): the car is repaired more often instead of being written off.
+        for own, other in (
+            ("Полная гибель — 75% от страховой суммы.", "Полная гибель — 70% от страховой суммы."),
+            ("Полная гибель — 75% действительной стоимости ТС.", "Полная гибель — 70% от страховой суммы."),
+        ):
+            with self.subTest(own=own, other=other):
+                result = self.analyze("total_loss", field_data("total_loss", own), field_data("total_loss", other))
+                self.assertEqual(result["advantages"][0]["comparison_basis"], "total_loss_higher_threshold")
 
     def test_identical_total_loss_text_without_basis_is_not_equal(self):
         result = self.analyze(
@@ -556,14 +546,16 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertIsNone(self.service._coverage_level_v2("drone", generic.lower()))
 
-    def test_tow_truck_percent_with_cap_is_not_compared_to_uncapped_percent(self):
+    def test_tow_truck_limits_are_read_in_roubles(self):
+        # Owner's rule (29.10.2026): % of the sum is read for a 2 mln ₽ car; the cap applies.
         result = self.analyze(
             "tow_truck",
             field_data("tow_truck", "Эвакуация предусмотрена в пределах 1% страховой суммы по риску «Ущерб»."),
             field_data("tow_truck", "Эвакуация предусмотрена до 5% страховой суммы, но не более 15 000 рублей на случай."),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["advantages"][0]["comparison_basis"], "tow_truck_higher_limit_rubles")
+        self.assertEqual(self.service._tow_limit_rubles("отдельного денежного лимита на эвакуацию в правилах нет"),
+                         float("inf"))
 
     def test_non_exhaustive_repair_examples_are_not_counted_as_options(self):
         text = (
@@ -607,12 +599,8 @@ class SalesInsightsTests(unittest.TestCase):
                 other = field_data(key, other_value, quality="review", eligible=False)
                 result = self.analyze(key, own, other)
                 self.assertTrue(result["comparisons"], f"{key} was suppressed by audit status")
-                if key != "total_loss":
-                    self.assertNotEqual(result["comparisons"][0]["outcome"], "incomparable",
-                                        f"{key} did not use populated accepted values")
-                else:
-                    self.assertEqual(result["comparisons"][0]["outcome"], "incomparable",
-                                     "Total-loss thresholds must remain unranked without full context")
+                self.assertNotEqual(result["comparisons"][0]["outcome"], "incomparable",
+                                    f"{key} did not use populated accepted values")
 
     def test_optional_terrorism_advantage_does_not_claim_it_is_included(self):
         result = self.analyze(

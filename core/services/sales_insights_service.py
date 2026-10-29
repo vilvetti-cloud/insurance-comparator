@@ -337,6 +337,17 @@ class SalesInsightsService:
             tail = f"лимит выше, чем у {competitor}"
         elif basis == "repair_option_set_superset":
             tail = f"у {competitor} вариантов меньше"
+        elif basis == "without_documents_default_vs_option":
+            tail = f"у {competitor} это только дополнительная опция"
+        elif basis == "without_documents_unlimited_glass":
+            feature = "Повреждённые стёкла без справок — без ограничения числа обращений"
+            tail = f"у {competitor} число таких обращений ограничено"
+        elif basis == "total_loss_higher_threshold":
+            own_threshold = SalesInsightsService._total_loss_threshold(SalesInsightsService._normalized(own))
+            other_threshold = SalesInsightsService._total_loss_threshold(SalesInsightsService._normalized(other))
+            feature = (f"Машину признают полностью погибшей, только если ремонт дороже "
+                       f"{own_threshold.amount:g}% её стоимости — её чаще ремонтируют, а не списывают")
+            tail = f"у {competitor} — уже от {other_threshold.amount:g}%"
         else:
             tail = ""
 
@@ -883,6 +894,25 @@ class SalesInsightsService:
                 own, other, "У обеих компаний урегулирование без справок не предусмотрено в подтверждённых условиях.",
             )
         if own_state == other_state == "positive":
+            # Owner's rule (29.10.2026): included by the rules beats a paid option,
+            # then unlimited glass claims beat a limited number.
+            for basis, own_has, other_has in (
+                ("without_documents_default_vs_option",
+                 not self._without_documents_option(own), not self._without_documents_option(other)),
+                ("without_documents_unlimited_glass", self._glass_unlimited(own_l), self._glass_unlimited(other_l)),
+            ):
+                if own_has and not other_has:
+                    return self._advantage(
+                        key="without_certificates", label=label, title="Шире урегулирование без справок",
+                        own=own, other=other, basis=basis,
+                        reason="Урегулирование без справок у первой страховой шире.",
+                        client_phrase="У первой страховой урегулирование без справок шире.",
+                    )
+                if other_has and not own_has:
+                    return self._comparison(
+                        "without_certificates", label, "competitor_advantage", basis, own, other,
+                        "У конкурента урегулирование без справок шире.",
+                    )
             own_count = self._occurrence_count(own_l)
             other_count = self._occurrence_count(other_l)
             if own_count is not None and other_count is not None:
@@ -1056,11 +1086,30 @@ class SalesInsightsService:
                 "total_loss", label, "incomparable", "total_loss_threshold_missing",
                 own, other, "Нельзя сопоставить процентный порог полной гибели.",
             )
+        # The sum insured, the actual and the insured value all mean the value
+        # of the car; only a threshold counted from the repair cost differs.
+        car_value = {"sum_insured", "actual_value", "insured_value", "mixed_basis"}
+        if own_basis in car_value and other_basis in car_value:
+            own_basis = other_basis = "car_value"
         if not own_basis or not other_basis or own_basis != other_basis:
             return self._comparison(
                 "total_loss", label, "incomparable", "total_loss_basis_differs_or_missing",
                 own, other,
                 "Базы расчёта отличаются или не установлены; проценты нельзя напрямую сопоставлять. Преимущество прозрачности отмечается отдельно, если оно подтверждено.",
+            )
+        # Owner's rule (29.10.2026): a higher threshold is better for the client:
+        # the car is repaired more often instead of being written off.
+        if own_threshold.amount > other_threshold.amount:
+            return self._advantage(
+                key="total_loss", label=label, title="Выше порог полной гибели",
+                own=own, other=other, basis="total_loss_higher_threshold",
+                reason="Порог полной гибели у первой страховой выше.",
+                client_phrase="У первой страховой порог полной гибели выше.",
+            )
+        if own_threshold.amount < other_threshold.amount:
+            return self._comparison(
+                "total_loss", label, "competitor_advantage", "total_loss_higher_threshold", own, other,
+                "У конкурента порог полной гибели выше.",
             )
         if own_threshold.amount != other_threshold.amount:
             return self._comparison(
@@ -1098,33 +1147,27 @@ class SalesInsightsService:
                 f"tow_truck_coverage_level_{own_level}_vs_{other_level}",
                 own, other, "Эвакуация у конкурента доступна на более высоком уровне.",
             )
-        own_limit = self._single_limit(own_l)
-        other_limit = self._single_limit(other_l)
-        combined_limit_text = f"{own_l} {other_l}".lower().replace("ё", "е")
-        limit_context_is_complex = bool(re.search(
-            r"не\s+более|но\s+не\s+более|максимум|ограничен\w*|"
-            r"при\s+полной\s+гибели|при\s+повреждении|"
-            r"две?\s+эвакуац|ночн\w*|"
-            r"\d+(?:[.,]\d+)?\s*%[^.;]{0,100}(?:но\s+не\s+более|не\s+более|максимум)",
-            combined_limit_text,
-        ))
-        if own_limit and other_limit and own_limit.unit == other_limit.unit and not limit_context_is_complex:
-            if own_limit.amount > other_limit.amount:
-                return self._advantage(
+        own_limit = self._tow_limit_rubles(own_l)
+        other_limit = self._tow_limit_rubles(other_l)
+        if own_limit is not None and other_limit is not None:
+            # Owner's rule (29.10.2026): the larger limit wins; «no money limit» beats any limit.
+            if own_limit > other_limit:
+                advantage = self._advantage(
                     key="tow_truck", label=label, title="Выше лимит эвакуации",
-                    own=own, other=other, basis=f"tow_truck_higher_limit_{own_limit.unit}",
-                    reason="При одинаковом типе лимита первая страховая предоставляет больший лимит.",
+                    own=own, other=other, basis="tow_truck_higher_limit_rubles",
+                    reason="Лимит возмещения эвакуации у первой страховой выше.",
                     client_phrase="У первой страховой лимит эвакуации выше.",
                 )
-            if own_limit.amount < other_limit.amount:
+                if own_level == 1:  # towing is a paid option there
+                    advantage["conditional"] = True
+                return advantage
+            if own_limit < other_limit:
                 return self._comparison(
-                    "tow_truck", label, "competitor_advantage",
-                    f"tow_truck_higher_limit_{own_limit.unit}",
+                    "tow_truck", label, "competitor_advantage", "tow_truck_higher_limit_rubles",
                     own, other, "У конкурента выше лимит эвакуации.",
                 )
             return self._comparison(
-                "tow_truck", label, "equal",
-                f"tow_truck_same_limit_{own_limit.unit}", own, other,
+                "tow_truck", label, "equal", "tow_truck_same_limit_rubles", own, other,
                 "Лимит эвакуации совпадает.",
             )
         if own_level is not None and other_level is not None and own_level == other_level:
@@ -1272,6 +1315,47 @@ class SalesInsightsService:
         ):
             return "positive"
         return "unknown"
+
+    # Owner's decision (29.10.2026): a limit in % of the sum insured is read
+    # for a typical car of 2 mln ₽ (1% = 20 000 ₽).
+    TYPICAL_SUM_INSURED = 2_000_000
+
+    @staticmethod
+    def _tow_limit_rubles(text: str) -> float | None:
+        """Towing limit for a passenger car in roubles; inf when the rules set no money limit."""
+        text = text.lower().replace("ё", "е")
+        if re.search(r"лимит\w*[^.;]{0,40}(?:\bнет\b|не\s+установлен)|без\s+(?:денежн\w*\s+)?лимит", text):
+            return float("inf")
+        amount = r"(\d{1,3}(?:[\s ]\d{3})+|\d+)\s*(?:₽|руб)"
+        percent = re.search(r"(\d+(?:[.,]\d+)?)\s*%\s*(?:от\s+)?страхов\w*\s+сумм", text)
+        if percent:
+            value = float(percent.group(1).replace(",", ".")) / 100 * SalesInsightsService.TYPICAL_SUM_INSURED
+            cap = re.search(r"не\s+более\s+" + amount, text[percent.end():percent.end() + 80])
+            return min(value, float(re.sub(r"\s", "", cap.group(1)))) if cap else value
+        rubles = re.search(amount, text)
+        if rubles:
+            # The first amount is the one for passenger cars (categories A/B, up to 3.5 t).
+            return float(re.sub(r"\s", "", rubles.group(1)))
+        return None
+
+    @staticmethod
+    def _without_documents_option(text: str) -> bool:
+        """«Without certificates» only when bought or written into the contract.
+
+        Only the lead claim counts: a paid extra mentioned later («отдельная
+        опция … в пределах лимита») does not undo what the rules give by default.
+        """
+        text = SalesInsightsService._lead_sentence(text)
+        return bool(re.search(
+            r"опци|если\s+(?:в\s+договор\s+)?включ\w*|по\s+соглашени\w*\s+сторон|"
+            r"выбира\w*\s+в\s+договор|при\s+наличии\s+в\s+договоре", text))
+
+    @staticmethod
+    def _glass_unlimited(text: str) -> bool:
+        text = text.replace("ё", "е")
+        return bool(re.search(
+            r"(?:стекл|стекол)\w*[^.;]{0,200}(?:неограниченн\w*|без\s+ограничени\w*\s+(?:количеств|числ))|"
+            r"(?:неограниченн\w*|без\s+ограничени\w*\s+(?:количеств|числ))[^.;]{0,120}(?:стекл|стекол)", text))
 
     @staticmethod
     def _occurrence_count(text: str) -> float | None:
@@ -1505,6 +1589,8 @@ class SalesInsightsService:
             return "insured_value"
         if re.search(r"от\s+(?:стоимост\w*\s+)?(?:восстановительн\w*\s+)?ремонт", text):
             return "repair_cost"
+        if has_sum:  # «0,75 × расчётная страховая сумма»
+            return "sum_insured"
         return None
 
     @staticmethod
