@@ -101,25 +101,15 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(result["advantages"][0]["comparison_basis"], "gap_coverage_level_2_vs_1")
 
-    def test_total_loss_higher_threshold_is_not_universal_advantage(self):
-        result = self.analyze(
-            "total_loss",
-            field_data("total_loss", "Полная гибель — 75% от страховой суммы."),
-            field_data("total_loss", "Полная гибель — 70% от страховой суммы."),
-        )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
-
-    def test_total_loss_actual_value_thresholds_are_compared_without_ranking(self):
-        result = self.analyze(
-            "total_loss",
-            field_data("total_loss", "Полная гибель — 75% действительной стоимости ТС."),
-            field_data("total_loss", "Полная гибель — 70% действительной стоимости ТС."),
-        )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_threshold_tradeoff")
+    def test_total_loss_higher_threshold_wins(self):
+        # Owner's rule (29.10.2026): the car is repaired more often instead of being written off.
+        for own, other in (
+            ("Полная гибель — 75% от страховой суммы.", "Полная гибель — 70% от страховой суммы."),
+            ("Полная гибель — 75% действительной стоимости ТС.", "Полная гибель — 70% от страховой суммы."),
+        ):
+            with self.subTest(own=own, other=other):
+                result = self.analyze("total_loss", field_data("total_loss", own), field_data("total_loss", other))
+                self.assertEqual(result["advantages"][0]["comparison_basis"], "total_loss_higher_threshold")
 
     def test_identical_total_loss_text_without_basis_is_not_equal(self):
         result = self.analyze(
@@ -153,17 +143,18 @@ class SalesInsightsTests(unittest.TestCase):
             "repair_type_both_not_stated_in_official_terms",
         )
 
-    def test_total_loss_same_percentage_with_strict_vs_inclusive_boundary_is_incomparable(self):
+    def test_total_loss_same_percentage_with_strict_vs_inclusive_boundary_is_equal(self):
+        # Owner's rule (29.10.2026): «свыше 75%» and «75% и более» are the same.
         result = self.analyze(
             "total_loss",
             field_data("total_loss", "Полная гибель признаётся, если стоимость ремонта превышает 75% действительной стоимости ТС."),
             field_data("total_loss", "Полная гибель признаётся, если стоимость ремонта равна или превышает 75% действительной стоимости ТС."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
         self.assertEqual(
             result["comparisons"][0]["comparison_basis"],
-            "total_loss_boundary_condition_differs_or_unestablished",
+            "total_loss_same_threshold_boundary_differs",
         )
 
     def test_same_coverage_level_with_different_exceptions_is_not_called_equal(self):
@@ -191,14 +182,15 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(basis, "actual_value")
 
-    def test_total_loss_mixed_basis_is_incomparable(self):
+    def test_total_loss_mixed_basis_same_threshold_is_equal(self):
+        # Sum insured and insured value both mean the value of the car.
         result = self.analyze(
             "total_loss",
             field_data("total_loss", "Конструктивная гибель — порог 75% страховой суммы или 75% полной страховой стоимости при неполном страховании."),
             field_data("total_loss", "Полная гибель — 75% страховой суммы."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
 
     def test_total_loss_different_basis_is_incomparable(self):
         result = self.analyze(
@@ -289,7 +281,8 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(self.service._repair_options_v2(text.lower()), set())
 
-    def test_crossed_repair_options_do_not_create_false_advantage(self):
+    def test_client_chosen_stoa_beats_stoa_with_insurer_consent(self):
+        # Owner's verdict (29.10.2026).
         result = self.analyze(
             "repair_type",
             field_data(
@@ -303,9 +296,8 @@ class SalesInsightsTests(unittest.TestCase):
                 "Ремонт на СТОА без договора сотрудничества возможен с письменного согласия страховщика.",
             ),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_option_sets_cross")
+        self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_option_set_superset")
 
     def test_indemnity_payment_listed_with_repair_is_counted_as_cash_option(self):
         result = self.analyze(
@@ -323,7 +315,8 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
         self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_same_options")
 
-    def test_equivalent_property_and_insured_chosen_repair_are_compared_as_distinct_forms(self):
+    def test_equivalent_property_does_not_count_as_a_repair_option(self):
+        # Owner's verdict (29.10.2026): «замена имуществом» is not a real choice.
         result = self.analyze(
             "repair_type",
             field_data(
@@ -335,12 +328,8 @@ class SalesInsightsTests(unittest.TestCase):
                 "Правила допускают денежную выплату, предоставление имущества, аналогичного утраченному, либо направление на ремонт.",
             ),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(
-            result["comparisons"][0]["comparison_basis"],
-            "repair_option_sets_cross",
-        )
+        self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_option_set_superset")
 
     def test_crossed_repair_options_are_incomparable(self):
         result = self.analyze(
@@ -414,14 +403,15 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(level, 1)
 
-    def test_same_optional_gap_level_is_incomparable_without_variant_and_limit_match(self):
+    def test_same_optional_gap_level_with_variant_limit_is_equal(self):
+        # Owner's rule (29.10.2026): the same level with different details is equal.
         result = self.analyze(
             "gap",
             field_data("gap", "GAP предусмотрен как отдельный дополнительный риск; лимит 25% от страховой суммы по КАСКО."),
             field_data("gap", "GAP — отдельный дополнительный риск по отдельному договору; вариант лимита зависит от выбранной программы."),
         )
         self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
         self.assertEqual(
             result["comparisons"][0]["comparison_basis"],
             "gap_same_level_variants_not_comparable",
@@ -556,14 +546,16 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
         self.assertIsNone(self.service._coverage_level_v2("drone", generic.lower()))
 
-    def test_tow_truck_percent_with_cap_is_not_compared_to_uncapped_percent(self):
+    def test_tow_truck_limits_are_read_in_roubles(self):
+        # Owner's rule (29.10.2026): % of the sum is read for a 2 mln ₽ car; the cap applies.
         result = self.analyze(
             "tow_truck",
             field_data("tow_truck", "Эвакуация предусмотрена в пределах 1% страховой суммы по риску «Ущерб»."),
             field_data("tow_truck", "Эвакуация предусмотрена до 5% страховой суммы, но не более 15 000 рублей на случай."),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
+        self.assertEqual(result["advantages"][0]["comparison_basis"], "tow_truck_higher_limit_rubles")
+        self.assertEqual(self.service._tow_limit_rubles("отдельного денежного лимита на эвакуацию в правилах нет"),
+                         float("inf"))
 
     def test_non_exhaustive_repair_examples_are_not_counted_as_options(self):
         text = (
@@ -607,12 +599,8 @@ class SalesInsightsTests(unittest.TestCase):
                 other = field_data(key, other_value, quality="review", eligible=False)
                 result = self.analyze(key, own, other)
                 self.assertTrue(result["comparisons"], f"{key} was suppressed by audit status")
-                if key != "total_loss":
-                    self.assertNotEqual(result["comparisons"][0]["outcome"], "incomparable",
-                                        f"{key} did not use populated accepted values")
-                else:
-                    self.assertEqual(result["comparisons"][0]["outcome"], "incomparable",
-                                     "Total-loss thresholds must remain unranked without full context")
+                self.assertNotEqual(result["comparisons"][0]["outcome"], "incomparable",
+                                    f"{key} did not use populated accepted values")
 
     def test_optional_terrorism_advantage_does_not_claim_it_is_included(self):
         result = self.analyze(

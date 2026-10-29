@@ -443,6 +443,28 @@ class UnifiedRuleTests(unittest.TestCase):
                         result["comparison_basis"], f"{key}_excluded_vs_not_stated_in_official_terms",
                     )
 
+    def test_same_level_with_different_details_is_equal_for_every_coverage_field(self):
+        # Owner's rule (29.10.2026): both offer it as an option, details differ — equal.
+        words = {"gap": "GAP", "self_ignition": "Самовозгорание", "terrorism": "Террористический акт", "drone": "Ущерб от БПЛА"}
+        for key, word in words.items():
+            with self.subTest(key=key):
+                own = f"{word} можно включить дополнительным соглашением; порядок расчёта выбирается в договоре."
+                other = f"{word} можно включить дополнительным соглашением."
+                result = self.analyze(key, own, other)
+                self.assertEqual(result["outcome"], "equal")
+                self.assertEqual(result["comparison_basis"], f"{key}_same_level_terms_differ")
+
+    def test_refusal_for_broken_safety_rules_loses_for_every_coverage_field(self):
+        # Owner's rule (29.10.2026, ВСК — РЕСО).
+        words = {"gap": "GAP", "self_ignition": "Самовозгорание", "terrorism": "Террористический акт", "drone": "Ущерб от БПЛА"}
+        for key, word in words.items():
+            with self.subTest(key=key):
+                own = f"{word} можно включить дополнительным соглашением."
+                other = f"{word} можно включить дополнительным соглашением. Исключён ущерб при нарушении правил пожарной безопасности."
+                result = self.analyze(key, own, other)
+                self.assertEqual(result["outcome"], "first_advantage")
+                self.assertEqual(result["comparison_basis"], f"{key}_no_rule_violation_exclusion")
+
     def test_opt_in_by_contract_is_an_add_on_for_every_coverage_field(self):
         words = {"gap": "GAP", "self_ignition": "Самовозгорание", "terrorism": "Террористический акт", "drone": "Ущерб от БПЛА"}
         for key, word in words.items():
@@ -582,7 +604,7 @@ class StructuredFactsWiringTests(unittest.TestCase):
             field_labels=w.FIELD_LABELS,
         )
         by_key = {item["field_key"]: item for item in result["comparisons"]}
-        self.assertNotEqual(by_key["self_ignition"]["outcome"], "equal")
+        self.assertNotEqual(by_key["self_ignition"]["comparison_basis"], "self_ignition_both_explicitly_excluded")
 
     def test_facts_decide_whether_a_condition_is_stated(self):
         # The text alone reads as stated; the accepted facts say it is not.
@@ -711,6 +733,41 @@ class ReadingFixesTests(unittest.TestCase):
         )
         self.assertEqual((term.amount, term.unit, term.context), (30, "working_days", "payment"))
 
+    def test_money_listed_among_forms_of_compensation_is_cash(self):
+        for text in (
+            "п. 11.3 перечисляет формы возмещения: денежные средства, имущество, аналогичное утраченному, или направление на ремонт.",
+            "правила прямо перечисляют денежную форму и направление на ремонт в партнёрскую стоа.",
+        ):
+            with self.subTest(text=text):
+                self.assertIn("cash", SalesInsightsService._repair_options_v2(text))
+
+    def test_replacement_property_does_not_count_and_client_stoa_beats_consent_stoa(self):
+        # Owner's verdicts (29.10.2026, Альфа and Т-Страхование vs РЕСО).
+        reso = "Ремонт на СТОА страховщика, на СТОА по выбору страхователя или денежная выплата."
+        for other in (
+            "Формы возмещения: денежные средства, имущество, аналогичное утраченному, или направление на ремонт.",
+            "Правила прямо перечисляют денежную форму и направление на ремонт в партнёрскую СТОА. "
+            "Ремонт на СТОА без договора сотрудничества возможен с письменного согласия страховщика.",
+        ):
+            with self.subTest(other=other[:30]):
+                result = SalesInsightsService().analyze(
+                    company="A", competitor="B",
+                    data={"repair_type": reso}, competitor_data={"repair_type": other},
+                    field_labels={"repair_type": "Ремонт"},
+                )["comparisons"][0]
+                self.assertEqual((result["outcome"], result["comparison_basis"]),
+                                 ("first_advantage", "repair_option_set_superset"))
+
+    def test_more_repair_options_win_when_the_sets_cross(self):
+        # Owner's rule (29.10.2026, Альфа — ВСК).
+        result = SalesInsightsService().analyze(
+            company="A", competitor="B",
+            data={"repair_type": "Ремонт на СТОА страховщика, у официального дилера или денежная выплата."},
+            competitor_data={"repair_type": "Ремонт на СТОА страховщика или на СТОА по выбору страхователя."},
+            field_labels={"repair_type": "Ремонт"},
+        )["comparisons"][0]
+        self.assertEqual((result["outcome"], result["comparison_basis"]), ("first_advantage", "repair_more_options"))
+
     def test_fire_from_internal_causes_reads_as_self_ignition(self):
         level = SalesInsightsService._coverage_level_v2(
             "self_ignition",
@@ -742,3 +799,13 @@ class ReadingFixesTests(unittest.TestCase):
             "статья 68 допускает денежную, натуральную или комбинированную форму возмещения."
         )
         self.assertEqual(options, {"cash", "stoa"})
+
+    def test_without_certificates_default_beats_option_then_unlimited_glass(self):
+        service = SalesInsightsService()
+        default = "Без документов из компетентных органов возмещается повреждение стёкол неограниченное количество раз."
+        limited = "Без документов из компетентных органов один раз за срок договора возмещается повреждение фары."
+        option = "Выплата без справок — опция договора: стёкла без ограничения количества обращений."
+        self.assertFalse(service._without_documents_option(default))
+        self.assertTrue(service._without_documents_option(option))
+        self.assertTrue(service._glass_unlimited(default.lower()))
+        self.assertFalse(service._glass_unlimited(limited.lower()))
