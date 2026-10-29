@@ -454,6 +454,17 @@ class UnifiedRuleTests(unittest.TestCase):
                 self.assertEqual(result["outcome"], "equal")
                 self.assertEqual(result["comparison_basis"], f"{key}_same_level_terms_differ")
 
+    def test_refusal_for_broken_safety_rules_loses_for_every_coverage_field(self):
+        # Owner's rule (29.10.2026, ВСК — РЕСО).
+        words = {"gap": "GAP", "self_ignition": "Самовозгорание", "terrorism": "Террористический акт", "drone": "Ущерб от БПЛА"}
+        for key, word in words.items():
+            with self.subTest(key=key):
+                own = f"{word} можно включить дополнительным соглашением."
+                other = f"{word} можно включить дополнительным соглашением. Исключён ущерб при нарушении правил пожарной безопасности."
+                result = self.analyze(key, own, other)
+                self.assertEqual(result["outcome"], "first_advantage")
+                self.assertEqual(result["comparison_basis"], f"{key}_no_rule_violation_exclusion")
+
     def test_opt_in_by_contract_is_an_add_on_for_every_coverage_field(self):
         words = {"gap": "GAP", "self_ignition": "Самовозгорание", "terrorism": "Террористический акт", "drone": "Ущерб от БПЛА"}
         for key, word in words.items():
@@ -730,12 +741,29 @@ class ReadingFixesTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIn("cash", SalesInsightsService._repair_options_v2(text))
 
+    def test_replacement_property_does_not_count_and_client_stoa_beats_consent_stoa(self):
+        # Owner's verdicts (29.10.2026, Альфа and Т-Страхование vs РЕСО).
+        reso = "Ремонт на СТОА страховщика, на СТОА по выбору страхователя или денежная выплата."
+        for other in (
+            "Формы возмещения: денежные средства, имущество, аналогичное утраченному, или направление на ремонт.",
+            "Правила прямо перечисляют денежную форму и направление на ремонт в партнёрскую СТОА. "
+            "Ремонт на СТОА без договора сотрудничества возможен с письменного согласия страховщика.",
+        ):
+            with self.subTest(other=other[:30]):
+                result = SalesInsightsService().analyze(
+                    company="A", competitor="B",
+                    data={"repair_type": reso}, competitor_data={"repair_type": other},
+                    field_labels={"repair_type": "Ремонт"},
+                )["comparisons"][0]
+                self.assertEqual((result["outcome"], result["comparison_basis"]),
+                                 ("first_advantage", "repair_option_set_superset"))
+
     def test_more_repair_options_win_when_the_sets_cross(self):
         # Owner's rule (29.10.2026, Альфа — ВСК).
         result = SalesInsightsService().analyze(
             company="A", competitor="B",
-            data={"repair_type": "Ремонт на СТОА страховщика, у официального дилера, на СТОА по выбору страхователя или денежная выплата."},
-            competitor_data={"repair_type": "Формы возмещения: денежные средства, имущество, аналогичное утраченному, или направление на ремонт."},
+            data={"repair_type": "Ремонт на СТОА страховщика, у официального дилера или денежная выплата."},
+            competitor_data={"repair_type": "Ремонт на СТОА страховщика или на СТОА по выбору страхователя."},
             field_labels={"repair_type": "Ремонт"},
         )["comparisons"][0]
         self.assertEqual((result["outcome"], result["comparison_basis"]), ("first_advantage", "repair_more_options"))

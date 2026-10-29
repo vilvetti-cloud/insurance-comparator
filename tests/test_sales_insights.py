@@ -281,7 +281,8 @@ class SalesInsightsTests(unittest.TestCase):
         )
         self.assertEqual(self.service._repair_options_v2(text.lower()), set())
 
-    def test_crossed_repair_options_do_not_create_false_advantage(self):
+    def test_client_chosen_stoa_beats_stoa_with_insurer_consent(self):
+        # Owner's verdict (29.10.2026).
         result = self.analyze(
             "repair_type",
             field_data(
@@ -295,9 +296,8 @@ class SalesInsightsTests(unittest.TestCase):
                 "Ремонт на СТОА без договора сотрудничества возможен с письменного согласия страховщика.",
             ),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_option_sets_cross")
+        self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_option_set_superset")
 
     def test_indemnity_payment_listed_with_repair_is_counted_as_cash_option(self):
         result = self.analyze(
@@ -315,7 +315,8 @@ class SalesInsightsTests(unittest.TestCase):
         self.assertEqual(result["comparisons"][0]["outcome"], "equal")
         self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_same_options")
 
-    def test_equivalent_property_and_insured_chosen_repair_are_compared_as_distinct_forms(self):
+    def test_equivalent_property_does_not_count_as_a_repair_option(self):
+        # Owner's verdict (29.10.2026): «замена имуществом» is not a real choice.
         result = self.analyze(
             "repair_type",
             field_data(
@@ -327,12 +328,8 @@ class SalesInsightsTests(unittest.TestCase):
                 "Правила допускают денежную выплату, предоставление имущества, аналогичного утраченному, либо направление на ремонт.",
             ),
         )
-        self.assertEqual(result["advantages"], [])
-        self.assertEqual(result["comparisons"][0]["outcome"], "incomparable")
-        self.assertEqual(
-            result["comparisons"][0]["comparison_basis"],
-            "repair_option_sets_cross",
-        )
+        self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "repair_option_set_superset")
 
     def test_crossed_repair_options_are_incomparable(self):
         result = self.analyze(

@@ -348,6 +348,9 @@ class SalesInsightsService:
             feature = (f"Машину признают полностью погибшей, только если ремонт дороже "
                        f"{own_threshold.amount:g}% её стоимости — её чаще ремонтируют, а не списывают")
             tail = f"у {competitor} — уже от {other_threshold.amount:g}%"
+        elif basis.endswith("_no_rule_violation_exclusion"):
+            feature = f"{label}: нет отказа в выплате из-за нарушения правил безопасности"
+            tail = f"у {competitor} при таком нарушении в выплате откажут"
         else:
             tail = ""
 
@@ -1068,6 +1071,22 @@ class SalesInsightsService:
                     key, label, "equal", f"{key}_same_accepted_condition", own, other,
                     "Принятые формулировки условий совпадают.",
                 )
+            # Owner's rule (29.10.2026, ВСК — РЕСО): a refusal whenever safety or
+            # operating rules were broken can hit an ordinary accident — worse.
+            own_refusal = self._rule_violation_exclusion(own_l)
+            other_refusal = self._rule_violation_exclusion(other_l)
+            if other_refusal and not own_refusal:
+                return self._advantage(
+                    key=key, label=label, title="Нет отказа за нарушение правил",
+                    own=own, other=other, basis=f"{key}_no_rule_violation_exclusion",
+                    reason="У конкурента есть отказ при нарушении правил безопасности или эксплуатации, у первой страховой — нет.",
+                    client_phrase="У первой страховой нет отказа в выплате из-за нарушения правил безопасности.",
+                )
+            if own_refusal and not other_refusal:
+                return self._comparison(
+                    key, label, "competitor_advantage", f"{key}_no_rule_violation_exclusion", own, other,
+                    "У первой страховой есть отказ при нарушении правил безопасности или эксплуатации, у конкурента — нет.",
+                )
             # Owner's rule (29.10.2026, GAP Ингосстрах — Ренессанс): the same
             # level of coverage with different details is equal.
             return self._comparison(
@@ -1209,9 +1228,25 @@ class SalesInsightsService:
             own, other, "Лимиты или условия эвакуации указаны в несопоставимой форме.",
         )
 
+    @staticmethod
+    def _rule_violation_exclusion(text: str) -> bool:
+        return bool(re.search(
+            r"нарушени\w*\s+правил\w*\s+(?:пожарн\w*|эксплуатац\w*|техники\s+безопасност|безопасност)", text))
+
+    @staticmethod
+    def _comparable_repair_options(options: set[str]) -> set[str]:
+        """Owner's verdicts (29.10.2026) on how the forms of compensation rank."""
+        options = set(options)
+        # «Замена аналогичным имуществом» is not a real choice for a damaged car.
+        options.discard("replacement_property")
+        # A STOA of the client's choice covers a STOA allowed only with the insurer's consent.
+        if "alternative_stoa" in options:
+            options.add("nonpartner_stoa_with_consent")
+        return options
+
     def _compare_repair(self, label, own, other, own_l, other_l):
-        own_options = self._repair_options_v2(own_l)
-        other_options = self._repair_options_v2(other_l)
+        own_options = self._comparable_repair_options(self._repair_options_v2(own_l))
+        other_options = self._comparable_repair_options(self._repair_options_v2(other_l))
         if not own_options or not other_options:
             return self._comparison(
                 "repair_type", label, "incomparable", "repair_options_missing",
@@ -1241,14 +1276,17 @@ class SalesInsightsService:
             )
         # Owner's rule (29.10.2026, Альфа — ВСК): when the sets cross, more ways
         # to settle the claim is better for the client.
-        if len(own_options) > len(other_options):
+        # Count only options the rules name, not ones implied by a wider option.
+        own_count = len(self._repair_options_v2(own_l) - {"replacement_property"})
+        other_count = len(self._repair_options_v2(other_l) - {"replacement_property"})
+        if own_count > other_count:
             return self._advantage(
                 key="repair_type", label=label, title="Больше вариантов урегулирования",
                 own=own, other=other, basis="repair_more_options",
                 reason="У первой страховой больше вариантов ремонта/выплаты.",
                 client_phrase="У первой страховой больше вариантов ремонта и выплаты.",
             )
-        if len(own_options) < len(other_options):
+        if own_count < other_count:
             return self._comparison(
                 "repair_type", label, "competitor_advantage", "repair_more_options",
                 own, other, "У конкурента больше вариантов ремонта/выплаты.",
