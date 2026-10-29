@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import os
+from urllib.parse import urlparse
 
 from flask import Flask, abort, jsonify, redirect, render_template, request
 
@@ -55,6 +56,8 @@ def source_check_context() -> dict:
             "changed_files": [f for f in item.get("files", []) if f.get("status") == "changed"],
             "new_documents": new_documents,
             "files": item.get("files", []),
+            "web_copy": next((urlparse(f["copy_url"]).netloc.removeprefix("www.")
+                              for f in item.get("files", []) if f.get("via") == "web_copy"), None),
             "pages_unavailable": sum(p.get("status") == "unavailable" for p in item.get("pages", [])),
         }
     snapshot_date = comparison_service.load_snapshot().get("_last_updated")

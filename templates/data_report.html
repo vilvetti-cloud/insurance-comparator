@@ -31,6 +31,7 @@
               <span class="source-check__meta">Ответы обновлены автоматически по новой редакции правил {{ check.auto_updated }}</span>
             {% endif %}
             {% if check.status == 'ok' %}
+              {% if check.web_copy %}<span class="source-check__meta">Сайт страховой закрыт — правила сверены по копии с {{ check.web_copy }}</span>{% endif %}
               <span class="source-check__meta">Подтверждено {{ check.verified }}{% if check.pages_unavailable %} · страница со списком документов не открылась, новую редакцию по новой ссылке заметить нельзя{% endif %}</span>
             {% else %}
               {% if check.verified %}<span class="source-check__meta">Последний раз без изменений: {{ check.verified }}</span>{% endif %}
