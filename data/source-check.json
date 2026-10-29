@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "checked_at": "2026-10-28T12:17+03:00",
+  "checked_at": "2026-10-29T12:18+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "ok",
-      "verified_at": "2026-10-28T12:17+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
@@ -361,7 +361,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-10-28T12:17+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -380,7 +380,7 @@
     },
     "Ингосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-29T07:35+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "ingos/technical.pdf",
@@ -406,7 +406,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-28T12:17+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -446,7 +446,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-28T12:17+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -469,20 +469,21 @@
       ]
     },
     "Согласие": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-10-29T07:35+03:00",
       "files": [
         {
           "file": "soglasie/technical.pdf",
           "url": "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20%D1%81%D1%82%D1%80%D0%B0%D1%85%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки"
         }
       ],
       "pages": [
         {
           "url": "https://www.soglasie.ru/individuals/avto/kasko/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки",
           "known_links": [
             "https://api.soglasie.ru/storage/managed/upload/docs/Personal_data_processing_consent.pdf",
             "https://api.soglasie.ru/storage/managed/upload/docs/Privacy_policy.pdf",
@@ -492,8 +493,8 @@
         },
         {
           "url": "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки",
           "known_links": [
             "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/Правила страхования.pdf",
             "https://api.soglasie.ru/storage/managed/upload/docs/Personal_data_processing_consent.pdf",
@@ -506,7 +507,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-28T12:17+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -743,6 +744,7 @@
             "https://www-data.rgs.ru/upload/iblock/545/pravila_194_s_prilozheniyami.pdf",
             "https://www-data.rgs.ru/upload/iblock/547/tarify_197_2019.pdf",
             "https://www-data.rgs.ru/upload/iblock/549/Pravila-OSAGO-_red.-ot-13.12.2022_.pdf",
+            "https://www-data.rgs.ru/upload/iblock/54a/pacn2ylnc60e7djgu5bvgmvs264mxoz5/Strakhovye-tarify-k-Pravilam-225-ot-22_10_2026.edmstamped.pdf",
             "https://www-data.rgs.ru/upload/iblock/54c/y37ii45an74tc7q4sr5t0dcejow1gytp/242_-Tablitsa-iznosa.-CHast-2.pdf",
             "https://www-data.rgs.ru/upload/iblock/54d/tarify_207_dec18.pdf",
             "https://www-data.rgs.ru/upload/iblock/550/pravila_219_01032017.pdf",
@@ -1124,6 +1126,7 @@
             "https://www-data.rgs.ru/upload/iblock/ecb/Pravila-102_270922.pdf",
             "https://www-data.rgs.ru/upload/iblock/ed1/pravila233_230321.pdf",
             "https://www-data.rgs.ru/upload/iblock/ed1/pravila_165.pdf",
+            "https://www-data.rgs.ru/upload/iblock/ed8/tp3iahc7zf11zc1xvflbqtekd7c09rli/Pravila-225-ot-22_10_2026.stamped.pdf",
             "https://www-data.rgs.ru/upload/iblock/ee3/pravila_strakhovaniya_202.pdf",
             "https://www-data.rgs.ru/upload/iblock/ee7/strakhovye_tarify234_010321.pdf",
             "https://www-data.rgs.ru/upload/iblock/ee8/Pravila_172.pdf",
@@ -1176,7 +1179,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-28T12:17+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1204,7 +1207,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-28T12:17+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1732,13 +1735,14 @@
       ]
     },
     "Югория": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-10-29T07:35+03:00",
       "files": [
         {
           "file": "yugoria/technical.pdf",
           "url": "https://ugsk.ru/pravila/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%D0%9A%D0%90%D0%A1%D0%9A%D0%9E_04_%D1%80%D0%B5%D0%B4.9.0.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт отдал страницу вместо файла правил"
         }
       ],
       "pages": [
@@ -1752,7 +1756,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-28T12:17+03:00",
+      "verified_at": "2026-10-29T12:18+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
@@ -1775,6 +1779,5 @@
         }
       ]
     }
-  },
-  "rechecked_at": "2026-10-29T07:35+03:00"
+  }
 }
