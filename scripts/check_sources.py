@@ -23,10 +23,38 @@ if str(ROOT_DIR) not in sys.path:
 
 from collector.casco_transport import CascoFetcher  # noqa: E402
 from collector.source_watch import (  # noqa: E402
-    accept_new_documents, load_source_table, load_status, run_check, save_status,
+    SOURCES_DIR, accept_new_documents, load_source_table, load_status, run_check, save_status,
 )
+from collector.web_copies import find_copy, gemini_search  # noqa: E402
 
 LABELS = {"ok": "без изменений", "changed": "ЕСТЬ ИЗМЕНЕНИЯ", "unavailable": "не удалось проверить"}
+
+
+def check_web_copies(status: dict, fetcher, download_dir: Path | None) -> dict:
+    """Insurers whose site refused the check: look for their rules on the internet."""
+    search = gemini_search()
+    blocked = [name for name, company in status["companies"].items() if company.get("status") == "unavailable"]
+    if not search or not blocked:
+        return status
+    found, links = {}, {}
+    for row in load_source_table():
+        if row.company in blocked and row.file.endswith("/technical.pdf"):
+            copy = find_copy(row.company, SOURCES_DIR / row.file, lambda url: fetcher.fetch(url), search)
+            if copy:
+                found[row.file], links[row.file] = copy.body, copy.url
+                print(f"  {row.company}: правила найдены на {copy.site}"
+                      f"{' (та же редакция)' if copy.same_as_ours else ' — НОВАЯ РЕДАКЦИЯ'}")
+            else:
+                print(f"  {row.company}: в интернете подходящая копия правил не найдена")
+    if not found:
+        return status
+    status = run_check(lambda url: fetcher.fetch(url), previous=status, download_dir=download_dir,
+                       only_unavailable=True, manual_files=found)
+    for company in status["companies"].values():
+        for item in company.get("files", []):
+            if item["file"] in links and item.get("via") == "manual":
+                item.update(via="web_copy", copy_url=links[item["file"]])
+    return status
 
 
 def main() -> int:
@@ -71,6 +99,7 @@ def main() -> int:
     )
     for path in inbox_paths:
         path.unlink()
+    status = check_web_copies(status, fetcher, Path(args.downloads) if args.downloads else None)
     save_status(status)
     print(f"Проверка {status['checked_at']}")
     for name, company in status["companies"].items():
