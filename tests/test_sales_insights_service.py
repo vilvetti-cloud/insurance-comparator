@@ -733,6 +733,30 @@ class ReadingFixesTests(unittest.TestCase):
         )
         self.assertEqual((term.amount, term.unit, term.context), (30, "working_days", "payment"))
 
+    def test_calendar_decision_and_working_payment_add_up_in_working_days(self):
+        # Owner's decision (29.10.2026, Сбер): 30 calendar ≈ 22 working + 15 = 37.
+        term = SalesInsightsService._payment_term(
+            "решение о признании события страховым случаем — в течение 30 календарных дней после получения "
+            "документов (п. 14.1), денежная выплата — в течение 15 рабочих дней со дня решения (п. 14.2.10)."
+        )
+        self.assertEqual((term.amount, term.unit, term.context), (37, "working_days", "payment"))
+
+    def test_deadline_counted_from_all_documents_is_the_payment_term(self):
+        # Owner's decision (29.10.2026, Согласие).
+        term = SalesInsightsService._payment_term(
+            "п. 11.2.3.2 предусматривает 30 рабочих дней для определённых случаев, считая со дня, "
+            "следующего за предоставлением всех необходимых документов."
+        )
+        self.assertEqual((term.amount, term.unit, term.context), (30, "working_days", "payment"))
+
+    def test_variant_to_check_in_the_policy_is_not_counted(self):
+        # Owner's rule (29.10.2026, Сбер): only what the rules state for sure counts.
+        options = SalesInsightsService._repair_options_v2(
+            "предусмотрен ремонт на стоа по договору со страховщиком. существуют дополнительные условия "
+            "по официальному дилеру/выбору стоа; возможность конкретного варианта нужно проверить в полисе."
+        )
+        self.assertEqual(options, {"stoa"})
+
     def test_money_listed_among_forms_of_compensation_is_cash(self):
         for text in (
             "п. 11.3 перечисляет формы возмещения: денежные средства, имущество, аналогичное утраченному, или направление на ремонт.",
@@ -782,9 +806,9 @@ class ReadingFixesTests(unittest.TestCase):
         )
         self.assertEqual((term.amount, term.unit, term.context), (22, "working_days", "payment"))
 
-    def test_stages_in_different_units_are_not_added(self):
+    def test_stages_in_hours_and_days_are_not_added(self):
         self.assertIsNone(SalesInsightsService._payment_term(
-            "решение — в течение 30 календарных дней после получения документов, "
+            "решение — в течение 48 часов после получения документов, "
             "денежная выплата — в течение 15 рабочих дней со дня решения."
         ))
 

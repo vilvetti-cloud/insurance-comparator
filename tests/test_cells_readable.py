@@ -12,11 +12,7 @@ from core.services.sales_insights_service import SalesInsightsService as S
 
 # Answers that are honestly unclear in the rules themselves; they stay
 # «нельзя сравнить» until the wording is clarified from the rules.
-UNCLEAR = {
-    ("Согласие", "payment_terms"),  # 30 рабочих дней только «в случаях подп. б или г»
-    ("СберСтрахование", "payment_terms"),  # 30 календарных + 15 рабочих дней — разные единицы
-    ("СберСтрахование", "repair_type"),  # варианты ремонта нужно проверять в полисе
-}
+UNCLEAR: set[tuple[str, str]] = set()  # all answers are readable since 29.10.2026
 
 READERS = {
     "payment_terms": lambda text: S._payment_term(S._normalized(text)),
