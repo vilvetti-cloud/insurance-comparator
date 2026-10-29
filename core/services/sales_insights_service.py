@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -571,6 +572,15 @@ class SalesInsightsService:
             # и деньги перечисляются в течение 30 дней») is the payment term.
             if "payment" in contexts:
                 return PaymentTerm(amount=amount, unit=unit, context="payment")
+            # Owner's decision (29.10.2026, Согласие): a deadline in the payment
+            # terms counted from the day all documents are handed in, and not
+            # tied to another stage, is the payment term.
+            if not contexts and re.search(
+                r"(?:со\s+дня|с\s+даты|после)[^.;]{0,40}(?:предоставлен|получен|представлен)\w*\s+"
+                r"(?:всех\s+)?(?:необходим\w*\s+)?документ",
+                sentence,
+            ):
+                return PaymentTerm(amount=amount, unit=unit, context="payment")
             if len(set(contexts)) != 1:
                 continue
             return PaymentTerm(amount=amount, unit=unit, context=contexts[0])
@@ -591,14 +601,20 @@ class SalesInsightsService:
             sentence,
         ):
             return None
-        units = {
-            "working_days" if unit.startswith("рабоч") else "calendar_days" if unit.startswith("календар")
-            else "hours" if unit.startswith("час") else "days"
-            for _, unit in terms
-        }
-        if len(units) != 1:
-            return None
-        return PaymentTerm(amount=sum(int(amount) for amount, _ in terms), unit=units.pop(), context="payment")
+        stages = [
+            (int(amount), "working_days" if unit.startswith("рабоч") else "calendar_days" if unit.startswith("календар")
+             else "hours" if unit.startswith("час") else "days")
+            for amount, unit in terms
+        ]
+        units = {unit for _, unit in stages}
+        if len(units) == 1:
+            return PaymentTerm(amount=sum(amount for amount, _ in stages), unit=units.pop(), context="payment")
+        if units == {"working_days", "calendar_days"}:
+            # Owner's decision (29.10.2026, Сбер): calendar days are converted
+            # to working days (5 of 7, rounded up) and the stages add up.
+            total = sum(amount if unit == "working_days" else math.ceil(amount * 5 / 7) for amount, unit in stages)
+            return PaymentTerm(amount=total, unit="working_days", context="payment")
+        return None
 
 
     # Deterministic, field-specific comparison rules.
@@ -1679,19 +1695,16 @@ class SalesInsightsService:
             text,
         ):
             return set()
-        # If the accepted answer says the excerpt is incomplete or a listed
-        # variant must be checked in the policy, do not infer an exhaustive
-        # option set from those caveats.
-        if re.search(
-            r"не\s+полностью\s+(?:раскрыт|видн|установлен)|"
-            r"часть\s+текст\w*[^.;]{0,80}обрыв|"
-            r"возможност\w*\s+конкретн\w*\s+вариант\w*[^.;]{0,100}"
-            r"(?:нужно|необходимо)\s+проверить\s+в\s+полисе|"
-            r"конкретн\w*\s+вариант\w*[^.;]{0,100}"
-            r"(?:нужно|необходимо)\s+проверить\s+в\s+полисе",
-            text,
-        ):
+        # If the accepted answer says the excerpt is incomplete, do not infer
+        # an option set from it.
+        if re.search(r"не\s+полностью\s+(?:раскрыт|видн|установлен)|часть\s+текст\w*[^.;]{0,80}обрыв", text):
             return set()
+        # Owner's rule (29.10.2026, Сбер): variants that «must be checked in the
+        # policy» are not something the client can count on — only the rest counts.
+        text = " ".join(
+            sentence for sentence in re.split(r"(?<=\.)\s+", text)
+            if not re.search(r"(?:нужно|необходимо)\s+проверить\s+в\s+полисе", sentence)
+        )
         options: set[str] = set()
         if re.search(
             r"денежн\w*\s+(?:выплат|форм|возмещ)|выплат\w*\s+денеж|денежн\w*,[^.;]{0,40}форм|"
