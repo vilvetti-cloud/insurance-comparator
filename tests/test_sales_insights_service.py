@@ -753,6 +753,21 @@ class ReadingFixesTests(unittest.TestCase):
         )
         self.assertIn("а у B — около 37 рабочих дней", result["client_message"])
 
+    def test_general_risk_is_not_called_absent(self):
+        # Owner's decision (30.10.2026): a general risk may still pay,
+        # depending on how the authorities qualify the event.
+        result = SalesInsightsService().analyze(
+            company="A", competitor="B",
+            data={"drone": "Падение БПЛА можно застраховать отдельным риском по соглашению сторон."},
+            competitor_data={"drone": "Прямого покрытия БПЛА нет; есть риск падения инородных предметов."},
+            field_labels={"drone": "БПЛА"},
+        )
+        self.assertIn("у B это прямо не названо", result["client_message"])
+
+    def test_term_written_as_about_stays_approximate(self):
+        term = SalesInsightsService._payment_term("денежная страховая выплата — всего около 30 рабочих дней.")
+        self.assertEqual((term.amount, term.approximate), (30, True))
+
     def test_client_message_does_not_offer_replacement_property(self):
         feature = SalesInsightsService._client_feature(
             "repair_type",
