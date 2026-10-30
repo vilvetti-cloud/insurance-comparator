@@ -741,6 +741,25 @@ class ReadingFixesTests(unittest.TestCase):
         )
         self.assertEqual((term.amount, term.unit, term.context), (37, "working_days", "payment"))
 
+    def test_client_message_says_about_for_a_summed_deadline(self):
+        result = SalesInsightsService().analyze(
+            company="A", competitor="B",
+            data={"payment_terms": "Денежная страховая выплата — в течение 30 рабочих дней."},
+            competitor_data={"payment_terms": (
+                "Решение — в течение 30 календарных дней после получения документов, "
+                "денежная выплата — в течение 15 рабочих дней со дня решения."
+            )},
+            field_labels={"payment_terms": "Срок выплат"},
+        )
+        self.assertIn("а у B — около 37 рабочих дней", result["client_message"])
+
+    def test_client_message_does_not_offer_replacement_property(self):
+        feature = SalesInsightsService._client_feature(
+            "repair_type",
+            "Формы возмещения: денежные средства, имущество, аналогичное утраченному, или направление на ремонт.",
+        )
+        self.assertEqual(feature, "Несколько вариантов возмещения: ремонт на СТОА по направлению страховой, денежная выплата")
+
     def test_deadline_counted_from_all_documents_is_the_payment_term(self):
         # Owner's decision (29.10.2026, Согласие).
         term = SalesInsightsService._payment_term(

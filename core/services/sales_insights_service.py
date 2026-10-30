@@ -13,6 +13,7 @@ class PaymentTerm:
     amount: int
     unit: str
     context: str
+    approximate: bool = False
 
 
 @dataclass(frozen=True)
@@ -308,7 +309,7 @@ class SalesInsightsService:
             # Owner's rule: what the competitor's rules do not clearly grant,
             # the client cannot count on, so it is presented as absent.
             tail = f"у {competitor} этого нет"
-            feature = feature or f"Условие «{label}» прямо закреплено в правилах {company}"
+            feature = feature or f"{label}: условие прямо указано в правилах {company}"
         elif "_coverage_level_" in basis:
             other_level = SalesInsightsService._coverage_level_v2(key, other)
             tail = (
@@ -339,16 +340,17 @@ class SalesInsightsService:
         elif basis in ("repair_option_set_superset", "repair_more_options"):
             tail = f"у {competitor} вариантов меньше"
         elif basis == "without_documents_default_vs_option":
+            feature = feature or "Часть повреждений можно урегулировать без справок из ГИБДД и полиции"
             tail = f"у {competitor} это только дополнительная опция"
         elif basis == "without_documents_unlimited_glass":
-            feature = "Повреждённые стёкла без справок — без ограничения числа обращений"
+            feature = "Повреждённые стёкла можно урегулировать без справок без ограничения числа обращений"
             tail = f"у {competitor} число таких обращений ограничено"
         elif basis == "total_loss_higher_threshold":
             own_threshold = SalesInsightsService._total_loss_threshold(SalesInsightsService._normalized(own))
             other_threshold = SalesInsightsService._total_loss_threshold(SalesInsightsService._normalized(other))
             feature = (f"Машину признают полностью погибшей, только если ремонт дороже "
-                       f"{own_threshold.amount:g}% её стоимости — её чаще ремонтируют, а не списывают")
-            tail = f"у {competitor} — уже от {other_threshold.amount:g}%"
+                       f"{own_threshold.amount:g}% её стоимости, поэтому её чаще ремонтируют, а не списывают")
+            tail = f"у {competitor} уже от {other_threshold.amount:g}%"
         elif basis.endswith("_no_rule_violation_exclusion"):
             feature = f"{label}: нет отказа в выплате из-за нарушения правил безопасности"
             tail = f"у {competitor} при таком нарушении в выплате откажут"
@@ -480,7 +482,6 @@ class SalesInsightsService:
                     ("alternative_stoa", "ремонт на СТОА по вашему выбору"),
                     ("nonpartner_stoa_with_consent", "ремонт на другой СТОА по согласованию"),
                     ("cash", "денежная выплата"),
-                    ("replacement_property", "замена аналогичным имуществом"),
                 ) if option in options
             ]
             if len(names) < 2:
@@ -613,7 +614,7 @@ class SalesInsightsService:
             # Owner's decision (29.10.2026, Сбер): calendar days are converted
             # to working days (5 of 7, rounded up) and the stages add up.
             total = sum(amount if unit == "working_days" else math.ceil(amount * 5 / 7) for amount, unit in stages)
-            return PaymentTerm(amount=total, unit="working_days", context="payment")
+            return PaymentTerm(amount=total, unit="working_days", context="payment", approximate=True)
         return None
 
 
@@ -1340,7 +1341,10 @@ class SalesInsightsService:
                 own=own, other=other,
                 basis=f"payment_term_{own_term.context}_{own_term.unit}_{own_term.amount}_vs_{other_term.amount}",
                 reason=f"Для {context_label} первая страховая указывает меньший срок при одинаковой единице времени.",
-                client_phrase=f"Для {context_label} у первой страховой указан срок до {own_term.amount} {unit_label}, а у конкурента — до {other_term.amount} {unit_label}.",
+                client_phrase=(
+                    f"Для {context_label} у первой страховой указан срок до {own_term.amount} {unit_label}, "
+                    f"а у конкурента — {'около' if other_term.approximate else 'до'} {other_term.amount} {unit_label}."
+                ),
             )
         if own_term.amount > other_term.amount:
             return self._comparison(
