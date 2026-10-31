@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "checked_at": "2026-10-30T12:34+03:00",
+  "checked_at": "2026-10-31T12:16+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:16+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
@@ -361,7 +361,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:16+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -380,7 +380,7 @@
     },
     "Ингосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:16+03:00",
       "files": [
         {
           "file": "ingos/technical.pdf",
@@ -406,7 +406,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:16+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -446,7 +446,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:16+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -507,7 +507,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:17+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -779,6 +779,7 @@
             "https://www-data.rgs.ru/upload/iblock/619/o0db9hier5w530yvhhy4jhoy80ht7h2v/23_08_300_Pravila-242.pdf",
             "https://www-data.rgs.ru/upload/iblock/61e/pravila_150_new_2018.pdf",
             "https://www-data.rgs.ru/upload/iblock/62f/qd7cdhat60frfuyg4m0w976lfhw8dndb/ORD-_-23_08_117-ot-27_02_2025-_-Prilozhenie_Pravila-strakhovaniya.pdf",
+            "https://www-data.rgs.ru/upload/iblock/633/tnzkovkne0qm246793mnb7jerk3u4c45/Prilozhenie-_-12-k-Pravilam-_-171-_STRAKHOVYE-TARIFY.pdf",
             "https://www-data.rgs.ru/upload/iblock/63d/ps_111_st.pdf",
             "https://www-data.rgs.ru/upload/iblock/63f/pravila151.pdf",
             "https://www-data.rgs.ru/upload/iblock/640/pravila_207_06052019.pdf",
@@ -1017,6 +1018,7 @@
             "https://www-data.rgs.ru/upload/iblock/c25/pravila_voen_251019.pdf",
             "https://www-data.rgs.ru/upload/iblock/c27/tarify_167_29122017.pdf",
             "https://www-data.rgs.ru/upload/iblock/c2b/45_pravila.pdf",
+            "https://www-data.rgs.ru/upload/iblock/c2c/qwypojlomy30xyxcjnkqoaaymehhc9an/Pravila-KASKO-_-171.pdf",
             "https://www-data.rgs.ru/upload/iblock/c37/ic22003uq0wxzzalsof8gbre4z75gcyg/Prilozhenie-_-1-k-Pravilam-253_-Tarify-31.03.2026.pdf",
             "https://www-data.rgs.ru/upload/iblock/c43/pravila_162_new_100918.pdf",
             "https://www-data.rgs.ru/upload/iblock/c50/pravila-i-tarify-171_110422.pdf",
@@ -1175,11 +1177,12 @@
             "https://www-data.rgs.ru/upload/iblock/ffd/tarify_172_25052016.pdf"
           ]
         }
-      ]
+      ],
+      "auto_updated_at": "2026-10-31T12:17+03:00"
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:16+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1207,7 +1210,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:16+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1756,7 +1759,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-30T12:34+03:00",
+      "verified_at": "2026-10-31T12:16+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
