@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "checked_at": "2026-10-31T12:16+03:00",
+  "checked_at": "2026-11-01T13:02+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:16+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
@@ -361,7 +361,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:16+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -380,7 +380,7 @@
     },
     "Ингосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:16+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "ingos/technical.pdf",
@@ -406,7 +406,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:16+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -446,7 +446,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:16+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -507,7 +507,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:17+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -1177,12 +1177,11 @@
             "https://www-data.rgs.ru/upload/iblock/ffd/tarify_172_25052016.pdf"
           ]
         }
-      ],
-      "auto_updated_at": "2026-10-31T12:17+03:00"
+      ]
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:16+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1210,7 +1209,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:16+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1759,7 +1758,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-10-31T12:16+03:00",
+      "verified_at": "2026-11-01T13:02+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
