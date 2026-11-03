@@ -91,6 +91,21 @@ class OpenAICompatibleTests(unittest.TestCase):
         self.assertEqual(http.posted, ["deepseek/deepseek-chat:free", "qwen/qwen3:free"])
         self.assertEqual(client.used_model, "qwen/qwen3:free")
 
+    def test_unreadable_model_list_falls_back_and_greedy_sampling_sets_top_p(self):
+        class NoList(FakeHttp):
+            def get(self, url, **kwargs):
+                return SimpleNamespace(status_code=401, text="unauthorized", json=lambda: {})
+
+            def post(self, url, json=None, **kwargs):
+                self.sent = json
+                return super().post(url, json=json, **kwargs)
+
+        http = NoList([], [(200, '{"ok": true}')])
+        client = OpenAICompatible(self.service("GitHub Models"), "token", http=http)
+        self.assertEqual(client.generate("вопрос"), {"ok": True})
+        self.assertEqual(http.posted, ["openai/gpt-4.1-mini"])
+        self.assertEqual((http.sent["temperature"], http.sent["top_p"]), (0, 1))
+
     def test_every_model_failing_is_an_error(self):
         http = FakeHttp([{"id": "mistral-small-latest"}], [(503, "busy")])
         with self.assertRaisesRegex(RuntimeError, "Mistral: mistral-small-latest: HTTP 503"):

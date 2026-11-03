@@ -35,23 +35,28 @@ class Service:
     # Free tiers limit the size of one request: the rules text shown is cut to this.
     max_chars: int
     models_env: str
+    # Used when the account's list of models cannot be read.
+    fallback_models: tuple[str, ...] = ()
+    # Free models of some services are often busy: try more of them.
+    models_to_try: int = 2
 
 
 SERVICES = (
     Service("GitHub Models", "GITHUB_TOKEN", "https://models.github.ai/inference/chat/completions",
             "https://models.github.ai/catalog/models",
-            ("openai/gpt-4.1", "openai/gpt-4o", "deepseek", "meta/llama-4", "mistral"), 14000, "GITHUB_MODELS"),
+            ("openai/gpt-4.1", "openai/gpt-4o", "deepseek", "meta/llama-4", "mistral"), 14000, "GITHUB_MODELS",
+            fallback_models=("openai/gpt-4.1-mini", "openai/gpt-4o-mini")),
     Service("Groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1/chat/completions",
             "https://api.groq.com/openai/v1/models",
             ("gpt-oss-120b", "llama-4-maverick", "llama-3.3-70b", "qwen", "kimi"), 18000, "GROQ_MODELS"),
     Service("OpenRouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1/chat/completions",
             "https://openrouter.ai/api/v1/models",
-            ("deepseek", "qwen", "llama", "gemma", "mistral"), 60000, "OPENROUTER_MODELS"),
+            ("deepseek", "qwen", "llama", "gemma", "mistral"), 60000, "OPENROUTER_MODELS", models_to_try=5),
     Service("Mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1/chat/completions",
             "https://api.mistral.ai/v1/models",
-            ("mistral-large", "mistral-medium", "mistral-small"), 60000, "MISTRAL_MODELS"),
+            ("mistral-large", "mistral-medium", "mistral-small"), 60000, "MISTRAL_MODELS",
+            fallback_models=("mistral-small-latest",)),
 )
-MODELS_PER_SERVICE = 2
 QUICK_TIMEOUT = 120  # seconds to wait for one answer before the next model or service
 
 
@@ -77,9 +82,14 @@ class OpenAICompatible:
         self.max_chars = service.max_chars
         self.name = service.name
         self._models: list[str] | None = None
+        self._list_problem = ""
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        if self.service.name == "GitHub Models":
+            # GitHub's REST conventions for the catalog and the inference endpoint.
+            headers.update({"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+        return headers
 
     def models(self) -> list[str]:
         if self._models is None:
@@ -87,14 +97,17 @@ class OpenAICompatible:
             if configured:
                 self._models = [m.strip() for m in configured.split(",") if m.strip()]
             else:
-                self._models = self._listed()
+                self._models = self._listed() or list(self.service.fallback_models)
         return self._models
 
     def _listed(self) -> list[str]:
         try:
             response = self.http.get(self.service.models_url, headers=self._headers(), timeout=(15, 60))
+            if response.status_code != 200:
+                self._list_problem = f"список моделей: HTTP {response.status_code} {response.text[:150]}"
             payload = response.json() if response.status_code == 200 else {}
-        except (requests.RequestException, ValueError):
+        except (requests.RequestException, ValueError) as exc:
+            self._list_problem = f"список моделей: {type(exc).__name__}"
             return []
         items = payload.get("data", payload) if isinstance(payload, dict) else payload
         names = []
@@ -110,14 +123,17 @@ class OpenAICompatible:
         ranked = []
         for fragment in self.service.preferred:
             ranked += [n for n in names if fragment in n.lower() and n not in ranked]
-        return ranked[:MODELS_PER_SERVICE]
+        if names and not ranked:
+            self._list_problem = f"в списке нет подходящих моделей (например, {', '.join(names[:5])})"
+        return ranked[:self.service.models_to_try]
 
     def generate(self, prompt: str) -> dict[str, Any]:
         errors = []
         for model in self.models():
             try:
                 response = self.http.post(self.service.chat_url, headers=self._headers(), timeout=(15, QUICK_TIMEOUT), json={
-                    "model": model, "temperature": 0,
+                    # temperature 0 with top_p 1: Mistral refuses greedy sampling otherwise.
+                    "model": model, "temperature": 0, "top_p": 1,
                     "response_format": {"type": "json_object"},
                     "messages": [{"role": "user", "content": prompt}],
                 })
@@ -134,7 +150,7 @@ class OpenAICompatible:
             except (KeyError, IndexError, TypeError, ValueError) as exc:
                 errors.append(f"{model}: ответ не в формате JSON ({type(exc).__name__})")
         if not errors:
-            errors.append("нет доступных моделей")
+            errors.append("нет доступных моделей" + (f" ({self._list_problem})" if self._list_problem else ""))
         raise RuntimeError(f"{self.name}: " + " | ".join(errors))
 
 
