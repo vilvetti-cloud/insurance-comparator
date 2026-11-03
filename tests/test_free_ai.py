@@ -51,11 +51,12 @@ class FreeChainTests(unittest.TestCase):
         self.assertTrue(any(p.startswith("Gemini:") for p in draft.problems))
 
     def test_services_without_a_key_are_skipped_gemini_first(self):
-        chain = free_chain(lambda key: SimpleNamespace(key=key), environ={
+        chain = free_chain(lambda key, **quick: SimpleNamespace(key=key, **quick), environ={
             "GEMINI_API_KEY": "g", "MISTRAL_API_KEY": "m", "GITHUB_TOKEN": "t"})
         self.assertEqual([s.name for s in chain.services], ["Gemini", "GitHub Models", "Mistral"])
         self.assertIsInstance(chain.services[0], GeminiService)
-        self.assertIsNone(free_chain(lambda key: None, environ={}))
+        self.assertEqual(chain.services[0].client.tries, 1)  # gives way quickly in the chain
+        self.assertIsNone(free_chain(lambda key, **quick: None, environ={}))
 
     def test_json_wrapped_in_fences_or_text(self):
         self.assertEqual(_json_from('```json\n{"a": 1}\n```'), {"a": 1})

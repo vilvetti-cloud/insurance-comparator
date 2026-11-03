@@ -19,7 +19,8 @@ permissions:
 jobs:
   selftest:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Every free AI service is tried on its own.
+    timeout-minutes: 45
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -36,4 +37,5 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt anthropic
-      - run: python scripts/auto_update_selftest.py
+      # -u: results reach the log at once, even if the job is stopped.
+      - run: python -u scripts/auto_update_selftest.py

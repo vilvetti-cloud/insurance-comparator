@@ -52,6 +52,7 @@ SERVICES = (
             ("mistral-large", "mistral-medium", "mistral-small"), 60000, "MISTRAL_MODELS"),
 )
 MODELS_PER_SERVICE = 2
+QUICK_TIMEOUT = 120  # seconds to wait for one answer before the next model or service
 
 
 def _json_from(text: str) -> dict[str, Any]:
@@ -115,7 +116,7 @@ class OpenAICompatible:
         errors = []
         for model in self.models():
             try:
-                response = self.http.post(self.service.chat_url, headers=self._headers(), timeout=(15, 240), json={
+                response = self.http.post(self.service.chat_url, headers=self._headers(), timeout=(15, QUICK_TIMEOUT), json={
                     "model": model, "temperature": 0,
                     "response_format": {"type": "json_object"},
                     "messages": [{"role": "user", "content": prompt}],
@@ -166,7 +167,9 @@ def free_chain(gemini_factory: Callable[[str], Any] | None = None, gemini_max_ch
                environ=os.environ) -> FreeChain | None:
     services: list = []
     if environ.get("GEMINI_API_KEY") and gemini_factory:
-        services.append(GeminiService(gemini_factory(environ["GEMINI_API_KEY"]), gemini_max_chars))
+        # In the chain Gemini does not wait for itself: the next service is asked instead.
+        quick = gemini_factory(environ["GEMINI_API_KEY"], tries=1, read_timeout=QUICK_TIMEOUT, fallbacks=1)
+        services.append(GeminiService(quick, gemini_max_chars))
     for service in SERVICES:
         if environ.get(service.key_env):
             services.append(OpenAICompatible(service, environ[service.key_env]))
