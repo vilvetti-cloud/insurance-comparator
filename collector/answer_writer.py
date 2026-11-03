@@ -159,12 +159,23 @@ def _task(company: str, field_key: str, field_label: str, current_answer: str,
     )
 
 
+def _plain(value: Any) -> str:
+    """Text of a field; some free models send a list of sentences instead of a string."""
+    if isinstance(value, list):
+        return " ".join(_plain(item) for item in value).strip()
+    return str(value if value is not None else "").strip()
+
+
 def _draft(payload: dict[str, Any], pages: list[str]) -> Draft:
+    quotes = []
+    for quote in payload.get("quotes") or []:
+        if isinstance(quote, dict) and _plain(quote.get("text")):
+            quotes.append(dict(quote, text=_plain(quote.get("text"))))
     draft = Draft(
         changed=bool(payload["changed"]),
-        key_conditions=str(payload["key_conditions"]).strip(),
-        quotes=[quote for quote in payload["quotes"] if isinstance(quote, dict)],
-        change_summary=str(payload["change_summary"]).strip(),
+        key_conditions=_plain(payload["key_conditions"]),
+        quotes=quotes,
+        change_summary=_plain(payload.get("change_summary")),
     )
     return validate(draft, pages)
 
