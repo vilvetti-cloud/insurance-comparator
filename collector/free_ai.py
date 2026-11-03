@@ -75,6 +75,15 @@ def _json_from(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
+def _content(message: dict[str, Any]) -> str:
+    """The answer text; Mistral may send a list of chunks (text and reasoning) instead of a string."""
+    content = message.get("content")
+    if isinstance(content, list):
+        return "".join(chunk.get("text", "") for chunk in content
+                       if isinstance(chunk, dict) and chunk.get("type", "text") == "text")
+    return content or ""
+
+
 class OpenAICompatible:
     """One free service with the common chat-completions interface."""
 
@@ -134,35 +143,48 @@ class OpenAICompatible:
     def generate(self, prompt: str) -> dict[str, Any]:
         errors = []
         for model in self.models():
-            try:
-                response = self._post(model, prompt)
-            except requests.RequestException as exc:
-                errors.append(f"{model}: {type(exc).__name__}")
-                continue
-            if response.status_code != 200:
-                errors.append(f"{model}: HTTP {response.status_code} {response.text[:200]}")
-                continue
-            try:
-                text = response.json()["choices"][0]["message"]["content"] or ""
-                self.used_model = model
-                return _json_from(text)
-            except (KeyError, IndexError, TypeError, ValueError) as exc:
-                shown = " ".join(str(locals().get("text", "")).split())[:160]
-                errors.append(f"{model}: ответ не в формате JSON ({type(exc).__name__}): «{shown}»")
+            # Strict JSON mode first; a model that answers it with nothing is asked once more without it.
+            for json_mode in (True, False):
+                try:
+                    response = self._post(model, prompt, json_mode)
+                except requests.RequestException as exc:
+                    errors.append(f"{model}: {type(exc).__name__}")
+                    break
+                if response.status_code != 200:
+                    errors.append(f"{model}: HTTP {response.status_code} {response.text[:200]}")
+                    break
+                text, finish = "", ""
+                try:
+                    choice = response.json()["choices"][0]
+                    finish = choice.get("finish_reason") or ""
+                    text = _content(choice["message"])
+                    if not text.strip() and json_mode:
+                        continue
+                    payload = _json_from(text)
+                    self.used_model = model
+                    return payload
+                except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
+                    shown = " ".join(text.split())[:160]
+                    errors.append(f"{model}: ответ не в формате JSON ({type(exc).__name__}, "
+                                  f"finish_reason={finish or '—'}): «{shown}»")
+                    break
         if not errors:
             errors.append("нет доступных моделей" + (f" ({self._list_problem})" if self._list_problem else ""))
         raise RuntimeError(f"{self.name}: " + " | ".join(errors))
 
 
-    def _post(self, model: str, prompt: str):
+    def _post(self, model: str, prompt: str, json_mode: bool = True):
         """One model; a per-second rate limit (Mistral, OpenRouter) gets one short pause."""
+        body = {
+            # temperature 0 with top_p 1: Mistral refuses greedy sampling otherwise.
+            "model": model, "temperature": 0, "top_p": 1, "max_tokens": 4000,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
         for attempt in range(2):
-            response = self.http.post(self.service.chat_url, headers=self._headers(), timeout=(15, QUICK_TIMEOUT), json={
-                # temperature 0 with top_p 1: Mistral refuses greedy sampling otherwise.
-                "model": model, "temperature": 0, "top_p": 1,
-                "response_format": {"type": "json_object"},
-                "messages": [{"role": "user", "content": prompt}],
-            })
+            response = self.http.post(self.service.chat_url, headers=self._headers(), timeout=(15, QUICK_TIMEOUT),
+                                      json=body)
             if response.status_code != 429 or attempt:
                 return response
             self.sleep(RATE_LIMIT_PAUSE)
