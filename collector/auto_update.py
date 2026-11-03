@@ -194,10 +194,19 @@ class AutoUpdater:
             self.report.unchanged.append(f"{company_name}: {file} — перезалит без изменений текста")
             return True
         touched = affected_fields(company, file, new_pages, added, removed, old_pages)
+        # Answers the owner settled by hand (a decision, a document from an
+        # agent) are never rewritten by the AI: the owner is told instead.
+        protected = [item for item in touched if item.get("owner_note")]
+        for item in protected:
+            touched.remove(item)
+            self.report.manual.append(
+                f"{company_name} — {LABELS[item['key']]}: в новой редакции правил изменились пункты об этом "
+                f"параметре, но ответ задан вручную ({item['owner_note']}) — сверьте его с новым текстом")
         if not touched:
             self._save_copy(local, new_body)
-            self.report.unchanged.append(
-                f"{company_name}: {file} — текст изменился, но не в пунктах о 10 параметрах сравнения")
+            if not protected:
+                self.report.unchanged.append(
+                    f"{company_name}: {file} — текст изменился, но не в пунктах о 10 параметрах сравнения")
             return True
         if self.client is None:
             self.report.manual.append(

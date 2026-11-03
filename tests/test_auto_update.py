@@ -132,6 +132,17 @@ class AutoUpdateTests(unittest.TestCase):
         self.run_updater(NEW_TOW, second)
         self.assertEqual(second.calls, ["tow_truck"])
 
+    def test_answer_settled_by_the_owner_is_not_rewritten(self):
+        master = json.loads(self.master.read_text(encoding="utf-8"))
+        tow = next(f for f in master["companies"][0]["fields"] if f["key"] == "tow_truck")
+        tow["owner_note"] = "решение владельца 30.10.2026"
+        self.master.write_text(json.dumps(master, ensure_ascii=False), encoding="utf-8")
+        writer = FakeWriter()
+        report, _ = self.run_updater(NEW_TOW, writer)
+        self.assertEqual(writer.calls, [])
+        self.assertEqual(self.answer("tow_truck")[0]["key_conditions"], "Старый ответ tow_truck.")
+        self.assertIn("ответ задан вручную (решение владельца 30.10.2026)", report.markdown("x"))
+
     def test_new_edition_at_a_new_link_stays_flagged_when_the_ai_is_busy(self):
         # Росгосстрах, 31.10.2026: the new edition was marked as known and lost.
         link = {"url": "https://reso.ru/rules-2026.pdf", "title": "Правила КАСКО 2026"}
