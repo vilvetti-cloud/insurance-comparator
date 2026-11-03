@@ -172,14 +172,17 @@ def _draft(payload: dict[str, Any], pages: list[str]) -> Draft:
 class GeminiClient:
     """Free alternative to the Claude API: Google Gemini with the same task and checks."""
 
-    def __init__(self, api_key: str, model: str | None = None):
+    def __init__(self, api_key: str, model: str | None = None, *, tries: int = 3, read_timeout: int = 240,
+                 fallbacks: int = GEMINI_FALLBACKS_TO_TRY):
         self.api_key = api_key
         self.model = model or os.environ.get("GEMINI_MODEL") or GEMINI_DEFAULT_MODEL
+        # Patient on its own; in the chain of free services it gives way quickly instead.
+        self.tries, self.read_timeout, self.fallbacks = tries, read_timeout, fallbacks
 
     def models(self) -> list[str]:
         configured = os.environ.get("GEMINI_FALLBACK_MODELS")
         fallbacks = [m.strip() for m in configured.split(",")] if configured else self._available_flash_models()
-        return list(dict.fromkeys([self.model, *(m for m in fallbacks if m)]))[:1 + GEMINI_FALLBACKS_TO_TRY]
+        return list(dict.fromkeys([self.model, *(m for m in fallbacks if m)]))[:1 + self.fallbacks]
 
     def _available_flash_models(self) -> list[str]:
         """Flash models this key can call, newest version first."""
@@ -221,7 +224,7 @@ class GeminiClient:
     def _request(self, model: str, prompt: str):
         """One model: a few tries while it is busy. A timeout is raised at once,
         so a slow model gives way to the next one instead of three long waits."""
-        for attempt in range(3):
+        for attempt in range(self.tries):
             if attempt:
                 time.sleep(30 * attempt)
             response = requests.post(
@@ -235,10 +238,10 @@ class GeminiClient:
                         "responseJsonSchema": SCHEMA,
                     },
                 },
-                timeout=(15, 240),
+                timeout=(15, self.read_timeout),
             )
             # Free-tier limits and busy servers: wait and try again.
-            if response.status_code in (429, 500, 502, 503, 504) and attempt < 2:
+            if response.status_code in (429, 500, 502, 503, 504) and attempt < self.tries - 1:
                 response.close()
                 continue
             return response
