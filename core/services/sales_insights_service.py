@@ -308,7 +308,10 @@ class SalesInsightsService:
         if basis.endswith("_explicit_vs_not_stated_in_official_terms"):
             # Owner's rule: what the competitor's rules do not clearly grant,
             # the client cannot count on, so it is presented as absent.
-            tail = f"у {competitor} этого нет"
+            tail = (
+                f"у {competitor} это прямо не названо: выплата зависит от того, как органы квалифицируют событие"
+                if SalesInsightsService._general_risk_may_apply(other) else f"у {competitor} этого нет"
+            )
             feature = feature or f"{label}: условие прямо указано в правилах {company}"
         elif "_coverage_level_" in basis:
             other_level = SalesInsightsService._coverage_level_v2(key, other)
@@ -373,6 +376,11 @@ class SalesInsightsService:
             r"конкретная форма)[^.]*\.", "", phrase,
         ).strip()
         return f"{label}: {SalesInsightsService._lower_first(phrase)}" if phrase else ""
+
+    @staticmethod
+    def _general_risk_may_apply(text: str) -> bool:
+        """A general risk such as «падение инородных предметов» may cover the event."""
+        return bool(re.search(r"(?:падени\w*|упавш\w*)[^.;]{0,40}предмет", text.lower()))
 
     @staticmethod
     def _fault_waiver_feature(level: int) -> str:
@@ -459,7 +467,7 @@ class SalesInsightsService:
                     "gap": "GAP-защита входит в покрытие: при угоне или полной гибели компенсируется разница в стоимости автомобиля",
                     "self_ignition": "Покрывается ущерб от самовозгорания автомобиля",
                     "terrorism": "Покрывается ущерб от террористического акта",
-                    "drone": "Покрывается ущерб от падения беспилотника (БПЛА)",
+                    "drone": "Покрывается ущерб от падения беспилотника (БПЛА), если событие не признают терактом или военными действиями",
                 }[key]
             return {
                 "gap": "Можно подключить GAP-защиту: при угоне или полной гибели компенсируется разница в стоимости автомобиля",
@@ -572,7 +580,8 @@ class SalesInsightsService:
             # One deadline that also covers the payment («решение принимается
             # и деньги перечисляются в течение 30 дней») is the payment term.
             if "payment" in contexts:
-                return PaymentTerm(amount=amount, unit=unit, context="payment")
+                approximate = bool(re.search(r"около\s+\d", sentence))
+                return PaymentTerm(amount=amount, unit=unit, context="payment", approximate=approximate)
             # Owner's decision (29.10.2026, Согласие): a deadline in the payment
             # terms counted from the day all documents are handed in, and not
             # tied to another stage, is the payment term.
@@ -1342,7 +1351,8 @@ class SalesInsightsService:
                 basis=f"payment_term_{own_term.context}_{own_term.unit}_{own_term.amount}_vs_{other_term.amount}",
                 reason=f"Для {context_label} первая страховая указывает меньший срок при одинаковой единице времени.",
                 client_phrase=(
-                    f"Для {context_label} у первой страховой указан срок до {own_term.amount} {unit_label}, "
+                    f"Для {context_label} у первой страховой указан срок {'около' if own_term.approximate else 'до'} "
+                    f"{own_term.amount} {unit_label}, "
                     f"а у конкурента — {'около' if other_term.approximate else 'до'} {other_term.amount} {unit_label}."
                 ),
             )
