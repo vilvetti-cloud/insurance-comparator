@@ -84,7 +84,7 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         self.assertEqual(total_response.status_code, 200)
         total_page = total_response.get_data(as_text=True)
         # Росгосстрах lowered its threshold to 65% (edition of 28.10.2026): ВСК's 75% wins.
-        self.assertIn("у Росгосстрах уже от 65%", total_page)
+        self.assertIn("у Росгосстраха уже от 65%", total_page)
 
     def test_populated_official_answers_render_even_when_audit_status_disagrees(self):
         def company_data(franchise_value):

@@ -263,8 +263,49 @@ class SalesInsightsService:
             for template, names in groups.items()
         )
 
+    # Insurer names after a preposition: (genitive, prepositional, instrumental).
+    _NAME_CASES = {
+        "РЕСО-Гарантия": ("РЕСО-Гарантии", "РЕСО-Гарантии", "РЕСО-Гарантией"),
+        "ВСК": ("ВСК", "ВСК", "ВСК"),
+        "Ингосстрах": ("Ингосстраха", "Ингосстрахе", "Ингосстрахом"),
+        "Ренессанс Страхование": ("Ренессанс Страхования", "Ренессанс Страховании", "Ренессанс Страхованием"),
+        "АльфаСтрахование": ("АльфаСтрахования", "АльфаСтраховании", "АльфаСтрахованием"),
+        "Согласие": ("Согласия", "Согласии", "Согласием"),
+        "Росгосстрах": ("Росгосстраха", "Росгосстрахе", "Росгосстрахом"),
+        "Т-Страхование": ("Т-Страхования", "Т-Страховании", "Т-Страхованием"),
+        "СберСтрахование": ("СберСтрахования", "СберСтраховании", "СберСтрахованием"),
+        "Югория": ("Югории", "Югории", "Югорией"),
+        "Совкомбанк Страхование": ("Совкомбанк Страхования", "Совкомбанк Страховании", "Совкомбанк Страхованием"),
+    }
+    _CASE_AFTER = {"у": 0, "правилах": 0, "преимущества": 0, "в": 1, "перед": 2}
+
+    @staticmethod
+    def _decline_names(text: str) -> str:
+        """«у Ингосстрах» → «у Ингосстраха», «в РЕСО-Гарантия» → «в РЕСО-Гарантии».
+
+        Every name of a list after the preposition is declined: «у ВСК и Ингосстраха».
+        """
+        cases = SalesInsightsService._NAME_CASES
+        name = "|".join(re.escape(n) for n in sorted(cases, key=len, reverse=True))
+        pattern = re.compile(
+            rf"(?<![\w-])({'|'.join(SalesInsightsService._CASE_AFTER)})\s+"
+            rf"((?:{name})(?:(?:,\s+|\s+и\s+)(?:{name}))*)(?![\w-])"
+        )
+
+        def decline(match: re.Match) -> str:
+            index = SalesInsightsService._CASE_AFTER[match.group(1)]
+            names = re.sub(rf"(?<![\w-])({name})(?![\w-])", lambda m: cases[m.group(1)][index], match.group(2))
+            return f"{match.group(1)} {names}"
+
+        return pattern.sub(decline, text)
+
     @staticmethod
     def _compose_message(*, company: str, competitors: list[str], lines: list[str], bonuses: list[str]) -> str:
+        return SalesInsightsService._decline_names(SalesInsightsService._compose_plain_message(
+            company=company, competitors=competitors, lines=lines, bonuses=bonuses))
+
+    @staticmethod
+    def _compose_plain_message(*, company: str, competitors: list[str], lines: list[str], bonuses: list[str]) -> str:
         others = SalesInsightsService._join_names(competitors)
         if not lines and not bonuses:
             return (
