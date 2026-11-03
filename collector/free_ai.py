@@ -21,6 +21,8 @@ import os
 import re
 from typing import Any, Callable
 
+import time
+
 import requests
 
 
@@ -58,6 +60,7 @@ SERVICES = (
             fallback_models=("mistral-small-latest",)),
 )
 QUICK_TIMEOUT = 120  # seconds to wait for one answer before the next model or service
+RATE_LIMIT_PAUSE = 6  # seconds after «too many requests per second»
 
 
 def _json_from(text: str) -> dict[str, Any]:
@@ -75,7 +78,8 @@ def _json_from(text: str) -> dict[str, Any]:
 class OpenAICompatible:
     """One free service with the common chat-completions interface."""
 
-    def __init__(self, service: Service, api_key: str, http=requests):
+    def __init__(self, service: Service, api_key: str, http=requests, sleep=time.sleep):
+        self.sleep = sleep
         self.service = service
         self.api_key = api_key
         self.http = http
@@ -123,20 +127,15 @@ class OpenAICompatible:
         ranked = []
         for fragment in self.service.preferred:
             ranked += [n for n in names if fragment in n.lower() and n not in ranked]
-        if names and not ranked:
-            self._list_problem = f"в списке нет подходящих моделей (например, {', '.join(names[:5])})"
+        # The preferred families first, then any other model of the list.
+        ranked += [n for n in names if n not in ranked]
         return ranked[:self.service.models_to_try]
 
     def generate(self, prompt: str) -> dict[str, Any]:
         errors = []
         for model in self.models():
             try:
-                response = self.http.post(self.service.chat_url, headers=self._headers(), timeout=(15, QUICK_TIMEOUT), json={
-                    # temperature 0 with top_p 1: Mistral refuses greedy sampling otherwise.
-                    "model": model, "temperature": 0, "top_p": 1,
-                    "response_format": {"type": "json_object"},
-                    "messages": [{"role": "user", "content": prompt}],
-                })
+                response = self._post(model, prompt)
             except requests.RequestException as exc:
                 errors.append(f"{model}: {type(exc).__name__}")
                 continue
@@ -144,14 +143,30 @@ class OpenAICompatible:
                 errors.append(f"{model}: HTTP {response.status_code} {response.text[:200]}")
                 continue
             try:
-                text = response.json()["choices"][0]["message"]["content"]
+                text = response.json()["choices"][0]["message"]["content"] or ""
                 self.used_model = model
                 return _json_from(text)
             except (KeyError, IndexError, TypeError, ValueError) as exc:
-                errors.append(f"{model}: ответ не в формате JSON ({type(exc).__name__})")
+                shown = " ".join(str(locals().get("text", "")).split())[:160]
+                errors.append(f"{model}: ответ не в формате JSON ({type(exc).__name__}): «{shown}»")
         if not errors:
             errors.append("нет доступных моделей" + (f" ({self._list_problem})" if self._list_problem else ""))
         raise RuntimeError(f"{self.name}: " + " | ".join(errors))
+
+
+    def _post(self, model: str, prompt: str):
+        """One model; a per-second rate limit (Mistral, OpenRouter) gets one short pause."""
+        for attempt in range(2):
+            response = self.http.post(self.service.chat_url, headers=self._headers(), timeout=(15, QUICK_TIMEOUT), json={
+                # temperature 0 with top_p 1: Mistral refuses greedy sampling otherwise.
+                "model": model, "temperature": 0, "top_p": 1,
+                "response_format": {"type": "json_object"},
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            if response.status_code != 429 or attempt:
+                return response
+            self.sleep(RATE_LIMIT_PAUSE)
+        return response
 
 
 class GeminiService:

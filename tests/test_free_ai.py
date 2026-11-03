@@ -84,11 +84,14 @@ class OpenAICompatibleTests(unittest.TestCase):
     def test_openrouter_uses_only_free_models_and_a_busy_model_gives_way(self):
         http = FakeHttp(
             [{"id": "deepseek/deepseek-chat"}, {"id": "deepseek/deepseek-chat:free"}, {"id": "qwen/qwen3:free"}],
-            [(429, "rate limited"), (200, '{"ok": true}')])
-        client = OpenAICompatible(self.service("OpenRouter"), "key", http=http)
+            [(429, "rate limited"), (429, "rate limited"), (200, '{"ok": true}')])
+        pauses = []
+        client = OpenAICompatible(self.service("OpenRouter"), "key", http=http, sleep=pauses.append)
         self.assertEqual(client.models(), ["deepseek/deepseek-chat:free", "qwen/qwen3:free"])
         self.assertEqual(client.generate("вопрос"), {"ok": True})
-        self.assertEqual(http.posted, ["deepseek/deepseek-chat:free", "qwen/qwen3:free"])
+        # A short pause and one more try, then the next free model.
+        self.assertEqual(http.posted, ["deepseek/deepseek-chat:free", "deepseek/deepseek-chat:free", "qwen/qwen3:free"])
+        self.assertEqual(len(pauses), 1)
         self.assertEqual(client.used_model, "qwen/qwen3:free")
 
     def test_unreadable_model_list_falls_back_and_greedy_sampling_sets_top_p(self):
@@ -105,6 +108,13 @@ class OpenAICompatibleTests(unittest.TestCase):
         self.assertEqual(client.generate("вопрос"), {"ok": True})
         self.assertEqual(http.posted, ["openai/gpt-4.1-mini"])
         self.assertEqual((http.sent["temperature"], http.sent["top_p"]), (0, 1))
+
+    def test_answer_fields_sent_as_lists_are_read_as_text(self):
+        from collector.answer_writer import _draft
+        from tests.test_free_ai import GOOD, PAGES
+        payload = dict(GOOD, key_conditions=[GOOD["key_conditions"]],
+                       quotes=[{"page": 1, "text": [GOOD["quotes"][0]["text"]]}])
+        self.assertTrue(_draft(payload, PAGES).valid)
 
     def test_every_model_failing_is_an_error(self):
         http = FakeHttp([{"id": "mistral-small-latest"}], [(503, "busy")])
