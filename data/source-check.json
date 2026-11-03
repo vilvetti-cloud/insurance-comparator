@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "checked_at": "2026-11-02T13:31+03:00",
+  "checked_at": "2026-11-03T13:27+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "ok",
-      "verified_at": "2026-11-02T13:31+03:00",
+      "verified_at": "2026-11-03T13:27+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
@@ -362,7 +362,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-11-02T13:31+03:00",
+      "verified_at": "2026-11-03T13:27+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -381,7 +381,7 @@
     },
     "Ингосстрах": {
       "status": "ok",
-      "verified_at": "2026-11-02T13:31+03:00",
+      "verified_at": "2026-11-03T13:27+03:00",
       "files": [
         {
           "file": "ingos/technical.pdf",
@@ -407,7 +407,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-02T13:31+03:00",
+      "verified_at": "2026-11-03T13:27+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -446,7 +446,7 @@
       ]
     },
     "АльфаСтрахование": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-11-02T13:31+03:00",
       "files": [
         {
@@ -457,7 +457,8 @@
         {
           "file": "alfa/technical.pdf",
           "url": "https://www.alfastrah.ru/upload/iblock/da8/6hxelk9vq4cnlhue3okjcluz1lowk2k0.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт не ответил"
         }
       ],
       "pages": [
@@ -508,7 +509,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-11-02T13:31+03:00",
+      "verified_at": "2026-11-03T13:27+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -1183,7 +1184,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-02T13:31+03:00",
+      "verified_at": "2026-11-03T13:27+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1211,7 +1212,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-02T13:31+03:00",
+      "verified_at": "2026-11-03T13:27+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1760,7 +1761,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-02T13:31+03:00",
+      "verified_at": "2026-11-03T13:27+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
