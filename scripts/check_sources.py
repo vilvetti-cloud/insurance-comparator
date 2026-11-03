@@ -14,6 +14,7 @@ inbox/Югория/правила.pdf. It replaces that company's main rules fil
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 import sys
 
@@ -30,16 +31,40 @@ from collector.web_copies import find_copy, gemini_search  # noqa: E402
 LABELS = {"ok": "без изменений", "changed": "ЕСТЬ ИЗМЕНЕНИЯ", "unavailable": "не удалось проверить"}
 
 
+def pages_blind(company: dict) -> bool:
+    """No readable page with the list of documents: a new edition at a new link would go unseen."""
+    pages = company.get("pages", [])
+    return not any(page.get("status") != "unavailable" and len(page.get("known_links", [])) > 1 for page in pages)
+
+
+def web_search_targets(status: dict) -> tuple[list[str], list[str]]:
+    """(insurers whose site refused the check, insurers searched only for a newer edition).
+
+    The second group are sites whose document list cannot be read (Ингосстрах's
+    list is drawn by a script, Альфа answers 401): once a week, on Mondays, the
+    internet is searched for a newer edition of their rules (owner, 03.11.2026).
+    """
+    companies = status["companies"]
+    blocked = [name for name, company in companies.items() if company.get("status") == "unavailable"]
+    checked = datetime.fromisoformat(status["checked_at"])
+    weekly = [name for name, company in companies.items()
+              if name not in blocked and checked.weekday() == 0 and pages_blind(company)]
+    return blocked, weekly
+
+
 def check_web_copies(status: dict, fetcher, download_dir: Path | None) -> dict:
-    """Insurers whose site refused the check: look for their rules on the internet."""
+    """Look for the rules on the internet: for closed sites, and weekly for unreadable document lists."""
     search = gemini_search()
-    blocked = [name for name, company in status["companies"].items() if company.get("status") == "unavailable"]
-    if not search or not blocked:
+    blocked, weekly = web_search_targets(status)
+    if not search or not (blocked or weekly):
         return status
     found, links = {}, {}
     for row in load_source_table():
-        if row.company in blocked and row.file.endswith("/technical.pdf"):
+        if row.company in blocked + weekly and row.file.endswith("/technical.pdf"):
             copy = find_copy(row.company, SOURCES_DIR / row.file, lambda url: fetcher.fetch(url), search)
+            if copy and row.company in weekly and copy.same_as_ours:
+                print(f"  {row.company}: в интернете та же редакция правил, что у нас")
+                continue
             if copy:
                 found[row.file], links[row.file] = copy.body, copy.url
                 print(f"  {row.company}: правила найдены на {copy.site}"

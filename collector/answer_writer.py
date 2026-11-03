@@ -12,10 +12,11 @@ import json
 import os
 import re
 import time
-from typing import Any
+from typing import Any, Callable
 
 import requests
 
+from collector.free_ai import FreeChain, GeminiService, free_chain
 from collector.rules_text import comparable, find_quote, with_page_markers
 
 MODEL = "claude-opus-5-5"
@@ -103,6 +104,7 @@ class Draft:
     problems: list[str] = field(default_factory=list)
     pages: list[int] = field(default_factory=list)
     request_failed: bool = False  # the AI did not answer (busy, limits), not a wrong answer
+    model: str = ""  # which free service wrote it, for the report
 
     @property
     def valid(self) -> bool:
@@ -274,10 +276,15 @@ def write_answer(client, *, company: str, field_key: str, field_label: str, page
                  current_answer: str, changed_sentences: list[str]) -> Draft:
     """Ask Claude (or free Gemini) for the answer to one parameter, then validate it."""
     task = _task(company, field_key, field_label, current_answer, changed_sentences)
+
+    def prompt(max_chars: int) -> str:
+        shown = with_page_markers(relevant_pages(pages, field_key, changed_sentences, max_chars=max_chars))
+        return SYSTEM + "\n\nТекст новой редакции правил (страницы о параметре):\n" + shown + "\n\n" + task
+
     if isinstance(client, GeminiClient):
-        shown = with_page_markers(relevant_pages(pages, field_key, changed_sentences))
-        prompt = SYSTEM + "\n\nТекст новой редакции правил (страницы о параметре):\n" + shown + "\n\n" + task
-        return _draft(client.generate(prompt), pages)
+        return _draft(client.generate(prompt(GEMINI_MAX_CHARS)), pages)
+    if isinstance(client, FreeChain):
+        return _ask_chain(client, prompt, pages)
 
     rules = with_page_markers(pages)
     response = client.beta.messages.create(
@@ -299,11 +306,40 @@ def write_answer(client, *, company: str, field_key: str, field_label: str, page
     return _draft(payload, pages)
 
 
+JSON_ONLY = ("\n\nОтветь только одним JSON-объектом, без пояснений, строго по этой схеме:\n"
+             + json.dumps(SCHEMA, ensure_ascii=False))
+
+
+def _ask_chain(chain: FreeChain, prompt: Callable[[int], str], pages: list[str]) -> Draft:
+    """The first answer of the free services that passes the checks.
+
+    A service that does not answer, or whose answer fails the checks, gives way
+    to the next one. If every service failed to answer at all, the error is
+    raised (the nightly update then retries); if some answered wrongly, the
+    rejected draft is returned with every service's problems.
+    """
+    problems, answered = [], False
+    for service in chain.services:
+        text = prompt(service.max_chars) + ("" if isinstance(service, GeminiService) else JSON_ONLY)
+        try:
+            payload = service.generate(text)
+            draft = _draft(payload, pages)
+        except Exception as exc:  # noqa: BLE001 - busy, limits, malformed JSON: the next service
+            problems.append(f"{service.name}: {type(exc).__name__}: {str(exc)[:300]}")
+            continue
+        answered = True
+        draft.model = f"{service.name} {getattr(service, 'used_model', '')}".strip()
+        if draft.valid:
+            return draft
+        problems.append(f"{service.name}: {'; '.join(draft.problems)}")
+    if not answered:
+        raise RuntimeError("ни один бесплатный ИИ не ответил — " + " | ".join(problems))
+    return Draft(False, "", [], "", problems=problems)
+
+
 def answer_client():
-    """Claude API client when its key is set, else free Gemini, else None (changes go to a person)."""
+    """Claude API client when its key is set, else the chain of free services, else None (changes go to a person)."""
     if os.environ.get("ANTHROPIC_API_KEY"):
         import anthropic
         return anthropic.Anthropic(timeout=900, max_retries=3)
-    if os.environ.get("GEMINI_API_KEY"):
-        return GeminiClient(os.environ["GEMINI_API_KEY"])
-    return None
+    return free_chain(GeminiClient, GEMINI_MAX_CHARS)

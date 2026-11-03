@@ -50,7 +50,8 @@ def edition_date(pages: list[str]) -> date | None:
     found = []
     for day, month, year in re.findall(r"\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b", text):
         found.append((int(year), int(month), int(day)))
-    for day, month, year in re.findall(r"«?(\d{1,2})»?\s+(" + "|".join(MONTHS) + r")\s+(20\d{2})", text):
+    # «13» мая 2025 and « 13 » мая 2025 (Ингосстрах) are the same date.
+    for day, month, year in re.findall(r"«?\s*(\d{1,2})\s*»?\s+(" + "|".join(MONTHS) + r")\s+(20\d{2})", text):
         found.append((int(year), MONTHS[month], int(day)))
     dates = []
     for year, month, day in found:
@@ -121,8 +122,9 @@ def find_copy(company: str, ours: Path, fetch: Callable[[str], Any], search: Cal
         if not looks_like_rules(pages, company):
             continue
         edition = edition_date(pages)
-        # An older or undated copy must never replace the rules we have.
-        if not edition or (our_edition and edition <= our_edition):
+        # An older or undated copy must never replace the rules we have; nor may
+        # any other copy when the date of ours cannot be read.
+        if not edition or not our_edition or edition <= our_edition:
             continue
         if best is None or edition > best.edition:
             best = WebCopy(fetched.url, body, edition, same_as_ours=False)
