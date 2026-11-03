@@ -41,6 +41,9 @@ def main() -> int:
         print("Изменений в правилах нет.")
     else:
         summary.write_text(report.markdown(status.get("checked_at", "")), encoding="utf-8")
+        date = (status.get("checked_at") or "")[:10]
+        date = ".".join(reversed(date.split("-"))) if date else ""
+        summary.with_name("auto-update-title.txt").write_text(report.title(date), encoding="utf-8")
         print(summary.read_text(encoding="utf-8"))
     return 0
 

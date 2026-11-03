@@ -102,6 +102,7 @@ class Draft:
     change_summary: str
     problems: list[str] = field(default_factory=list)
     pages: list[int] = field(default_factory=list)
+    request_failed: bool = False  # the AI did not answer (busy, limits), not a wrong answer
 
     @property
     def valid(self) -> bool:

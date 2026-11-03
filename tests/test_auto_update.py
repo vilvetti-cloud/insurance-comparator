@@ -66,6 +66,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.log = root / "log.json"
         self.table = root / "table.md"
         self.table.write_text("| РЕСО-Гарантия | `reso/technical.pdf` | https://reso.ru/rules.pdf |\n", encoding="utf-8")
+        self.pauses = []
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -82,7 +83,7 @@ class AutoUpdateTests(unittest.TestCase):
         updater = AutoUpdater(status=status, download_dir=self.downloads, client=client,
                               now=datetime(2026, 11, 1, 6, 5, tzinfo=MOSCOW), sources_dir=self.sources,
                               master_path=self.master, writer=writer, read_pages=fake_pages,
-                              log_file=self.log, table_file=self.table)
+                              log_file=self.log, table_file=self.table, sleep=self.pauses.append)
         return updater.run(), status
 
     def answer(self, key):
@@ -117,8 +118,11 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(status["companies"]["РЕСО-Гарантия"]["status"], "changed")
         # The same file next night: no second (paid) attempt.
         second = FakeWriter()
-        self.run_updater(NEW_TOW, second)
+        reminder, _ = self.run_updater(NEW_TOW, second)
         self.assertEqual(second.calls, [])
+        # …but the owner is reminded every night until it is sorted out.
+        self.assertIn("ждёт ручного разбора", reminder.markdown("x"))
+        self.assertIn("РЕСО-Гарантия: новая редакция", reminder.title("02.11.2026"))
 
     def test_failed_ai_request_is_reported_in_detail_and_retried_next_time(self):
         def broken(*args, **kwargs):
@@ -131,6 +135,44 @@ class AutoUpdateTests(unittest.TestCase):
         second = FakeWriter()
         self.run_updater(NEW_TOW, second)
         self.assertEqual(second.calls, ["tow_truck"])
+
+    def test_busy_ai_is_asked_again_the_same_night(self):
+        answers = FakeWriter()
+        calls = []
+
+        def busy_once(*args, **kwargs):
+            calls.append(kwargs["field_key"])
+            if len(calls) == 1:
+                raise RuntimeError("Gemini HTTP 503: model overloaded")
+            return answers(*args, **kwargs)
+
+        report, status = self.run_updater(NEW_TOW, busy_once)
+        self.assertEqual(calls, ["tow_truck", "tow_truck"])
+        self.assertEqual(len(self.pauses), 1)
+        self.assertEqual(self.answer("tow_truck")[0]["key_conditions"], NEW_ANSWER)
+        self.assertEqual(status["companies"]["РЕСО-Гарантия"]["status"], "ok")
+
+    def test_good_answers_go_live_when_another_parameter_fails(self):
+        # Росгосстрах, 31.10.2026: the right new threshold was thrown away with the failed answers.
+        both = NEW_TOW.replace("25 (двадцати пяти) рабочих дней", "30 (тридцати) рабочих дней")
+        good = FakeWriter()
+
+        def payment_fails(*args, **kwargs):
+            if kwargs["field_key"] == "payment_terms":
+                raise RuntimeError("Gemini HTTP 503: model overloaded")
+            return good(*args, **kwargs)
+
+        report, status = self.run_updater(both, payment_fails)
+        self.assertEqual(self.answer("tow_truck")[0]["key_conditions"], NEW_ANSWER)
+        self.assertEqual(self.answer("payment_terms")[0]["key_conditions"], "Старый ответ payment_terms.")
+        self.assertEqual(status["companies"]["РЕСО-Гарантия"]["status"], "changed")
+        # The copy stays old, so the failed parameter is tried again next night.
+        self.assertEqual((self.sources / "reso" / "technical.pdf").read_text(encoding="utf-8"), OLD_RULES)
+        text = report.markdown("x")
+        self.assertIn("Вышла новая редакция правил: РЕСО-Гарантия", text)
+        self.assertIn("Срок выплат: 25 (двадцати пяти) рабочих дней → 30 (тридцати) рабочих дней", text)
+        self.assertIn("Эвакуатор: 1% → 2%", text)
+        self.assertEqual(report.title("01.11.2026"), "РЕСО-Гарантия: новая редакция правил КАСКО — нужна ваша проверка")
 
     def test_answer_settled_by_the_owner_is_not_rewritten(self):
         master = json.loads(self.master.read_text(encoding="utf-8"))
@@ -163,7 +205,7 @@ class AutoUpdateTests(unittest.TestCase):
                               fetch=lambda url: SimpleNamespace(body=b"%PDF" + NEW_TOW.encode()),
                               now=datetime(2026, 11, 1, 6, 5, tzinfo=MOSCOW), sources_dir=self.sources,
                               master_path=self.master, writer=broken, read_pages=read_pages,
-                              log_file=self.log, table_file=self.table)
+                              log_file=self.log, table_file=self.table, sleep=self.pauses.append)
         report = updater.run()
         page = status["companies"]["РЕСО-Гарантия"]["pages"][0]
         self.assertEqual(page["new_documents"], [link])
