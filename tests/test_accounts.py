@@ -171,6 +171,44 @@ class AccountsTests(unittest.TestCase):
         self.assertIn("Чаще всего сравнивают", page)
         self.assertIn("использовали все 3 бесплатных", page)
 
+    def test_error_report_reaches_the_owner_without_using_a_comparison(self):
+        self.register()
+        page = self.compare(PAIRS[0]).get_data(as_text=True)
+        self.assertIn("Нашёл ошибку в сравнении", page)
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        used = web_accounts.store().free_used(user_id=None, ip=self.ip, visitor="")
+        sent = []
+        with patch.dict(os.environ, {"SMTP_USER": "site@example.com", "SMTP_PASSWORD": "x"}), \
+                patch("core.mailer.send", side_effect=lambda to, subject, text: sent.append((to, subject, text))):
+            answer = self.client.post("/report", headers={"X-Forwarded-For": self.ip}, follow_redirects=True, data={
+                "csrf": token, "company1": PAIRS[0][0], "company2": PAIRS[0][1], "field": "tow_truck",
+                "message": "У РЕСО эвакуатор до 1% суммы"})
+        self.assertIn("Спасибо! Сообщение отправлено", answer.get_data(as_text=True))
+        # Back on the home page: no comparison was opened again.
+        self.assertEqual(web_accounts.store().free_used(user_id=None, ip=self.ip, visitor=""), used)
+        self.assertEqual(sent[0][0], "owner@example.com")
+        self.assertIn("Эвакуатор", sent[0][2])
+        self.buy("monthly")
+        owner = app.test_client()
+        html = owner.get("/login").get_data(as_text=True)
+        token = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
+        owner.post("/login", data={"csrf": token, "email": "owner@example.com", "password": "secret1"})
+        admin = owner.get("/admin").get_data(as_text=True)
+        self.assertIn("У РЕСО эвакуатор до 1% суммы", admin)
+        self.assertIn("новых: 1", admin)
+        report_id = web_accounts.store().reports()[0]["id"]
+        token = re.search(r'name="csrf" value="([^"]+)"', admin).group(1)
+        owner.post(f"/admin/report/{report_id}/done", data={"csrf": token})
+        self.assertNotIn("новых: 1", owner.get("/admin").get_data(as_text=True))
+
+    def test_error_reports_are_limited_per_day(self):
+        store = web_accounts.store()
+        for _ in range(10):
+            self.assertIsNotNone(store.add_report(user_id=None, ip=self.ip, visitor="v", pair="A|B", field="",
+                                                  message="ошибка"))
+        self.assertIsNone(store.add_report(user_id=None, ip=self.ip, visitor="v2", pair="A|B", field="",
+                                           message="ошибка"))
+
     def test_health_queries_the_database(self):
         self.assertEqual(self.client.get("/health/accounts").get_json(), {"accounts": "ok"})
         with patch.object(web_accounts.store(), "ping", side_effect=OSError("paused")):

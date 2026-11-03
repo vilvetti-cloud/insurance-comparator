@@ -58,7 +58,21 @@ SCHEMA = (
         created_at TEXT NOT NULL,
         paid_at TEXT
     )""",
+    """CREATE TABLE IF NOT EXISTS casco_reports (
+        id {serial} PRIMARY KEY,
+        user_id INTEGER,
+        ip TEXT,
+        visitor TEXT,
+        pair TEXT NOT NULL,
+        field TEXT,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""",
 )
+# Supabase exposes tables over its public API; every casco_* table keeps RLS on.
+POSTGRES_ONLY = ("ALTER TABLE casco_reports ENABLE ROW LEVEL SECURITY",)
+REPORTS_PER_DAY = 10  # error reports from one visitor per day
 
 
 def _now() -> datetime:
@@ -88,6 +102,9 @@ class AccountStore:
             self._connect = (lambda: self._shared) if self._shared else (lambda: sqlite3.connect(path))
         for statement in SCHEMA:
             self._run(statement.format(serial="SERIAL" if self.postgres else "INTEGER"))
+        if self.postgres:
+            for statement in POSTGRES_ONLY:
+                self._run(statement)
 
     # --- low level -------------------------------------------------------
     def _run(self, sql: str, params: tuple = (), fetch: str | None = None, last_id: bool = False) -> Any:
@@ -245,6 +262,33 @@ class AccountStore:
             "top_users": [(names.get(user_id, "—"), count) for user_id, count in
                           sorted(by_user.items(), key=lambda item: -item[1])[:top]],
         }
+
+    # --- error reports from partners ---------------------------------------
+    def add_report(self, *, user_id: int | None, ip: str, visitor: str, pair: str, field: str,
+                   message: str) -> int | None:
+        """None when this visitor already sent REPORTS_PER_DAY reports in a day."""
+        since = (_now() - timedelta(days=1)).isoformat()
+        sent = self._run("SELECT COUNT(*) FROM casco_reports WHERE (ip = ? OR visitor = ?) AND created_at > ?",
+                         (ip, visitor, since), fetch="one")[0]
+        if sent >= REPORTS_PER_DAY:
+            return None
+        return self._insert(
+            "INSERT INTO casco_reports (user_id, ip, visitor, pair, field, message, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'new', ?)",
+            (user_id, ip, visitor, pair, field, message, _now().isoformat()))
+
+    def reports(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Open reports first, newest first."""
+        rows = self._run(
+            "SELECT r.id, r.pair, r.field, r.message, r.status, r.created_at, u.first_name, u.last_name, u.email "
+            "FROM casco_reports r LEFT JOIN casco_users u ON u.id = r.user_id "
+            "ORDER BY CASE WHEN r.status = 'new' THEN 0 ELSE 1 END, r.created_at DESC LIMIT ?",
+            (limit,), fetch="all")
+        keys = ("id", "pair", "field", "message", "status", "created_at", "first_name", "last_name", "email")
+        return [dict(zip(keys, row)) for row in rows]
+
+    def close_report(self, report_id: int) -> None:
+        self._run("UPDATE casco_reports SET status = 'done' WHERE id = ?", (report_id,))
 
     def grant(self, user_id: int, plan: str) -> None:
         """A subscription the owner gives by hand (paid by transfer, a gift)."""

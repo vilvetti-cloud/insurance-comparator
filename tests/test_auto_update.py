@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from collector.answer_writer import Draft, GeminiClient, relevant_pages, validate, write_answer
 from collector.auto_update import AutoUpdater, _lost_condition, affected_fields
@@ -130,6 +131,45 @@ class AutoUpdateTests(unittest.TestCase):
         second = FakeWriter()
         self.run_updater(NEW_TOW, second)
         self.assertEqual(second.calls, ["tow_truck"])
+
+    def test_answer_settled_by_the_owner_is_not_rewritten(self):
+        master = json.loads(self.master.read_text(encoding="utf-8"))
+        tow = next(f for f in master["companies"][0]["fields"] if f["key"] == "tow_truck")
+        tow["owner_note"] = "решение владельца 30.10.2026"
+        self.master.write_text(json.dumps(master, ensure_ascii=False), encoding="utf-8")
+        writer = FakeWriter()
+        report, _ = self.run_updater(NEW_TOW, writer)
+        self.assertEqual(writer.calls, [])
+        self.assertEqual(self.answer("tow_truck")[0]["key_conditions"], "Старый ответ tow_truck.")
+        self.assertIn("ответ задан вручную (решение владельца 30.10.2026)", report.markdown("x"))
+
+    def test_new_edition_at_a_new_link_stays_flagged_when_the_ai_is_busy(self):
+        # Росгосстрах, 31.10.2026: the new edition was marked as known and lost.
+        link = {"url": "https://reso.ru/rules-2026.pdf", "title": "Правила КАСКО 2026"}
+        status = {"checked_at": "2026-11-01T06:00+03:00", "companies": {"РЕСО-Гарантия": {
+            "status": "changed", "files": [{"file": "reso/technical.pdf", "status": "unchanged"}],
+            "pages": [{"url": "https://reso.ru/docs", "status": "new_documents",
+                       "new_documents": [link], "known_links": []}],
+        }}}
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("Gemini HTTP 503: model overloaded")
+
+        def read_pages(source):
+            data = source.read_bytes() if isinstance(source, Path) else source
+            return data.removeprefix(b"%PDF").decode("utf-8").split("\f")
+
+        updater = AutoUpdater(status=status, download_dir=self.downloads, client=object(),
+                              fetch=lambda url: SimpleNamespace(body=b"%PDF" + NEW_TOW.encode()),
+                              now=datetime(2026, 11, 1, 6, 5, tzinfo=MOSCOW), sources_dir=self.sources,
+                              master_path=self.master, writer=broken, read_pages=read_pages,
+                              log_file=self.log, table_file=self.table)
+        report = updater.run()
+        page = status["companies"]["РЕСО-Гарантия"]["pages"][0]
+        self.assertEqual(page["new_documents"], [link])
+        self.assertNotIn(link["url"], page["known_links"])
+        self.assertEqual(status["companies"]["РЕСО-Гарантия"]["status"], "changed")
+        self.assertIn("не разобрана", report.markdown("x"))
 
     def test_without_api_key_change_is_reported_for_a_person(self):
         report, status = self.run_updater(NEW_TOW, FakeWriter(), client=None)

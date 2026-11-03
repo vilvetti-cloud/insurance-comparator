@@ -194,10 +194,19 @@ class AutoUpdater:
             self.report.unchanged.append(f"{company_name}: {file} — перезалит без изменений текста")
             return True
         touched = affected_fields(company, file, new_pages, added, removed, old_pages)
+        # Answers the owner settled by hand (a decision, a document from an
+        # agent) are never rewritten by the AI: the owner is told instead.
+        protected = [item for item in touched if item.get("owner_note")]
+        for item in protected:
+            touched.remove(item)
+            self.report.manual.append(
+                f"{company_name} — {LABELS[item['key']]}: в новой редакции правил изменились пункты об этом "
+                f"параметре, но ответ задан вручную ({item['owner_note']}) — сверьте его с новым текстом")
         if not touched:
             self._save_copy(local, new_body)
-            self.report.unchanged.append(
-                f"{company_name}: {file} — текст изменился, но не в пунктах о 10 параметрах сравнения")
+            if not protected:
+                self.report.unchanged.append(
+                    f"{company_name}: {file} — текст изменился, но не в пунктах о 10 параметрах сравнения")
             return True
         if self.client is None:
             self.report.manual.append(
@@ -264,17 +273,21 @@ class AutoUpdater:
         local.write_bytes(body)
 
     # -- new documents on insurer pages ------------------------------------
-    def _process_new_document(self, company_name: str, link: dict[str, Any]) -> bool:
-        """True when the document was a new edition of a rules file and was handled."""
+    def _process_new_document(self, company_name: str, link: dict[str, Any]) -> str:
+        """«handled» (a new edition, answers updated), «other» (not our rules) or «pending».
+
+        A pending document stays flagged so the next check tries it again: a busy
+        AI or a failed download must not make a new edition look already known.
+        """
         if self.fetch is None:
-            return False
+            return "pending"
         try:
             body = self.fetch(link["url"]).body
         except Exception:  # noqa: BLE001 - reported as a note
             self.report.notes.append(f"{company_name}: новый документ не скачался — {link['url']}")
-            return False
+            return "pending"
         if not body.lstrip().startswith(b"%PDF"):
-            return False
+            return "other"
         candidate = self.read_pages(body)
         best_file, best_score = None, 0.0
         for row in load_source_table(self.table_file):
@@ -287,12 +300,16 @@ class AutoUpdater:
             self.report.notes.append(
                 f"{company_name}: на сайте новый документ «{link.get('title') or link['url']}» — "
                 "это не новая редакция наших правил, ответы не затронуты")
-            return False
+            return "other"
         handled = self._process_file(company_name, best_file.file, body, hashlib.sha256(body).hexdigest())
-        if handled:
-            _replace_table_url(self.table_file, best_file.file, link["url"])
-            self.report.notes.append(f"{company_name}: правила теперь берутся по новой ссылке {link['url']}")
-        return handled
+        if not handled:
+            self.report.manual.append(
+                f"{company_name}: новая редакция правил «{link.get('title') or link['url']}» не разобрана "
+                f"автоматически, сайт показывает прежние ответы — {link['url']}")
+            return "pending"
+        _replace_table_url(self.table_file, best_file.file, link["url"])
+        self.report.notes.append(f"{company_name}: правила теперь берутся по новой ссылке {link['url']}")
+        return "handled"
 
     # -- whole night -------------------------------------------------------
     def run(self) -> Report:
@@ -312,11 +329,15 @@ class AutoUpdater:
                     file.pop("reason", None)
                 else:
                     all_handled = False
+            pending = set()
             for page in item.get("pages", []):
                 for link in list(page.get("new_documents", [])):
-                    self._process_new_document(company_name, link)
-            # New documents are now known: they were handled or noted.
-            accept_new_documents(self.status, company_name)
+                    if self._process_new_document(company_name, link) == "pending":
+                        pending.add(link["url"])
+            # Handled and unrelated documents are now known; pending ones stay flagged.
+            accept_new_documents(self.status, company_name, keep=pending)
+            if pending:
+                all_handled = False
             if all_handled:
                 item["status"] = "ok"
                 item["verified_at"] = self.now.isoformat(timespec="minutes")

@@ -198,14 +198,14 @@ def run_check(fetch: Callable[[str], Any], *, previous: dict[str, Any] | None = 
     return result
 
 
-def accept_new_documents(status: dict[str, Any], company: str) -> dict[str, Any]:
-    """Owner reviewed the flagged documents of one company: stop flagging them."""
+def accept_new_documents(status: dict[str, Any], company: str, keep: set[str] = frozenset()) -> dict[str, Any]:
+    """Stop flagging the documents of one company, except those in ``keep``."""
     for page in status.get("companies", {}).get(company, {}).get("pages", []):
         known = set(page.get("known_links", []))
-        known |= {link["url"] for link in page.get("new_documents", [])}
+        known |= {link["url"] for link in page.get("new_documents", []) if link["url"] not in keep}
         page["known_links"] = sorted(known)
-        page["new_documents"] = []
-        if page.get("status") == "new_documents":
+        page["new_documents"] = [link for link in page.get("new_documents", []) if link["url"] in keep]
+        if page.get("status") == "new_documents" and not page["new_documents"]:
             page["status"] = "unchanged"
     return status
 

@@ -38,6 +38,20 @@ def _ru_date(value: str | None, with_time: bool = False) -> str | None:
     return moment.strftime("%d.%m.%Y в %H:%M" if with_time else "%d.%m.%Y")
 
 
+# The owner's computer re-checks closed sites in the morning; the GitHub run
+# later the same day cannot open them. A recent morning result still counts.
+RECENT_CHECK_HOURS = 48
+
+
+def _recently_verified(item: dict, checked_at: str | None) -> bool:
+    try:
+        verified = datetime.fromisoformat(item.get("verified_at") or "")
+        checked = datetime.fromisoformat(checked_at or "")
+    except ValueError:
+        return False
+    return abs((checked - verified).total_seconds()) <= RECENT_CHECK_HOURS * 3600
+
+
 @app.context_processor
 def source_check_context() -> dict:
     """Nightly source check (data/source-check.json) for every page."""
@@ -45,6 +59,8 @@ def source_check_context() -> dict:
     companies = {}
     for name, item in (status.get("companies") or {}).items():
         state = item.get("status", "unavailable")
+        if state == "unavailable" and _recently_verified(item, status.get("checked_at")):
+            state = "ok"
         new_documents = [
             link for page in item.get("pages", []) for link in page.get("new_documents", [])
         ]

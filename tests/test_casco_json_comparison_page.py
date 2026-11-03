@@ -83,10 +83,8 @@ class CascoJsonComparisonPageTests(unittest.TestCase):
         )
         self.assertEqual(total_response.status_code, 200)
         total_page = total_response.get_data(as_text=True)
-        # "exceeds 75%" vs "equals or exceeds 75%" is not presented as equal
-        # and is not sold as an advantage.
-        self.assertNotIn("Порог полной гибели совпадает.", total_page)
-        self.assertNotIn("<strong>Порог тотала</strong>", total_page)
+        # Росгосстрах lowered its threshold to 65% (edition of 28.10.2026): ВСК's 75% wins.
+        self.assertIn("у Росгосстраха уже от 65%", total_page)
 
     def test_populated_official_answers_render_even_when_audit_status_disagrees(self):
         def company_data(franchise_value):

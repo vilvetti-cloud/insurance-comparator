@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import secrets
 from functools import wraps
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from flask import (Blueprint, abort, current_app, flash, g, redirect, render_template, request, session,
                    url_for)
@@ -345,8 +345,68 @@ def admin():
             oneoff_left=max(store().oneoff_left(user["id"]), 0),
             comparisons=store().comparisons_made(user["id"]),
         ))
+    from web_app import FIELD_LABELS
+
+    reports = [dict(
+        report,
+        pair=report["pair"].replace("|", " против "),
+        field=FIELD_LABELS.get(report["field"] or "", ""),
+        sent=datetime.fromisoformat(report["created_at"]).astimezone().strftime("%d.%m.%Y %H:%M"),
+        link="/compare?" + urlencode(dict(zip(("company1", "company2"), report["pair"].split("|", 1)))),
+    ) for report in store().reports()]
     return render_template("admin.html", users=rows, plans=PLANS, stats=store().stats(), free=FREE_COMPARISONS,
+                           reports=reports, open_reports=sum(r["status"] == "new" for r in reports),
                            active_section="admin")
+
+
+REPORT_MAX_LENGTH = 1000
+
+
+@bp.route("/report", methods=["POST"])
+def report_error():
+    """«Нашёл ошибку» on a comparison: saved for the owner's admin page and mailed to the owner."""
+    if not enabled():
+        abort(404)
+    _check_csrf()
+    from web_app import COMPANIES, FIELD_LABELS
+
+    form = request.form
+    company1, company2 = form.get("company1"), form.get("company2")
+    if company1 not in COMPANIES or company2 not in COMPANIES:
+        abort(400)
+    # Back to the home page: reopening the comparison would count as one more comparison.
+    back = "/"
+    field = form.get("field") if form.get("field") in FIELD_LABELS else ""
+    message = " ".join(form.get("message", "").split())[:REPORT_MAX_LENGTH]
+    if len(message) < 5:
+        flash("Опишите ошибку хотя бы парой слов.")
+        return redirect(back)
+    user = current_user()
+    saved = store().add_report(user_id=user["id"] if user else None, ip=client_ip(), visitor=visitor_id(),
+                               pair=f"{company1}|{company2}", field=field, message=message)
+    if saved is None:
+        flash("Сегодня вы уже отправили много сообщений — спасибо! Напишите владельцу напрямую.")
+        return redirect(back)
+    admins = [e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if mailer.enabled() and admins:
+        who = f"{user['first_name']} {user['last_name']} ({user['email']})" if user else "гость без входа"
+        try:
+            mailer.send(admins[0], f"Нашёл ошибку: {company1} против {company2}",
+                        f"От: {who}\nСравнение: {company1} против {company2}\n"
+                        f"Параметр: {FIELD_LABELS.get(field, 'не выбран')}\n\n{message}\n\n"
+                        f"Все сообщения: {url_for('accounts.admin', _external=True)}#reports\n")
+        except Exception:  # noqa: BLE001 - the report is saved anyway
+            current_app.logger.exception("Error report e-mail was not sent")
+    flash("Спасибо! Сообщение отправлено владельцу сервиса, он проверит условие по правилам.")
+    return redirect(back)
+
+
+@bp.route("/admin/report/<int:report_id>/done", methods=["POST"])
+@admin_required
+def admin_report_done(report_id):
+    _check_csrf()
+    store().close_report(report_id)
+    return redirect(url_for("accounts.admin") + "#reports")
 
 
 @bp.route("/admin/grant/<int:user_id>/<plan>", methods=["POST"])

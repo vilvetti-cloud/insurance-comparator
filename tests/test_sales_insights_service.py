@@ -192,9 +192,9 @@ class SalesInsightsSalesMessageTests(unittest.TestCase):
         message = self._structured_result()["client_message"]
         advantages = message.index("Почему РЕСО-Гарантия лучше, чем ВСК")
         gap = message.index("GAP-защиту")
-        bonuses = message.index("А ещё в РЕСО-Гарантия")
+        bonuses = message.index("А ещё в РЕСО-Гарантии")
         franchise = message.index("Без франшизы")
-        call = message.index("Предлагаю оформить КАСКО в РЕСО-Гарантия")
+        call = message.index("Предлагаю оформить КАСКО в РЕСО-Гарантии")
         self.assertTrue(message.startswith("Здравствуйте! Вот сравнение КАСКО"))
         self.assertNotRegex(message, r"\b(?:Мы|мы|наш\w*)\b")
         self.assertLess(advantages, gap)
@@ -767,6 +767,15 @@ class ReadingFixesTests(unittest.TestCase):
     def test_term_written_as_about_stays_approximate(self):
         term = SalesInsightsService._payment_term("денежная страховая выплата — всего около 30 рабочих дней.")
         self.assertEqual((term.amount, term.approximate), (30, True))
+
+    def test_insurer_names_are_declined_after_prepositions(self):
+        decline = SalesInsightsService._decline_names
+        self.assertEqual(decline("лимит выше, чем у Ингосстрах."), "лимит выше, чем у Ингосстраха.")
+        self.assertEqual(decline("Предлагаю оформить КАСКО в РЕСО-Гарантия:"), "Предлагаю оформить КАСКО в РЕСО-Гарантии:")
+        self.assertEqual(decline("у ВСК и Ренессанс Страхование этого нет"), "у ВСК и Ренессанс Страхования этого нет")
+        self.assertEqual(decline("в правилах Югория"), "в правилах Югории")
+        # Names that stand on their own keep their form.
+        self.assertEqual(decline("Почему Согласие лучше, чем Росгосстрах:"), "Почему Согласие лучше, чем Росгосстрах:")
 
     def test_client_message_does_not_offer_replacement_property(self):
         feature = SalesInsightsService._client_feature(

@@ -188,6 +188,35 @@
   </div>
 </section>
 
+{% if accounts_enabled %}
+<details class="card report-error" id="report">
+  <summary>Нашёл ошибку в сравнении</summary>
+  <form method="POST" action="/report" class="report-error__form">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="company1" value="{{ company1 }}">
+    <input type="hidden" name="company2" value="{{ company2 }}">
+    <div class="field-group">
+      <label class="field-label" for="report-field">Параметр</label>
+      <div class="select-wrap">
+        <select id="report-field" name="field">
+          <option value="">Не выбран / общее</option>
+          {% for key, label in field_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label" for="report-message">Что не так</label>
+      <textarea class="text-input report-error__text" id="report-message" name="message" rows="3" minlength="5"
+                maxlength="1000" required
+                placeholder="Например: у Ингосстраха эвакуатор без лимита, а здесь написано иначе"></textarea>
+    </div>
+    <p class="report-error__hint">Сообщение получит владелец сервиса и проверит условие по правилам.
+      Повторно открывать сравнение не нужно — после отправки вы вернётесь на главную.</p>
+    <button class="button" type="submit"><span>Отправить</span></button>
+  </form>
+</details>
+{% endif %}
+
 <footer class="page-footer">
   <a class="button button--secondary" href="/">← Другое сравнение</a>
   <p>Сравнение выполнено по принятым официальным условиям. Если условие прямо есть в правилах одной компании, а у другой его нет или оно описано размыто, это считается преимуществом первой.</p>
