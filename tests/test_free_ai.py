@@ -77,6 +77,10 @@ class FakeHttp:
                                json=lambda: {"choices": [{"message": {"content": content}}]})
 
 
+FULL = '{"changed": true, "key_conditions": "ответ", "quotes": []}'
+FULL_PAYLOAD = {"changed": True, "key_conditions": "ответ", "quotes": []}
+
+
 class OpenAICompatibleTests(unittest.TestCase):
     def service(self, name):
         return next(s for s in SERVICES if s.name == name)
@@ -84,11 +88,11 @@ class OpenAICompatibleTests(unittest.TestCase):
     def test_openrouter_uses_only_free_models_and_a_busy_model_gives_way(self):
         http = FakeHttp(
             [{"id": "deepseek/deepseek-chat"}, {"id": "deepseek/deepseek-chat:free"}, {"id": "qwen/qwen3:free"}],
-            [(429, "rate limited"), (429, "rate limited"), (200, '{"ok": true}')])
+            [(429, "rate limited"), (429, "rate limited"), (200, FULL)])
         pauses = []
         client = OpenAICompatible(self.service("OpenRouter"), "key", http=http, sleep=pauses.append)
         self.assertEqual(client.models(), ["deepseek/deepseek-chat:free", "qwen/qwen3:free"])
-        self.assertEqual(client.generate("вопрос"), {"ok": True})
+        self.assertEqual(client.generate("вопрос"), FULL_PAYLOAD)
         # A short pause and one more try, then the next free model.
         self.assertEqual(http.posted, ["deepseek/deepseek-chat:free", "deepseek/deepseek-chat:free", "qwen/qwen3:free"])
         self.assertEqual(len(pauses), 1)
@@ -103,9 +107,9 @@ class OpenAICompatibleTests(unittest.TestCase):
                 self.sent = json
                 return super().post(url, json=json, **kwargs)
 
-        http = NoList([], [(200, '{"ok": true}')])
+        http = NoList([], [(200, FULL)])
         client = OpenAICompatible(self.service("GitHub Models"), "token", http=http)
-        self.assertEqual(client.generate("вопрос"), {"ok": True})
+        self.assertEqual(client.generate("вопрос"), FULL_PAYLOAD)
         self.assertEqual(http.posted, ["openai/gpt-4.1-mini"])
         self.assertEqual((http.sent["temperature"], http.sent["top_p"]), (0, 1))
 
@@ -124,14 +128,19 @@ class OpenAICompatibleTests(unittest.TestCase):
                 return SimpleNamespace(status_code=200, text="",
                                        json=lambda: {"choices": [{"message": {"content": content}}]})
 
-        chunks = [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": '{"ok": true}'}]
+        chunks = [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": FULL}]
         mistral = OpenAICompatible(self.service("Mistral"), "key", http=Replies([{"id": "mistral-large-4"}], [chunks]))
-        self.assertEqual(mistral.generate("вопрос"), {"ok": True})
+        self.assertEqual(mistral.generate("вопрос"), FULL_PAYLOAD)
         # GitHub Models answered the strict JSON mode with nothing: asked again without it.
-        http = Replies([{"id": "openai/gpt-4.1-mini"}], ["", '{"ok": true}'])
+        http = Replies([{"id": "openai/gpt-4.1-mini"}], ["", FULL])
         github = OpenAICompatible(self.service("GitHub Models"), "token", http=http)
-        self.assertEqual(github.generate("вопрос"), {"ok": True})
+        self.assertEqual(github.generate("вопрос"), FULL_PAYLOAD)
         self.assertEqual(http.posted, [("openai/gpt-4.1-mini", True), ("openai/gpt-4.1-mini", False)])
+
+    def test_answer_without_the_required_fields_is_rejected(self):
+        http = FakeHttp([{"id": "mistral-small-latest"}], [(200, '{"answer": "ответ"}')])
+        with self.assertRaisesRegex(RuntimeError, "нет полей changed, key_conditions, quotes"):
+            OpenAICompatible(self.service("Mistral"), "key", http=http).generate("вопрос")
 
     def test_every_model_failing_is_an_error(self):
         http = FakeHttp([{"id": "mistral-small-latest"}], [(503, "busy")])

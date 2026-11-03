@@ -50,7 +50,8 @@ def run_scenarios(client, label: str) -> int:
             print(f"::warning::{label} — {LABELS[key]}: ошибка запроса: {type(exc).__name__}: {str(exc)[:300]}")
             failed += 1
             continue
-        ok = draft.valid and expected in draft.key_conditions
+        # «2 %» and «2%» are the same value.
+        ok = draft.valid and expected.replace(" ", "") in draft.key_conditions.replace(" ", "").replace(" ", "")
         level = "notice" if ok else "warning"
         detail = "; ".join(draft.problems) or ("новое значение не найдено в ответе" if not ok else "проверки пройдены")
         text = draft.key_conditions.replace("\n", " ")[:400]
