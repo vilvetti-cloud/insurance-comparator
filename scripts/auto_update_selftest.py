@@ -53,8 +53,7 @@ def run_scenarios(client, label: str) -> int:
         ok = draft.valid and expected in draft.key_conditions
         level = "notice" if ok else "warning"
         detail = "; ".join(draft.problems) or ("новое значение не найдено в ответе" if not ok else "проверки пройдены")
-        text = draft.key_conditions.replace("
-", " ")[:400]
+        text = draft.key_conditions.replace("\n", " ")[:400]
         print(f"::{level}::{label} — {LABELS[key]}: {detail}. Ответ: {text}")
         failed += 0 if ok else 1
     return failed
