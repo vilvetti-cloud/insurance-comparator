@@ -17,6 +17,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from collector import answers_store  # noqa: E402
 from collector.answer_writer import answer_client, write_answer  # noqa: E402
+from collector.free_ai import FreeChain  # noqa: E402
 from collector.auto_update import LABELS, affected_fields  # noqa: E402
 from collector.rules_text import changed_sentences, pdf_pages  # noqa: E402
 
@@ -26,12 +27,8 @@ SCENARIOS = [
 ]
 
 
-def main() -> int:
-    client = answer_client()
-    if client is None:
-        print("::error::Нет ключа ИИ (ANTHROPIC_API_KEY или GEMINI_API_KEY)")
-        return 1
-    print(f"::notice::ИИ для разбора: {type(client).__name__} {getattr(client, 'model', '')}")
+def run_scenarios(client, label: str) -> int:
+    """Failed scenarios for one AI (or the whole chain)."""
     pages = pdf_pages(ROOT_DIR / "data" / "sources" / "reso" / "technical.pdf")
     master = answers_store.load()
     company = next(c for c in master["companies"] if c["slug"] == "reso")
@@ -50,16 +47,36 @@ def main() -> int:
                                  pages=changed, current_answer=field["key_conditions"],
                                  changed_sentences=added + removed)
         except Exception as exc:  # noqa: BLE001 - reported as a failed scenario
-            print(f"::error::{LABELS[key]}: ошибка запроса: {type(exc).__name__}: {str(exc)[:200]}")
+            print(f"::warning::{label} — {LABELS[key]}: ошибка запроса: {type(exc).__name__}: {str(exc)[:300]}")
             failed += 1
             continue
         ok = draft.valid and expected in draft.key_conditions
-        level = "notice" if ok else "error"
+        level = "notice" if ok else "warning"
         detail = "; ".join(draft.problems) or ("новое значение не найдено в ответе" if not ok else "проверки пройдены")
-        text = draft.key_conditions.replace("\n", " ")[:600]
-        print(f"::{level}::{LABELS[key]}: {detail}. Ответ: {text}")
+        text = draft.key_conditions.replace("
+", " ")[:400]
+        print(f"::{level}::{label} — {LABELS[key]}: {detail}. Ответ: {text}")
         failed += 0 if ok else 1
-    return 1 if failed else 0
+    return failed
+
+
+def main() -> int:
+    client = answer_client()
+    if client is None:
+        print("::error::Нет ключа ИИ (ANTHROPIC_API_KEY, GEMINI_API_KEY или другого бесплатного сервиса)")
+        return 1
+    if not isinstance(client, FreeChain):
+        print(f"::notice::ИИ для разбора: {type(client).__name__}")
+        return 1 if run_scenarios(client, "Claude") else 0
+    # Each free service on its own, so the owner sees which ones work today.
+    working = []
+    for service in client.services:
+        if run_scenarios(FreeChain([service]), service.name) == 0:
+            working.append(service.name)
+    summary = ", ".join(working) or "ни один"
+    print(f"::{'notice' if working else 'error'}::Бесплатные ИИ, которые прошли самопроверку: {summary} "
+          f"(из {len(client.services)}: {client.model})")
+    return 0 if working else 1
 
 
 if __name__ == "__main__":

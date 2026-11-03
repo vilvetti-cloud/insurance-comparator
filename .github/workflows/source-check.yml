@@ -12,6 +12,8 @@ on:
 permissions:
   contents: write
   issues: write
+  # GitHub Models: a free AI in the chain, no sign-up (collector/free_ai.py).
+  models: read
 
 concurrency:
   group: source-check
@@ -20,12 +22,18 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # Up to 3 nightly attempts across several free AI services can take a while.
+    timeout-minutes: 90
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       # Free alternative used when no Claude key is set.
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      # The other free AI services, asked in turn when one is busy (collector/free_ai.py).
+      GITHUB_TOKEN: ${{ github.token }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
       DOWNLOADS: ${{ github.event_name == 'push' && 'data/incoming' || 'work/downloads' }}
       GH_TOKEN: ${{ github.token }}
     steps:

@@ -307,7 +307,7 @@ class AutoUpdater:
                 "source_quote_check": f"цитата найдена в новой редакции правил (автопроверка {stamp})",
                 "limitations": "",
             }
-            line = f"{company_name} — {LABELS[key]}: {draft.change_summary}"
+            line = f"{company_name} — {LABELS[key]}: {draft.change_summary}" + (f" (разобрал: {draft.model})" if draft.model else "")
             (self.report.updated if draft.changed else self.report.unchanged).append(line)
         if updates:
             answers_store.update_cells(updates, created_date=self.now.date().isoformat(), path=self.master_path)

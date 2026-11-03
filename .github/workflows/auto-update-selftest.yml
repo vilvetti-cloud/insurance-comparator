@@ -7,11 +7,14 @@ on:
     branches: [main]
     paths:
       - "collector/answer_writer.py"
+      - "collector/free_ai.py"
       - "scripts/auto_update_selftest.py"
       - ".github/workflows/auto-update-selftest.yml"
 
 permissions:
   contents: read
+  # GitHub Models: a free AI in the chain, no sign-up (collector/free_ai.py).
+  models: read
 
 jobs:
   selftest:
@@ -21,6 +24,11 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      # The other free AI services, asked in turn when one is busy (collector/free_ai.py).
+      GITHUB_TOKEN: ${{ github.token }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
