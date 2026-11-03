@@ -34,6 +34,32 @@
 </section>
 {% endif %}
 
+<h2 class="admin-subtitle" id="reports">Сообщения об ошибках{% if open_reports %} · новых: {{ open_reports }}{% endif %}</h2>
+
+{% if reports %}
+<div class="admin-list">
+  {% for report in reports %}
+  <article class="card admin-user admin-report{% if report.status != 'new' %} admin-report--done{% endif %}">
+    <div class="admin-user__main">
+      <strong><a href="{{ report.link }}">{{ report.pair }}</a>{% if report.field %} · {{ report.field }}{% endif %}</strong>
+      <span class="admin-report__message">{{ report.message }}</span>
+      <span>{% if report.email %}{{ report.first_name }} {{ report.last_name }}, {{ report.email }}{% else %}Гость без входа{% endif %} · {{ report.sent }}</span>
+    </div>
+    <div class="admin-user__actions">
+      {% if report.status == 'new' %}
+      <form method="POST" action="/admin/report/{{ report.id }}/done">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <button class="button button--secondary" type="submit"><span>Разобрано</span></button>
+      </form>
+      {% else %}<span class="outcome-chip outcome-chip--equal">Разобрано</span>{% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p class="auth-card__lead">Пока никто не сообщал об ошибках. Кнопка «Нашёл ошибку» есть под каждым сравнением.</p>
+{% endif %}
+
 <h2 class="admin-subtitle">Пользователи</h2>
 
 {% if users %}
