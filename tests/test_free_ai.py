@@ -116,6 +116,23 @@ class OpenAICompatibleTests(unittest.TestCase):
                        quotes=[{"page": 1, "text": [GOOD["quotes"][0]["text"]]}])
         self.assertTrue(_draft(payload, PAGES).valid)
 
+    def test_chunked_answer_and_empty_json_mode_answer(self):
+        class Replies(FakeHttp):
+            def post(self, url, json=None, **kwargs):
+                self.posted.append((json["model"], "response_format" in json))
+                content = self.replies.pop(0)
+                return SimpleNamespace(status_code=200, text="",
+                                       json=lambda: {"choices": [{"message": {"content": content}}]})
+
+        chunks = [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": '{"ok": true}'}]
+        mistral = OpenAICompatible(self.service("Mistral"), "key", http=Replies([{"id": "mistral-large-4"}], [chunks]))
+        self.assertEqual(mistral.generate("вопрос"), {"ok": True})
+        # GitHub Models answered the strict JSON mode with nothing: asked again without it.
+        http = Replies([{"id": "openai/gpt-4.1-mini"}], ["", '{"ok": true}'])
+        github = OpenAICompatible(self.service("GitHub Models"), "token", http=http)
+        self.assertEqual(github.generate("вопрос"), {"ok": True})
+        self.assertEqual(http.posted, [("openai/gpt-4.1-mini", True), ("openai/gpt-4.1-mini", False)])
+
     def test_every_model_failing_is_an_error(self):
         http = FakeHttp([{"id": "mistral-small-latest"}], [(503, "busy")])
         with self.assertRaisesRegex(RuntimeError, "Mistral: mistral-small-latest: HTTP 503"):
