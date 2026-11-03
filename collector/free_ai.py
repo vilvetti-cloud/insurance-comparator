@@ -46,11 +46,11 @@ class Service:
 SERVICES = (
     Service("GitHub Models", "GITHUB_TOKEN", "https://models.github.ai/inference/chat/completions",
             "https://models.github.ai/catalog/models",
-            ("openai/gpt-4.1", "openai/gpt-4o", "deepseek", "meta/llama-4", "mistral"), 14000, "GITHUB_MODELS",
+            ("openai/gpt-4.1", "openai/gpt-4o", "deepseek", "meta/llama-4", "mistral"), 7000, "GITHUB_MODELS",
             fallback_models=("openai/gpt-4.1-mini", "openai/gpt-4o-mini")),
     Service("Groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1/chat/completions",
             "https://api.groq.com/openai/v1/models",
-            ("gpt-oss-120b", "llama-4-maverick", "llama-3.3-70b", "qwen", "kimi"), 18000, "GROQ_MODELS"),
+            ("gpt-oss-120b", "llama-4-maverick", "llama-3.3-70b", "qwen", "kimi"), 10000, "GROQ_MODELS"),
     Service("OpenRouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1/chat/completions",
             "https://openrouter.ai/api/v1/models",
             ("deepseek", "qwen", "llama", "gemma", "mistral"), 60000, "OPENROUTER_MODELS", models_to_try=5),
@@ -161,11 +161,14 @@ class OpenAICompatible:
                     if not text.strip() and json_mode:
                         continue
                     payload = _json_from(text)
+                    missing = [key for key in ("changed", "key_conditions", "quotes") if key not in payload]
+                    if missing:
+                        raise ValueError(f"нет полей {', '.join(missing)}")
                     self.used_model = model
                     return payload
                 except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
                     shown = " ".join(text.split())[:160]
-                    errors.append(f"{model}: ответ не в формате JSON ({type(exc).__name__}, "
+                    errors.append(f"{model}: ответ не в формате JSON ({type(exc).__name__}: {str(exc)[:80]}, "
                                   f"finish_reason={finish or '—'}): «{shown}»")
                     break
         if not errors:
@@ -177,7 +180,7 @@ class OpenAICompatible:
         """One model; a per-second rate limit (Mistral, OpenRouter) gets one short pause."""
         body = {
             # temperature 0 with top_p 1: Mistral refuses greedy sampling otherwise.
-            "model": model, "temperature": 0, "top_p": 1, "max_tokens": 4000,
+            "model": model, "temperature": 0, "top_p": 1, "max_tokens": 8000,
             "messages": [{"role": "user", "content": prompt}],
         }
         if json_mode:
