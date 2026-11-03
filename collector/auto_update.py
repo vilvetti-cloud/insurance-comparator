@@ -20,11 +20,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+import difflib
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import time
 from typing import Any, Callable
 
 from collector import answers_store
@@ -36,6 +38,9 @@ from collector.source_watch import (
 from core.catalog import KASKO_FIELDS
 
 LOG_FILE = ROOT / "data" / "auto-update-log.json"
+# A busy AI (HTTP 503, limits) is asked again within the same night.
+AI_ATTEMPTS = 3
+AI_RETRY_PAUSE = 90  # seconds
 LABELS = {item["key"]: item["label"] for item in KASKO_FIELDS}
 
 @dataclass
@@ -44,13 +49,28 @@ class Report:
     unchanged: list[str] = field(default_factory=list)    # refreshed copies, no answer changed
     manual: list[str] = field(default_factory=list)       # needs a person
     notes: list[str] = field(default_factory=list)
+    editions: list[str] = field(default_factory=list)     # insurers with a new text of the rules
+    numbers: list[str] = field(default_factory=list)      # «Росгосстрах — Порог тотала: 75% → 65%»
 
     @property
     def empty(self) -> bool:
         return not (self.updated or self.unchanged or self.manual or self.notes)
 
+    def title(self, date: str) -> str:
+        """The e-mail subject says who published new rules and whether the owner is needed."""
+        if not self.editions:
+            return f"Правила КАСКО: изменения от {date}"
+        names = ", ".join(dict.fromkeys(self.editions))
+        return f"{names}: новая редакция правил КАСКО" + (" — нужна ваша проверка" if self.manual else "")
+
     def markdown(self, checked_at: str) -> str:
         lines = [f"Ночная проверка правил КАСКО: {checked_at}", ""]
+        if self.editions:
+            lines += [f"**Вышла новая редакция правил: {', '.join(dict.fromkeys(self.editions))}.**",
+                      "Сайт уже показывает новые ответы по пунктам из раздела «обновлены»; "
+                      "по пунктам из раздела «вручную» пока показаны прежние ответы.", ""]
+        if self.numbers:
+            lines += ["**Что изменилось в цифрах (сравнение текста, без ИИ):**", *[f"- {item}" for item in self.numbers], ""]
         if self.updated:
             lines += ["**Ответы обновлены автоматически:**", *[f"- {item}" for item in self.updated], ""]
         if self.unchanged:
@@ -104,6 +124,37 @@ def affected_fields(company: dict[str, Any], file: str, new_pages: list[str],
         touched = any(re.search(pattern, part) for part in _changed_parts(added, removed_here))
         if quote_gone or touched:
             result.append(item)
+    return result
+
+
+AMOUNT = re.compile(r"\d+(?:[.,]\d+)?(?:\s\d{3})*\s*(?:%|₽|руб\w*|\(?[а-я ]+\)?\s*(?:рабоч|календарн)\w*\s+дн\w*)")
+
+
+def number_changes(item: dict[str, Any], added: list[str], removed: list[str]) -> list[str]:
+    """«75% → 65%» for a sentence about this parameter whose amounts changed.
+
+    Found by comparing the two texts, so it works even when the AI is busy.
+    """
+    pattern = FIELD_PATTERNS[item["key"]]
+    result = []
+    for old in removed:
+        if not re.search(pattern, comparable(old)):
+            continue
+        best, score = None, 0.0
+        for new in added:
+            ratio = difflib.SequenceMatcher(None, comparable(old), comparable(new)).ratio()
+            if ratio > score:
+                best, score = new, ratio
+        if best is None or score < 0.8:
+            continue
+        was = [m.group(0) for m in AMOUNT.finditer(comparable(old))]
+        now = [m.group(0) for m in AMOUNT.finditer(comparable(best))]
+        gone = [a for a in was if a not in now]
+        came = [a for a in now if a not in was]
+        if gone and came:  # one amount replaced by another; a glued sentence only adds
+            change = f"{', '.join(gone)} → {', '.join(came)}"
+            if change not in result:
+                result.append(change)
     return result
 
 
@@ -161,7 +212,7 @@ class AutoUpdater:
                  sources_dir: Path = SOURCES_DIR, master_path: Path = answers_store.MASTER,
                  writer: Callable[..., Draft] = write_answer,
                  read_pages: Callable[[bytes | Path], list[str]] = pdf_pages,
-                 log_file: Path = None, table_file: Path = None):
+                 log_file: Path = None, table_file: Path = None, sleep: Callable[[float], None] = time.sleep):
         self.status = status
         self.download_dir = download_dir
         self.client = client
@@ -173,6 +224,7 @@ class AutoUpdater:
         self.read_pages = read_pages
         self.log_file = log_file or LOG_FILE
         self.table_file = table_file or SOURCES_TABLE
+        self.sleep = sleep
         self.report = Report()
         self.log = _load_log(self.log_file)
 
@@ -180,8 +232,14 @@ class AutoUpdater:
     def _process_file(self, company_name: str, file: str, new_body: bytes, remote_sha: str) -> bool:
         """True when the file was fully handled (answers updated or untouched)."""
         attempt_key = f"{file}@{remote_sha}"
-        if self.log["attempts"].get(attempt_key, {}).get("result") == "manual":
-            # This exact file already failed the checks: do not pay for it again.
+        attempt = self.log["attempts"].get(attempt_key, {})
+        if attempt.get("result") == "manual":
+            # This exact file already failed the checks: do not pay for it again,
+            # but remind the owner every night until it is sorted out.
+            self.report.manual.append(
+                f"{company_name}: новая редакция правил ({file}) с {attempt.get('at', '')[:10]} ждёт ручного разбора — "
+                "сайт показывает прежние ответы по непроверенным пунктам")
+            self.report.editions.append(company_name)
             return False
         master = answers_store.load(self.master_path)
         company = next(c for c in master["companies"] if c["name"] == company_name)
@@ -194,6 +252,11 @@ class AutoUpdater:
             self.report.unchanged.append(f"{company_name}: {file} — перезалит без изменений текста")
             return True
         touched = affected_fields(company, file, new_pages, added, removed, old_pages)
+        if touched:
+            self.report.editions.append(company_name)
+            for item in touched:
+                for change in number_changes(item, added, removed):
+                    self.report.numbers.append(f"{company_name} — {LABELS[item['key']]}: {change}")
         # Answers the owner settled by hand (a decision, a document from an
         # agent) are never rewritten by the AI: the owner is told instead.
         protected = [item for item in touched if item.get("owner_note")]
@@ -218,21 +281,37 @@ class AutoUpdater:
         drafts: dict[str, Draft] = {}
         request_failed = False
         for item in touched:
-            try:
-                drafts[item["key"]] = self.writer(
-                    self.client, company=company_name, field_key=item["key"], field_label=LABELS[item["key"]],
-                    pages=new_pages, current_answer=item.get("key_conditions") or item.get("direct_answer") or "",
-                    changed_sentences=added + removed,
-                )
-            except Exception as exc:  # noqa: BLE001 - network, limits, malformed output: keep the old answer
-                request_failed = True
-                problem = f"ошибка запроса к ИИ ({type(self.client).__name__}): {type(exc).__name__}: {str(exc)[:900]}"
-                drafts[item["key"]] = Draft(False, "", [], "", problems=[problem])
+            drafts[item["key"]] = self._ask(company_name, item, new_pages, added + removed)
+            request_failed |= drafts[item["key"]].request_failed
         for item in touched:
             draft = drafts[item["key"]]
             if draft.valid and _lost_condition(item, draft, new_pages):
                 draft.problems.append(
                     "новый ответ говорит, что условия нет, хотя цитаты прежнего ответа остались в правилах")
+
+        # Every answer that passed the checks goes to the site at once, even when
+        # another parameter failed (Росгосстрах, 31.10.2026: the new 65% total-loss
+        # threshold was thrown away because two other answers failed).
+        stamp = self.now.strftime("%d.%m.%Y")
+        updates = {}
+        for key, draft in drafts.items():
+            if not draft.valid:
+                continue
+            updates[(company["slug"], key)] = {
+                "direct_answer": re.split(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z«])", draft.key_conditions, maxsplit=1)[0],
+                "key_conditions": draft.key_conditions,
+                "evidence_quote": " | ".join(quote["text"] for quote in draft.quotes),
+                "text_search_pages": draft.pages,
+                "audit_status": f"Автообновление по новой редакции правил {stamp}",
+                "source_analysis_status": "found",
+                "source_quote_check": f"цитата найдена в новой редакции правил (автопроверка {stamp})",
+                "limitations": "",
+            }
+            line = f"{company_name} — {LABELS[key]}: {draft.change_summary}"
+            (self.report.updated if draft.changed else self.report.unchanged).append(line)
+        if updates:
+            answers_store.update_cells(updates, created_date=self.now.date().isoformat(), path=self.master_path)
+
         failed = {key: draft for key, draft in drafts.items() if not draft.valid}
         if failed:
             for key, draft in failed.items():
@@ -247,26 +326,25 @@ class AutoUpdater:
             else:
                 self.log["attempts"][attempt_key] = {"result": "manual", "at": self.now.isoformat(timespec="minutes")}
             return False
-
-        stamp = self.now.strftime("%d.%m.%Y")
-        updates = {}
-        for key, draft in drafts.items():
-            updates[(company["slug"], key)] = {
-                "direct_answer": re.split(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z«])", draft.key_conditions, maxsplit=1)[0],
-                "key_conditions": draft.key_conditions,
-                "evidence_quote": " | ".join(quote["text"] for quote in draft.quotes),
-                "text_search_pages": draft.pages,
-                "audit_status": f"Автообновление по новой редакции правил {stamp}",
-                "source_analysis_status": "found",
-                "source_quote_check": f"цитата найдена в новой редакции правил (автопроверка {stamp})",
-                "limitations": "",
-            }
-            line = f"{company_name} — {LABELS[key]}: {draft.change_summary}"
-            (self.report.updated if draft.changed else self.report.unchanged).append(line)
-        answers_store.update_cells(updates, created_date=self.now.date().isoformat(), path=self.master_path)
         self._save_copy(local, new_body)
         self.log["attempts"][attempt_key] = {"result": "updated", "at": self.now.isoformat(timespec="minutes")}
         return True
+
+    def _ask(self, company_name: str, item: dict[str, Any], pages: list[str], changed: list[str]) -> Draft:
+        """The AI's answer for one parameter; a busy AI is asked again a few times."""
+        problem = ""
+        for attempt in range(AI_ATTEMPTS):
+            if attempt:
+                self.sleep(AI_RETRY_PAUSE)
+            try:
+                return self.writer(
+                    self.client, company=company_name, field_key=item["key"], field_label=LABELS[item["key"]],
+                    pages=pages, current_answer=item.get("key_conditions") or item.get("direct_answer") or "",
+                    changed_sentences=changed,
+                )
+            except Exception as exc:  # noqa: BLE001 - network, limits, malformed output: keep the old answer
+                problem = f"ошибка запроса к ИИ ({type(self.client).__name__}): {type(exc).__name__}: {str(exc)[:900]}"
+        return Draft(False, "", [], "", problems=[f"{problem} (попыток: {AI_ATTEMPTS})"], request_failed=True)
 
     def _save_copy(self, local: Path, body: bytes) -> None:
         local.parent.mkdir(parents=True, exist_ok=True)
