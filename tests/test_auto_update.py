@@ -122,6 +122,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(second.calls, [])
         # …but the owner is reminded every night until it is sorted out.
         self.assertIn("ждёт ручного разбора", reminder.markdown("x"))
+        self.assertIn("откройте Claude Code", reminder.markdown("x"))
         self.assertIn("РЕСО-Гарантия: новая редакция", reminder.title("02.11.2026"))
 
     def test_failed_ai_request_is_reported_in_detail_and_retried_next_time(self):

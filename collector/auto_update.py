@@ -77,6 +77,9 @@ class Report:
             lines += ["**Файлы правил обновлены, ответы не изменились:**", *[f"- {item}" for item in self.unchanged], ""]
         if self.manual:
             lines += ["**Нужно посмотреть вручную (старые ответы оставлены):**", *[f"- {item}" for item in self.manual], ""]
+            # The owner's Claude subscription is the sure fallback when no free AI managed (03.11.2026).
+            lines += ["**Как разобрать вручную:** откройте Claude Code в папке проекта и напишите: "
+                      "«разбери новую редакцию из письма» — Claude сверит пункты по PDF и обновит ответы.", ""]
         if self.notes:
             lines += ["**Заметки:**", *[f"- {item}" for item in self.notes], ""]
         return "\n".join(lines).strip() + "\n"
