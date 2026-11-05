@@ -1172,6 +1172,16 @@ class SalesInsightsService:
         own_basis = self._total_loss_basis(own_l)
         other_basis = self._total_loss_basis(other_l)
 
+        if bool(own_threshold) != bool(other_threshold):
+            # Owner's rule (29.10.2026): both define total loss, the difference cannot be
+            # ranked — equal. Югория (05.11.2026): no percentage, a floating threshold
+            # (repair cost above the sum insured minus the value of the damaged car).
+            return self._comparison(
+                "total_loss", label, "equal", "total_loss_percent_vs_formula",
+                own, other,
+                "Одна компания задаёт порог полной гибели процентом, другая — формулой без процента; "
+                "какой порог выгоднее, зависит от стоимости машины после аварии.",
+            )
         if own_threshold and own_basis and (not other_threshold or not other_basis):
             return self._comparison(
                 "total_loss", label, "incomparable",
