@@ -461,6 +461,18 @@ class SalesInsightsTests(unittest.TestCase):
                 self.assertEqual(result["comparisons"][0]["outcome"], "first_advantage")
 
 
+    def test_total_loss_percentage_against_a_formula_without_percentage_is_equal(self):
+        # Югория (05.11.2026): repair cost above the sum insured minus the value of the damaged car.
+        result = self.analyze(
+            "total_loss",
+            field_data("total_loss", "Полная гибель — если ремонт превышает 75% страховой суммы."),
+            field_data("total_loss", "Полная гибель (тотальное повреждение) — если стоимость ремонта превышает "
+                                     "разницу между страховой суммой и стоимостью повреждённого ТС."),
+        )
+        self.assertEqual(result["advantages"], [])
+        self.assertEqual(result["comparisons"][0]["outcome"], "equal")
+        self.assertEqual(result["comparisons"][0]["comparison_basis"], "total_loss_percent_vs_formula")
+
     def test_total_loss_missing_calculation_basis_is_incomparable(self):
         result = self.analyze(
             "total_loss",
