@@ -12,7 +12,11 @@ from core.services.sales_insights_service import SalesInsightsService as S
 
 # Answers that are honestly unclear in the rules themselves; they stay
 # «нельзя сравнить» until the wording is clarified from the rules.
-UNCLEAR: set[tuple[str, str]] = set()  # all answers are readable since 29.10.2026
+UNCLEAR = {
+    # The rules set no percentage: total loss is repair cost above the sum insured
+    # minus the value of the damaged car (audit 05.11.2026, owner to decide how to rank).
+    ("Югория", "total_loss"),
+}
 
 READERS = {
     "payment_terms": lambda text: S._payment_term(S._normalized(text)),
