@@ -88,8 +88,18 @@ jobs:
           else
             git commit -m "Автообновление ответов по новой редакции правил"
           fi
-          git pull --rebase origin main
-          git push origin HEAD:main
+          # A busy GitHub or a commit pushed meanwhile (the owner's PC): try again.
+          for attempt in 1 2 3; do
+            if out=$(git pull --rebase origin main 2>&1 && git push origin HEAD:main 2>&1); then
+              exit 0
+            fi
+            echo "$out"
+            git rebase --abort 2>/dev/null || true
+            sleep 20
+          done
+          # The reason is kept as an annotation: logs are visible to repository admins only.
+          echo "::error::Публикация не удалась: $(echo "$out" | tail -4 | tr '\n' ' ')"
+          exit 1
       - name: Email the owner about changes
         # A new issue sends an email to the repository owner.
         if: hashFiles('work/auto-update-summary.md') != ''
@@ -98,6 +108,13 @@ jobs:
           title="Правила КАСКО: изменения от $(date +%d.%m.%Y)"
           [ -s work/auto-update-title.txt ] && title="$(cat work/auto-update-title.txt)"
           gh issue create --title "$title" --body-file work/auto-update-summary.md
+      - name: Email the owner when the nightly check itself failed
+        # Owner's request (05.11.2026): a check that broke must never stay silent.
+        if: failure()
+        run: |
+          body="Ночная проверка остановилась с ошибкой: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          body="$body — данные на сайте остались вчерашними. Откройте Claude Code и напишите: «ночная проверка упала, разберись»."
+          gh issue create --title "Ночная проверка правил не завершилась $(date +%d.%m.%Y)" --body "$body"
       - name: Monthly reminder for sites closed to programs
         if: github.event_name == 'schedule'
         shell: bash
