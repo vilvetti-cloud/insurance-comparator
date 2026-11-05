@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Сообщения клиенту — Страховой аналитик{% endblock %}
+{% block page_class %}admin-page{% endblock %}
+
+{% block content %}
+<section class="admin-head">
+  <p class="eyebrow">Админка · <a href="/admin">назад</a></p>
+  <h1>Сообщения клиенту</h1>
+  <p class="auth-card__lead">Готовые сообщения «{{ company }} против конкурента» — так их видит агент.
+    Если что-то звучит неверно, отметьте это под сообщением: отметка попадёт в «Сообщения об ошибках».</p>
+  <form method="GET" action="/admin/messages" class="admin-messages__pick">
+    <label class="field-label" for="pick-company">Компания</label>
+    <div class="select-wrap">
+      <select id="pick-company" name="company" onchange="this.form.submit()">
+        {% for name in companies %}<option value="{{ name }}"{% if name == company %} selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select>
+    </div>
+    <noscript><button class="button" type="submit"><span>Показать</span></button></noscript>
+  </form>
+  {% include "_messages.html" %}
+</section>
+
+<div class="admin-list">
+  {% for item in messages %}
+  <article class="card admin-message" id="pair-{{ loop.index }}">
+    <h2>{{ company }} против {{ item.competitor }}
+      <span class="outcome-chip {% if item.wins %}outcome-chip--win{% else %}outcome-chip--equal{% endif %}">
+        преимуществ: {{ item.wins }}</span></h2>
+    <p class="client-message">{{ item.text }}</p>
+    <details class="report-error">
+      <summary>Здесь ошибка</summary>
+      <form method="POST" action="/report" class="report-error__form">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="company1" value="{{ company }}">
+        <input type="hidden" name="company2" value="{{ item.competitor }}">
+        <input type="hidden" name="back" value="/admin/messages?company={{ company|urlencode }}#pair-{{ loop.index }}">
+        <div class="field-group">
+          <label class="field-label" for="field-{{ loop.index }}">Параметр</label>
+          <div class="select-wrap">
+            <select id="field-{{ loop.index }}" name="field">
+              <option value="">Не выбран / общее</option>
+              {% for key, label in field_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="note-{{ loop.index }}">Что не так</label>
+          <textarea class="text-input report-error__text" id="note-{{ loop.index }}" name="message" rows="3"
+                    minlength="5" maxlength="1000" required></textarea>
+        </div>
+        <button class="button" type="submit"><span>Сохранить отметку</span></button>
+      </form>
+    </details>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -2072,6 +2072,42 @@ a.company-head__tag {
   opacity: 0.6;
 }
 
+/* ---------- Admin: client messages ---------- */
+
+.admin-messages__pick {
+  display: grid;
+  gap: 8px;
+  max-width: 360px;
+  margin-top: 16px;
+}
+
+.admin-message {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.admin-message h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 16px;
+}
+
+.admin-message .client-message {
+  margin: 0;
+  white-space: pre-line;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.admin-message .report-error {
+  margin-top: 0;
+}
+
 /* ---------- About ---------- */
 
 .about-page .app-shell {

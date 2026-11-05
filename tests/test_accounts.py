@@ -201,6 +201,19 @@ class AccountsTests(unittest.TestCase):
         owner.post(f"/admin/report/{report_id}/done", data={"csrf": token})
         self.assertNotIn("новых: 1", owner.get("/admin").get_data(as_text=True))
 
+    def test_owner_reads_every_client_message_and_marks_one(self):
+        self.register(email="owner@example.com")
+        self.assertEqual(app.test_client().get("/admin/messages").status_code, 404)  # not for others
+        page = self.client.get("/admin/messages", query_string={"company": "ВСК"}).get_data(as_text=True)
+        self.assertEqual(page.count('class="card admin-message"'), 10)
+        self.assertIn("ВСК против РЕСО-Гарантия", page)
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        answer = self.client.post("/report", data={
+            "csrf": token, "company1": "ВСК", "company2": "РЕСО-Гарантия", "field": "",
+            "back": "/admin/messages?company=ВСК#pair-1", "message": "Проверить формулировку про эвакуатор"})
+        self.assertIn("/admin/messages", answer.headers["Location"])
+        self.assertEqual(web_accounts.store().reports()[0]["message"], "Проверить формулировку про эвакуатор")
+
     def test_error_reports_are_limited_per_day(self):
         store = web_accounts.store()
         for _ in range(10):
