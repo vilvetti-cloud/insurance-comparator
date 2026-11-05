@@ -375,7 +375,9 @@ def report_error():
     if company1 not in COMPANIES or company2 not in COMPANIES:
         abort(400)
     # Back to the home page: reopening the comparison would count as one more comparison.
-    back = "/"
+    # The owner marking messages on /admin/messages goes back there (the owner is not counted).
+    owner_note = is_admin() and form.get("back", "").startswith("/admin/messages")
+    back = form["back"] if owner_note and _safe_next(form["back"]) == form["back"] else "/"
     field = form.get("field") if form.get("field") in FIELD_LABELS else ""
     message = " ".join(form.get("message", "").split())[:REPORT_MAX_LENGTH]
     if len(message) < 5:
@@ -388,7 +390,7 @@ def report_error():
         flash("Сегодня вы уже отправили много сообщений — спасибо! Напишите владельцу напрямую.")
         return redirect(back)
     admins = [e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
-    if mailer.enabled() and admins:
+    if mailer.enabled() and admins and not owner_note:
         who = f"{user['first_name']} {user['last_name']} ({user['email']})" if user else "гость без входа"
         try:
             mailer.send(admins[0], f"Нашёл ошибку: {company1} против {company2}",
@@ -397,8 +399,31 @@ def report_error():
                         f"Все сообщения: {url_for('accounts.admin', _external=True)}#reports\n")
         except Exception:  # noqa: BLE001 - the report is saved anyway
             current_app.logger.exception("Error report e-mail was not sent")
-    flash("Спасибо! Сообщение отправлено владельцу сервиса, он проверит условие по правилам.")
+    flash("Отметка сохранена — она в списке «Сообщения об ошибках» в админке." if owner_note
+          else "Спасибо! Сообщение отправлено владельцу сервиса, он проверит условие по правилам.")
     return redirect(back)
+
+
+@bp.route("/admin/messages")
+@admin_required
+def admin_messages():
+    """Every client message of one insurer against each competitor, for the owner to read (05.11.2026)."""
+    import web_app as w
+
+    company = request.args.get("company") if request.args.get("company") in w.COMPANIES else w.COMPANIES[0]
+    snapshot = w.comparison_service.load_snapshot()
+    own = w._prepare_company_data(snapshot, company)
+    messages = []
+    for competitor in w.COMPANIES:
+        if competitor == company:
+            continue
+        result = w.sales_insights_service.analyze(
+            company=company, competitor=competitor, data=own,
+            competitor_data=w._prepare_company_data(snapshot, competitor), field_labels=w.FIELD_LABELS)
+        messages.append({"competitor": competitor, "text": result["client_message"],
+                         "wins": len(result["advantages"]) + len(result.get("conditional_advantages", []))})
+    return render_template("admin_messages.html", company=company, companies=w.COMPANIES,
+                           messages=messages, field_labels=w.FIELD_LABELS, active_section="admin")
 
 
 @bp.route("/admin/report/<int:report_id>/done", methods=["POST"])
