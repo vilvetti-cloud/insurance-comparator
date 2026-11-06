@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "checked_at": "2026-11-05T13:17+03:00",
+  "checked_at": "2026-11-06T13:20+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "ok",
-      "verified_at": "2026-11-05T13:17+03:00",
+      "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
@@ -362,7 +362,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-11-05T13:17+03:00",
+      "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -408,7 +408,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-05T13:17+03:00",
+      "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -448,7 +448,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-05T13:17+03:00",
+      "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -471,20 +471,21 @@
       ]
     },
     "Согласие": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-11-06T08:50+03:00",
       "files": [
         {
           "file": "soglasie/technical.pdf",
           "url": "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/%D0%9F%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0%20%D1%81%D1%82%D1%80%D0%B0%D1%85%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки"
         }
       ],
       "pages": [
         {
           "url": "https://www.soglasie.ru/individuals/avto/kasko/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки",
           "known_links": [
             "https://api.soglasie.ru/storage/managed/upload/docs/Personal_data_processing_consent.pdf",
             "https://api.soglasie.ru/storage/managed/upload/docs/Privacy_policy.pdf",
@@ -494,8 +495,8 @@
         },
         {
           "url": "https://www.soglasie.ru/individuals/avto/kasko/pravila-strakhovaniya-transportnykh-sredstv/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт закрыт для автоматической проверки",
           "known_links": [
             "https://api.soglasie.ru/storage/managed/pravila_strahovania/4/Правила страхования.pdf",
             "https://api.soglasie.ru/storage/managed/upload/docs/Personal_data_processing_consent.pdf",
@@ -508,7 +509,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-11-05T13:17+03:00",
+      "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -892,6 +893,7 @@
             "https://www-data.rgs.ru/upload/iblock/8e4/pravila_184_s_30.05.2016_po_31.07.2017.pdf",
             "https://www-data.rgs.ru/upload/iblock/8ee/k9s7hepp2n5fivftv81ppibioeagzzgu/Pril_-_-4-k-Pravilam_Tipovaya-programma-DMS-ORD-_-23_08_539-ot-21_09_2026.edmstamped.pdf",
             "https://www-data.rgs.ru/upload/iblock/8ee/pravila_175_2018.pdf",
+            "https://www-data.rgs.ru/upload/iblock/8f0/4jma9zm0ssli53pggdrk6zdw2b61wtpc/tarify_osopo1126.pdf",
             "https://www-data.rgs.ru/upload/iblock/8f8/pravila_172_06052019.pdf",
             "https://www-data.rgs.ru/upload/iblock/8fc/nwd0od2boro82a3qi66m3s155qe8kxq1/Prilozhenie-_-4-k-Pravilam_Strakhovye-tarify.pdf",
             "https://www-data.rgs.ru/upload/iblock/904/227_tarify_2019.pdf",
@@ -1183,7 +1185,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-05T13:17+03:00",
+      "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1211,7 +1213,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-05T13:17+03:00",
+      "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1760,7 +1762,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-05T13:17+03:00",
+      "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
@@ -1783,6 +1785,5 @@
         }
       ]
     }
-  },
-  "rechecked_at": "2026-11-06T08:50+03:00"
+  }
 }
