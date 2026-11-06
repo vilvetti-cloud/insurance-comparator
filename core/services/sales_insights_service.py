@@ -353,7 +353,7 @@ class SalesInsightsService:
                 f"у {competitor} это прямо не названо: выплата зависит от того, как органы квалифицируют событие"
                 if SalesInsightsService._general_risk_may_apply(other) else f"у {competitor} этого нет"
             )
-            feature = feature or f"{label}: условие прямо указано в правилах {company}"
+            feature = feature or f"{label}: есть у {company}"
         elif "_coverage_level_" in basis:
             other_level = SalesInsightsService._coverage_level_v2(key, other)
             tail = (
@@ -380,7 +380,9 @@ class SalesInsightsService:
         elif basis in {"without_documents_higher_count"}:
             tail = f"обращений без справок больше, чем у {competitor}"
         elif "higher_limit" in basis:
-            tail = f"лимит выше, чем у {competitor}"
+            unlimited = key == "tow_truck" and SalesInsightsService._tow_limit_rubles(
+                SalesInsightsService._normalized(own)) == float("inf")
+            tail = f"у {competitor} лимит ограничен" if unlimited else f"лимит выше, чем у {competitor}"
         elif basis in ("repair_option_set_superset", "repair_more_options"):
             tail = f"у {competitor} вариантов меньше"
         elif basis == "without_documents_default_vs_option":
@@ -520,6 +522,11 @@ class SalesInsightsService:
         if key == "tow_truck":
             if not re.search(r"эвакуац|эвакуатор|транспортировк", lead):
                 return None
+            # A paid option is not «covered»; no money limit is worth saying plainly.
+            if SalesInsightsService._coverage_level_v2("tow_truck", value) == 1:
+                return "Эвакуацию после страхового случая можно добавить в полис"
+            if SalesInsightsService._tow_limit_rubles(full) == float("inf"):
+                return "Расходы на эвакуацию автомобиля после страхового случая возмещаются без денежного лимита"
             return "Расходы на эвакуацию автомобиля после страхового случая возмещаются"
 
         if key == "repair_type":
