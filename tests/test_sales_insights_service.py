@@ -768,6 +768,16 @@ class ReadingFixesTests(unittest.TestCase):
         term = SalesInsightsService._payment_term("денежная страховая выплата — всего около 30 рабочих дней.")
         self.assertEqual((term.amount, term.approximate), (30, True))
 
+    def test_towing_option_and_no_limit_are_said_plainly(self):
+        # Ренессанс: towing is a paid option; Ингосстрах: no money limit (review 06.11.2026).
+        feature = SalesInsightsService._client_feature
+        self.assertEqual(
+            feature("tow_truck", "Эвакуация ТС — дополнительная опция риска «Дополнительные расходы»: до 10 000 ₽."),
+            "Эвакуацию после страхового случая можно добавить в полис")
+        self.assertEqual(
+            feature("tow_truck", "Расходы на эвакуацию ТС возмещаются. Отдельного денежного лимита на эвакуацию в правилах нет."),
+            "Расходы на эвакуацию автомобиля после страхового случая возмещаются без денежного лимита")
+
     def test_insurer_names_are_declined_after_prepositions(self):
         decline = SalesInsightsService._decline_names
         self.assertEqual(decline("лимит выше, чем у Ингосстрах."), "лимит выше, чем у Ингосстраха.")
