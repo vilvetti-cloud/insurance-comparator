@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "checked_at": "2026-11-06T13:20+03:00",
+  "checked_at": "2026-11-07T12:35+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "ok",
-      "verified_at": "2026-11-06T13:20+03:00",
+      "verified_at": "2026-11-07T12:35+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
@@ -361,13 +361,14 @@
       ]
     },
     "ВСК": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
           "url": "https://www.vsk.ru/cms/assets/1179953c-dc8f-45f9-9d46-8eaba56b9c10",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт не ответил"
         }
       ],
       "pages": [
@@ -408,7 +409,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-06T13:20+03:00",
+      "verified_at": "2026-11-07T12:35+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -448,7 +449,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-06T13:20+03:00",
+      "verified_at": "2026-11-07T12:35+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -508,20 +509,21 @@
       ]
     },
     "Росгосстрах": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-11-06T13:20+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
           "url": "https://www-data.rgs.ru/upload/iblock/c2c/qwypojlomy30xyxcjnkqoaaymehhc9an/Pravila-KASKO-_-171.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт не ответил"
         }
       ],
       "pages": [
         {
           "url": "https://www.rgs.ru/auto/ekasko/kasko-ot-ugona-i-gibeli",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт не ответил",
           "known_links": [
             "https://www-data.rgs.ru/upload/iblock/bac/Pril-10-KID-_Avtozashchita.pdf"
           ]
@@ -1185,7 +1187,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-06T13:20+03:00",
+      "verified_at": "2026-11-07T12:35+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1213,7 +1215,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-06T13:20+03:00",
+      "verified_at": "2026-11-07T12:35+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1762,7 +1764,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-06T13:20+03:00",
+      "verified_at": "2026-11-07T12:35+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
