@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block page_class %}legal-page{% endblock %}
+{% block content %}
+<article class="card legal-doc">
+  <p class="eyebrow">Документы сервиса · редакция от {{ version_date }}</p>
+  <h1>{% block heading %}{% endblock %}</h1>
+  {% block body %}{% endblock %}
+  <p class="legal-doc__links">Другие документы:
+    <a href="/privacy">персональные данные</a> · <a href="/terms">пользовательское соглашение</a> ·
+    <a href="/cookies">cookie</a> · <a href="/refund">возврат оплаты</a> · <a href="/licenses">лицензии</a></p>
+</article>
+{% endblock %}

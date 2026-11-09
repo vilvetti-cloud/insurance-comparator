@@ -41,5 +41,20 @@
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <button class="link-button" type="submit">Выйти</button>
   </form>
+
+  <details class="report-error account-delete" id="delete">
+    <summary>Удалить аккаунт и мои данные</summary>
+    <form method="POST" action="/account/delete" class="report-error__form"
+          onsubmit="return confirm('Удалить аккаунт? Подписка и история сравнений будут удалены без возможности восстановления.')">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <p class="report-error__hint">Будут удалены имя, почта, подписки, история сравнений и ваши сообщения об ошибках.
+        Восстановить их будет нельзя.</p>
+      <div class="field-group">
+        <label class="field-label" for="delete-password">Пароль для подтверждения</label>
+        <input class="text-input" id="delete-password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="button button--danger" type="submit"><span>Удалить навсегда</span></button>
+    </form>
+  </details>
 </section>
 {% endblock %}

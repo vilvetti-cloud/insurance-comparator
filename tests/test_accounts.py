@@ -13,6 +13,9 @@ PAIRS = [("РЕСО-Гарантия", "ВСК"), ("РЕСО-Гарантия", 
          ("РЕСО-Гарантия", "Т-Страхование"), ("РЕСО-Гарантия", "АльфаСтрахование")]
 
 
+CONSENTS = {"consent_pd": "1", "consent_terms": "1", "adult": "1"}
+
+
 class AccountsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -43,7 +46,7 @@ class AccountsTests(unittest.TestCase):
         token = self.csrf("/register")
         return self.client.post("/register", headers={"X-Forwarded-For": self.ip}, data={
             "csrf": token, "first_name": "Анна", "last_name": "Иванова", "main_insurer": "РЕСО-Гарантия",
-            "email": email, "password": "secret1"})
+            "email": email, "password": "secret1", **CONSENTS})
 
     def buy(self, plan, email="agent@example.com"):
         """The owner gives the subscription by hand (no card payments yet)."""
@@ -51,7 +54,8 @@ class AccountsTests(unittest.TestCase):
         html = owner.get("/register").get_data(as_text=True)
         token = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
         owner.post("/register", data={"csrf": token, "first_name": "В", "last_name": "О",
-                                      "main_insurer": "ВСК", "email": "owner@example.com", "password": "secret1"})
+                                      "main_insurer": "ВСК", "email": "owner@example.com", "password": "secret1",
+                                      **CONSENTS})
         if owner.get("/admin").status_code != 200:  # already registered: sign in
             html = owner.get("/login").get_data(as_text=True)
             token = re.search(r'name="csrf" value="([^"]+)"', html).group(1)
@@ -213,6 +217,35 @@ class AccountsTests(unittest.TestCase):
             "back": "/admin/messages?company=ВСК#pair-1", "message": "Проверить формулировку про эвакуатор"})
         self.assertIn("/admin/messages", answer.headers["Location"])
         self.assertEqual(web_accounts.store().reports()[0]["message"], "Проверить формулировку про эвакуатор")
+
+    def test_registration_needs_separate_consents_and_age(self):
+        token = self.csrf("/register")
+        data = {"csrf": token, "first_name": "Анна", "last_name": "Иванова", "main_insurer": "РЕСО-Гарантия",
+                "email": "agent@example.com", "password": "secret1"}
+        page = self.client.post("/register", data=data, headers={"X-Forwarded-For": self.ip}).get_data(as_text=True)
+        self.assertIn("Нужно согласие на обработку персональных данных.", page)
+        self.assertIn("только лица старше 18 лет", page)
+        self.assertIsNone(web_accounts.store().user_id_by_email("agent@example.com"))
+        self.register()
+        user_id = web_accounts.store().user_id_by_email("agent@example.com")
+        row = web_accounts.store()._run("SELECT consent_version, consent_at FROM casco_users WHERE id = ?",
+                                        (user_id,), fetch="one")
+        self.assertEqual(row[0], "2026-11-09")
+        self.assertTrue(row[1])
+
+    def test_user_deletes_the_account_and_every_record(self):
+        self.register()
+        self.compare(PAIRS[0])
+        user_id = web_accounts.store().user_id_by_email("agent@example.com")
+        token = self.csrf("/account")
+        wrong = self.client.post("/account/delete", data={"csrf": token, "password": "nope"})
+        self.assertIn("/account", wrong.headers["Location"])
+        self.assertIsNotNone(web_accounts.store().user(user_id))
+        self.client.post("/account/delete", data={"csrf": token, "password": "secret1"})
+        self.assertIsNone(web_accounts.store().user(user_id))
+        left = web_accounts.store()._run("SELECT COUNT(*) FROM casco_usage WHERE user_id = ?", (user_id,), fetch="one")
+        self.assertEqual(left[0], 0)
+        self.assertEqual(self.client.get("/account").status_code, 302)  # signed out
 
     def test_error_reports_are_limited_per_day(self):
         store = web_accounts.store()

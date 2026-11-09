@@ -181,6 +181,22 @@ def index():
 ABOUT_EXAMPLE = ("Ренессанс Страхование", "ВСК")
 
 
+LEGAL_PAGES = ("privacy", "terms", "cookies", "refund", "licenses")
+
+
+def legal_page(page: str):
+    """Privacy policy, terms of use, cookies, refunds, licences (09.11.2026)."""
+    from core import legal
+
+    version = legal.DOCUMENTS_VERSION
+    return render_template(f"legal/{page}.html", op=legal.operator(), age=legal.MINIMUM_AGE,
+                           version_date=".".join(reversed(version.split("-"))), active_section="legal")
+
+
+for _page in LEGAL_PAGES:
+    app.add_url_rule(f"/{_page}", f"legal_{_page}", lambda page=_page: legal_page(page))
+
+
 @app.route("/about")
 def about():
     """What the service is, for people who have not used it yet."""
