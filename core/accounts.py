@@ -72,6 +72,10 @@ SCHEMA = (
 )
 # Supabase exposes tables over its public API; every casco_* table keeps RLS on.
 POSTGRES_ONLY = ("ALTER TABLE casco_reports ENABLE ROW LEVEL SECURITY",)
+# Columns added after the first launch: consent to the documents (152-ФЗ, 09.11.2026).
+ADDED_COLUMNS = (("casco_users", "consent_version", "TEXT"), ("casco_users", "consent_at", "TEXT"))
+# Records of visitors without an account are kept for a year (privacy policy, п. 6).
+GUEST_RECORDS_DAYS = 365
 REPORTS_PER_DAY = 10  # error reports from one visitor per day
 
 
@@ -105,6 +109,14 @@ class AccountStore:
         if self.postgres:
             for statement in POSTGRES_ONLY:
                 self._run(statement)
+        for table, column, kind in ADDED_COLUMNS:
+            if self.postgres:
+                self._run(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {kind}")
+            else:
+                try:
+                    self._run(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+                except sqlite3.OperationalError:  # already there
+                    pass
 
     # --- low level -------------------------------------------------------
     def _run(self, sql: str, params: tuple = (), fetch: str | None = None, last_id: bool = False) -> Any:
@@ -131,13 +143,26 @@ class AccountStore:
 
     # --- users -----------------------------------------------------------
     def create_user(self, *, email: str, password: str, first_name: str, last_name: str,
-                    main_insurer: str) -> int:
+                    main_insurer: str, consent_version: str = "") -> int:
+        now = _now().isoformat()
         return self._insert(
-            "INSERT INTO casco_users (email, password_hash, first_name, last_name, main_insurer, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO casco_users (email, password_hash, first_name, last_name, main_insurer, created_at, "
+            "consent_version, consent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (email.strip().lower(), generate_password_hash(password), first_name.strip(), last_name.strip(),
-             main_insurer, _now().isoformat()),
+             main_insurer, now, consent_version, now if consent_version else None),
         )
+
+    def delete_user(self, user_id: int) -> None:
+        """The user's request to delete the account and every record about them (152-ФЗ, ст. 21)."""
+        for table in ("casco_usage", "casco_purchases", "casco_reports"):
+            self._run(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+        self._run("DELETE FROM casco_users WHERE id = ?", (user_id,))
+
+    def purge_guest_records(self) -> None:
+        """Comparisons and reports of visitors without an account, older than a year."""
+        since = (_now() - timedelta(days=GUEST_RECORDS_DAYS)).isoformat()
+        for table in ("casco_usage", "casco_reports"):
+            self._run(f"DELETE FROM {table} WHERE user_id IS NULL AND created_at < ?", (since,))
 
     def ping(self) -> None:
         """A real query, so the free Supabase project does not pause after 7 quiet days."""

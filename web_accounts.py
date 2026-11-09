@@ -20,7 +20,7 @@ from flask import (Blueprint, abort, current_app, flash, g, redirect, render_tem
                    url_for)
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from core import mailer
+from core import legal, mailer
 from core.accounts import FREE_COMPARISONS, PLANS, AccountStore
 
 bp = Blueprint("accounts", __name__)
@@ -141,6 +141,7 @@ def accounts_health():
         return {"accounts": "off"}
     try:
         store().ping()
+        store().purge_guest_records()  # the daily call keeps the promise of the privacy policy
     except Exception:  # noqa: BLE001 - any database error means sign-in is down
         return {"accounts": "error"}, 503
     return {"accounts": "ok"}
@@ -173,13 +174,21 @@ def register():
             problems.append("Проверьте адрес почты.")
         if len(form.get("password", "")) < 6:
             problems.append("Пароль — не короче 6 символов.")
+        # Separate consents (152-ФЗ, ст. 9): personal data, the terms, the age.
+        if not form.get("consent_pd"):
+            problems.append("Нужно согласие на обработку персональных данных.")
+        if not form.get("consent_terms"):
+            problems.append("Нужно принять пользовательское соглашение.")
+        if not form.get("adult"):
+            problems.append(f"Сервисом могут пользоваться только лица старше {legal.MINIMUM_AGE} лет.")
         if not problems and store().email_taken(email):
             problems.append("Эта почта уже зарегистрирована — войдите.")
         if not problems:
             session.clear()
             session["user_id"] = store().create_user(
                 email=email, password=form["password"], first_name=form["first_name"],
-                last_name=form["last_name"], main_insurer=form["main_insurer"])
+                last_name=form["last_name"], main_insurer=form["main_insurer"],
+                consent_version=legal.DOCUMENTS_VERSION)
             return redirect(_safe_next(request.args.get("next")))
         for problem in problems:
             flash(problem)
@@ -256,6 +265,21 @@ def reset(token):
             flash("Пароль изменён.")
             return redirect("/account")
     return render_template("reset.html")
+
+
+@bp.route("/account/delete", methods=["POST"])
+@login_required
+def delete_account():
+    """The user deletes the account and every record about them (privacy policy, п. 7)."""
+    _check_csrf()
+    user = current_user()
+    if store().check_login(user["email"], request.form.get("password", "")) != user["id"]:
+        flash("Неверный пароль — аккаунт не удалён.")
+        return redirect(url_for("accounts.account") + "#delete")
+    store().delete_user(user["id"])
+    session.clear()
+    flash("Аккаунт и все данные о нём удалены.")
+    return redirect("/")
 
 
 @bp.route("/logout", methods=["POST"])
@@ -443,6 +467,19 @@ def admin_grant(user_id, plan):
         abort(404)
     store().grant(user_id, plan)
     flash(f"{user['first_name']} {user['last_name']}: подключена подписка «{PLANS[plan]['title']}».")
+    return redirect(url_for("accounts.admin"))
+
+
+@bp.route("/admin/delete/<int:user_id>", methods=["POST"])
+@admin_required
+def admin_delete_user(user_id):
+    """A deletion request that came by e-mail (privacy policy, п. 7)."""
+    _check_csrf()
+    user = store().user(user_id)
+    if not user:
+        abort(404)
+    store().delete_user(user_id)
+    flash(f"{user['email']}: аккаунт и все данные удалены.")
     return redirect(url_for("accounts.admin"))
 
 

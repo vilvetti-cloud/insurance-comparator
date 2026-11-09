@@ -41,6 +41,17 @@
         <label class="field-label" for="password">Пароль</label>
         <input class="text-input" id="password" name="password" type="password" autocomplete="new-password" minlength="6" required>
       </div>
+      <fieldset class="consents">
+        <legend class="field-label">Согласия</legend>
+        <label class="consent"><input type="checkbox" name="consent_pd" value="1" required{% if form.get('consent_pd') %} checked{% endif %}>
+          <span>Даю согласие на обработку моих персональных данных, включая передачу за рубеж, на условиях
+            <a class="text-link" href="/privacy" target="_blank" rel="noopener">политики обработки персональных данных</a></span></label>
+        <label class="consent"><input type="checkbox" name="consent_terms" value="1" required{% if form.get('consent_terms') %} checked{% endif %}>
+          <span>Принимаю <a class="text-link" href="/terms" target="_blank" rel="noopener">пользовательское соглашение</a>
+            и <a class="text-link" href="/refund" target="_blank" rel="noopener">политику возврата</a></span></label>
+        <label class="consent"><input type="checkbox" name="adult" value="1" required{% if form.get('adult') %} checked{% endif %}>
+          <span>Мне исполнилось 18 лет</span></label>
+      </fieldset>
       <button class="button" type="submit"><span>Зарегистрироваться</span></button>
     </div>
   </form>

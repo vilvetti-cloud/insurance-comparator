@@ -90,6 +90,11 @@
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
         <button class="link-button" type="submit">Сбросить пароль</button>
       </form>
+      <form method="POST" action="/admin/delete/{{ user.id }}"
+            onsubmit="return confirm('Удалить аккаунт {{ user.email }} и все его данные? Это нельзя отменить.')">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <button class="link-button" type="submit">Удалить по запросу</button>
+      </form>
     </div>
   </article>
   {% endfor %}
