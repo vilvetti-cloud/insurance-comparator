@@ -14,6 +14,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import os
+import re
+import secrets
 import sqlite3
 from typing import Any
 
@@ -91,10 +94,18 @@ class Access:
 
 
 class AccountStore:
-    def __init__(self, url: str):
+    def __init__(self, url: str, table_prefix: str = ""):
         self.url = url
         self.postgres = url.startswith(("postgres://", "postgresql://"))
+        self.ydb = None
         self._shared = None
+        if url.startswith("ydb://"):
+            # Yandex Cloud, data in Russia (core.accounts_ydb, 09.11.2026).
+            from core.accounts_ydb import YdbConnection
+
+            self.ydb = YdbConnection(url, table_prefix or os.environ.get("ACCOUNTS_TABLE_PREFIX", ""))
+            self.ydb.create_schema()
+            return
         if self.postgres:
             import psycopg
 
@@ -120,6 +131,8 @@ class AccountStore:
 
     # --- low level -------------------------------------------------------
     def _run(self, sql: str, params: tuple = (), fetch: str | None = None, last_id: bool = False) -> Any:
+        if self.ydb:
+            return self.ydb.run(sql, params, fetch)
         if self.postgres:
             sql = sql.replace("?", "%s")
         connection = self._connect()
@@ -137,6 +150,13 @@ class AccountStore:
                 connection.close()
 
     def _insert(self, sql: str, params: tuple) -> int:
+        if self.ydb:
+            # No auto-increment in YDB: a random id that fits a JavaScript number.
+            new_id = secrets.randbelow(2 ** 53 - 1) + 1
+            sql = re.sub(r"\(", "(id, ", sql, count=1)
+            sql = re.sub(r"VALUES \(", "VALUES (?, ", sql, count=1)
+            self._run(sql, (new_id, *params))
+            return new_id
         if self.postgres:
             return self._run(sql + " RETURNING id", params, fetch="one")[0]
         return self._run(sql, params, last_id=True)
@@ -184,7 +204,7 @@ class AccountStore:
     def users(self) -> list[dict[str, Any]]:
         """Everyone registered, newest first (for the owner's admin page)."""
         rows = self._run("SELECT id, email, first_name, last_name, main_insurer, created_at FROM casco_users "
-                         "ORDER BY id DESC", fetch="all")
+                         "ORDER BY created_at DESC", fetch="all")
         return [dict(zip(("id", "email", "first_name", "last_name", "main_insurer", "created_at"), row))
                 for row in rows]
 
@@ -229,7 +249,7 @@ class AccountStore:
 
     def purchases(self, user_id: int) -> list[dict[str, Any]]:
         rows = self._run("SELECT id, plan, amount, status, paid_until, paid_at FROM casco_purchases "
-                         "WHERE user_id = ? AND status = 'paid' ORDER BY id DESC", (user_id,), fetch="all")
+                         "WHERE user_id = ? AND status = 'paid' ORDER BY created_at DESC", (user_id,), fetch="all")
         return [dict(zip(("id", "plan", "amount", "status", "paid_until", "paid_at"), row)) for row in rows]
 
     def monthly_until(self, user_id: int) -> datetime | None:
@@ -306,7 +326,7 @@ class AccountStore:
         """Open reports first, newest first."""
         rows = self._run(
             "SELECT r.id, r.pair, r.field, r.message, r.status, r.created_at, u.first_name, u.last_name, u.email "
-            "FROM casco_reports r LEFT JOIN casco_users u ON u.id = r.user_id "
+            "FROM casco_reports AS r LEFT JOIN casco_users AS u ON u.id = r.user_id "
             "ORDER BY CASE WHEN r.status = 'new' THEN 0 ELSE 1 END, r.created_at DESC LIMIT ?",
             (limit,), fetch="all")
         keys = ("id", "pair", "field", "message", "status", "created_at", "first_name", "last_name", "email")

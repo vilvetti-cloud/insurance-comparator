@@ -9,7 +9,13 @@ dependencies = [
   "pypdf",
   "PyMuPDF",
   "psycopg[binary]>=3.2,<4",
+  # Accounts in Yandex Cloud YDB: personal data stays in Russia (core/accounts_ydb.py).
+  "ydb>=3.34,<4",
 ]
 
 [tool.vercel]
 entrypoint = "vercel_db_entry:app"
+
+[tool.pytest.ini_options]
+# The ydb package installs a top-level «tests» package; ours must come first.
+pythonpath = ["."]

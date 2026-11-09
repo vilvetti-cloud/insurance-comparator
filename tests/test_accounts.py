@@ -3,6 +3,7 @@ import os
 import re
 import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 import web_accounts
@@ -19,8 +20,12 @@ CONSENTS = {"consent_pd": "1", "consent_terms": "1", "adult": "1"}
 class AccountsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        # The same tests against the real YDB (.github/workflows/accounts-ydb.yml): own tables per test.
+        real = os.environ.get("ACCOUNTS_TEST_DATABASE_URL")
+        self.prefix = f"t{uuid.uuid4().hex[:10]}_" if real else ""
         self.env = patch.dict(os.environ, {
-            "ACCOUNTS_DATABASE_URL": f"sqlite:///{self.tmp.name}/accounts.db",
+            "ACCOUNTS_DATABASE_URL": real or f"sqlite:///{self.tmp.name}/accounts.db",
+            "ACCOUNTS_TABLE_PREFIX": self.prefix,
             "SECRET_KEY": "test", "PAYMENTS_TEST": "1", "ADMIN_EMAILS": "owner@example.com",
         })
         self.env.start()
@@ -30,6 +35,10 @@ class AccountsTests(unittest.TestCase):
         self.ip = "203.0.113.5"
 
     def tearDown(self):
+        if self.prefix:
+            from core.accounts_ydb import TABLES
+            for table in TABLES:
+                web_accounts.store().ydb.pool.execute_with_retries(f"DROP TABLE {self.prefix}{table}")
         web_accounts.reset_store()
         self.env.stop()
         self.tmp.cleanup()

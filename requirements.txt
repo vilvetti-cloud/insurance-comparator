@@ -6,3 +6,4 @@ pypdf>=4.0.0
 psycopg[binary]>=3.2,<4
 PyMuPDF>=1.24.0
 PyYAML>=6
+ydb>=3.34,<4
