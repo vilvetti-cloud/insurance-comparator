@@ -1,22 +1,23 @@
 {
   "version": 1,
-  "checked_at": "2026-11-15T13:21+03:00",
+  "checked_at": "2026-11-16T13:35+03:00",
   "companies": {
     "РЕСО-Гарантия": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-11-15T13:21+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
           "url": "https://reso.ru/export/sites/reso/individual/auto/kasko/sredstv-avtotransporta-03022025.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт не ответил"
         }
       ],
       "pages": [
         {
           "url": "https://reso.ru/individual/auto/kasko/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт не ответил",
           "known_links": [
             "https://reso.ru/about/bazoviy_standart_zaschiti_prav.pdf",
             "https://reso.ru/about/bazovuy_standart.pdf",
@@ -27,8 +28,8 @@
         },
         {
           "url": "https://www.reso.ru/about/rules/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт не ответил",
           "known_links": [
             "https://reso.ru/about/bazoviy_standart_zaschiti_prav.pdf",
             "https://reso.ru/about/bazovuy_standart.pdf",
@@ -362,7 +363,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-11-15T13:21+03:00",
+      "verified_at": "2026-11-16T13:35+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -386,7 +387,8 @@
         {
           "file": "ingos/technical.pdf",
           "url": "https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт не ответил"
         },
         {
           "file": "ingos/supporting/ingos-gap-2025.pdf",
@@ -398,8 +400,8 @@
       "pages": [
         {
           "url": "https://www.ingos.ru/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт не ответил",
           "known_links": [
             "https://www.ingos.ru/docs/politika-cookie.pdf"
           ]
@@ -408,7 +410,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-15T13:21+03:00",
+      "verified_at": "2026-11-16T13:35+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -448,7 +450,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-15T13:21+03:00",
+      "verified_at": "2026-11-16T13:35+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -509,7 +511,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-11-15T13:21+03:00",
+      "verified_at": "2026-11-16T13:35+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -1185,7 +1187,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-15T13:21+03:00",
+      "verified_at": "2026-11-16T13:35+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1213,7 +1215,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-15T13:21+03:00",
+      "verified_at": "2026-11-16T13:35+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1420,6 +1422,7 @@
             "https://sberbankins.ru/upload/iblock/4ca/148-ot-19.10.2018.pdf",
             "https://sberbankins.ru/upload/iblock/4cc/sg3n7ds0gb72dywhgsuv8dnf627y64d5/Pravila-88.1.pdf",
             "https://sberbankins.ru/upload/iblock/4d7/fsgajeo517za38uqjiwesb9orgmvu7xy/Pravila-strakhovaniya-imushchestva-_1.1.pdf",
+            "https://sberbankins.ru/upload/iblock/4dc/brjxrqlarjf3y5577n5odhr7n1edrzxg/Pravila-88.4.pdf",
             "https://sberbankins.ru/upload/iblock/4e2/-226-ot-18.08.2020.pdf",
             "https://sberbankins.ru/upload/iblock/4ea/25-ot-24.03.2017.pdf",
             "https://sberbankins.ru/upload/iblock/4ef/3b5hae40lkeq1knu4oy31a23yjoiwh9i/Pravila-dobrovolnogo-strakhovaniya-passazhirov-_-108.pdf",
@@ -1698,6 +1701,7 @@
             "https://sberbankins.ru/upload/iblock/e7d/Ustav_v_novoi_redaktsii_ot_26.11.2019.pdf",
             "https://sberbankins.ru/upload/iblock/e7f/v5xw4t75icwvnb17fk7rozwul1lc3t5b/Pravila-strakhovaniya-kulturnykh-tsennostey-_-54-redaktsiya-ot-21.02.2024.pdf",
             "https://sberbankins.ru/upload/iblock/e87/cc5c528f17d822492cb656469eb50948.pdf",
+            "https://sberbankins.ru/upload/iblock/eaf/y1jwffu01xmyoq5lsykathfq004yzzf0/Bazovye-strakhovye-tarify-i-popravochnye-koeffitsienty-k-nim.pdf",
             "https://sberbankins.ru/upload/iblock/ebb/ih560bpy7den17jcd5izexpe0emjfktt/Zayavlenie-o-nastuplenii-sobytiya-Sberegi-sebya.pdf",
             "https://sberbankins.ru/upload/iblock/ebe/rg65dmem9rhu4aj9x5hftik7zi57eqc4/pravila_53_1_8.pdf",
             "https://sberbankins.ru/upload/iblock/ec1/5c5a0f2ec60248ecbb62f1c8d5175998.pdf",
@@ -1762,7 +1766,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-15T13:21+03:00",
+      "verified_at": "2026-11-16T13:35+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
