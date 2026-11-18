@@ -1,22 +1,23 @@
 {
   "version": 1,
-  "checked_at": "2026-11-17T14:27+03:00",
+  "checked_at": "2026-11-18T14:04+03:00",
   "companies": {
     "РЕСО-Гарантия": {
-      "status": "ok",
+      "status": "unavailable",
       "verified_at": "2026-11-17T14:27+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
           "url": "https://reso.ru/export/sites/reso/individual/auto/kasko/sredstv-avtotransporta-03022025.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт не ответил"
         }
       ],
       "pages": [
         {
           "url": "https://reso.ru/individual/auto/kasko/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт не ответил",
           "known_links": [
             "https://reso.ru/about/bazoviy_standart_zaschiti_prav.pdf",
             "https://reso.ru/about/bazovuy_standart.pdf",
@@ -27,8 +28,8 @@
         },
         {
           "url": "https://www.reso.ru/about/rules/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт не ответил",
           "known_links": [
             "https://reso.ru/about/bazoviy_standart_zaschiti_prav.pdf",
             "https://reso.ru/about/bazovuy_standart.pdf",
@@ -362,7 +363,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-11-17T14:27+03:00",
+      "verified_at": "2026-11-18T14:04+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -386,7 +387,8 @@
         {
           "file": "ingos/technical.pdf",
           "url": "https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf",
-          "status": "unchanged"
+          "status": "unavailable",
+          "reason": "сайт не ответил"
         },
         {
           "file": "ingos/supporting/ingos-gap-2025.pdf",
@@ -398,8 +400,8 @@
       "pages": [
         {
           "url": "https://www.ingos.ru/",
-          "status": "unchanged",
-          "new_documents": [],
+          "status": "unavailable",
+          "reason": "сайт не ответил",
           "known_links": [
             "https://www.ingos.ru/docs/politika-cookie.pdf"
           ]
@@ -408,7 +410,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-17T14:27+03:00",
+      "verified_at": "2026-11-18T14:04+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -448,7 +450,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-17T14:27+03:00",
+      "verified_at": "2026-11-18T14:04+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -509,7 +511,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-11-17T14:27+03:00",
+      "verified_at": "2026-11-18T14:04+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -1185,7 +1187,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-17T14:27+03:00",
+      "verified_at": "2026-11-18T14:04+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1196,8 +1198,8 @@
       "pages": [
         {
           "url": "https://www.tinsurance.ru/kasko/",
-          "status": "unavailable",
-          "reason": "сайт не ответил",
+          "status": "unchanged",
+          "new_documents": [],
           "known_links": [
             "https://cdn.tinsurance.ru/static/documents/7971965d-5365-4f08-9e94-a1693f711b62.pdf",
             "https://cdn.tinsurance.ru/static/documents/kasko_rules.pdf"
@@ -1213,7 +1215,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-17T14:27+03:00",
+      "verified_at": "2026-11-18T14:04+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1298,6 +1300,7 @@
             "https://sberbankins.ru/upload/iblock/0fe/-52-ot-27.03.2019.pdf",
             "https://sberbankins.ru/upload/iblock/101/8bx0znmh753zx0ae7szuk3qkjrz7kqnv/Zayavlenie-na-vnesenie-izmeneniy-_OSGOP-taksi_.pdf",
             "https://sberbankins.ru/upload/iblock/110/voi97j2rcxdlk4gl54ohf47dx5wct42c/pravila_102_1.pdf",
+            "https://sberbankins.ru/upload/iblock/121/bxhsvo8o7x5gu3ujf8c7sq5xz2u12ee7/pravila_82_1_607.pdf",
             "https://sberbankins.ru/upload/iblock/122/0hwbagr1z7finzi01cvjpvtvvwryfgpg/Pril.-_-2-Zayavlenie-na-vnesenie-izmeneniy-v-dogovor-strakhovaniya.pdf",
             "https://sberbankins.ru/upload/iblock/125/avrw6v7zhsbmn1syiw2bxxyxzkgt0kpp/pravila_71.pdf",
             "https://sberbankins.ru/upload/iblock/128/hu2zqq86z1kkt5mh5rjez01vvqgakj12/pravila_105_499.pdf",
@@ -1764,7 +1767,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-17T14:27+03:00",
+      "verified_at": "2026-11-18T14:04+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
