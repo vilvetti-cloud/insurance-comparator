@@ -1,23 +1,22 @@
 {
   "version": 1,
-  "checked_at": "2026-11-24T16:15+03:00",
+  "checked_at": "2026-11-25T15:04+03:00",
   "companies": {
     "РЕСО-Гарантия": {
-      "status": "unavailable",
-      "verified_at": "2026-11-20T13:52+03:00",
+      "status": "ok",
+      "verified_at": "2026-11-25T15:04+03:00",
       "files": [
         {
           "file": "reso/technical.pdf",
           "url": "https://reso.ru/export/sites/reso/individual/auto/kasko/sredstv-avtotransporta-03022025.pdf",
-          "status": "unavailable",
-          "reason": "сайт не ответил"
+          "status": "unchanged"
         }
       ],
       "pages": [
         {
           "url": "https://reso.ru/individual/auto/kasko/",
-          "status": "unavailable",
-          "reason": "сайт не ответил",
+          "status": "unchanged",
+          "new_documents": [],
           "known_links": [
             "https://reso.ru/about/bazoviy_standart_zaschiti_prav.pdf",
             "https://reso.ru/about/bazovuy_standart.pdf",
@@ -28,8 +27,8 @@
         },
         {
           "url": "https://www.reso.ru/about/rules/",
-          "status": "unavailable",
-          "reason": "сайт не ответил",
+          "status": "unchanged",
+          "new_documents": [],
           "known_links": [
             "https://reso.ru/about/bazoviy_standart_zaschiti_prav.pdf",
             "https://reso.ru/about/bazovuy_standart.pdf",
@@ -66,6 +65,8 @@
             "https://reso.ru/about/rules/corporate/pereryva-proizvodstve-16-12-2025-bt-02-2025.pdf",
             "https://reso.ru/about/rules/corporate/property/Strah-imuschestva-urlits-ot-vseh-riskov-14-02-2023.pdf",
             "https://reso.ru/about/rules/corporate/property/imuschestva_urlits_ot_ognya_idr29.12.23.pdf",
+            "https://reso.ru/about/rules/corporate/property/jur-lic-terror-no.pdf",
+            "https://reso.ru/about/rules/corporate/property/jur-lic-terror-yes.pdf",
             "https://reso.ru/about/rules/corporate/property/stroitelnoy-i-spetsializ-tehniki-07-05-2019.pdf",
             "https://reso.ru/about/rules/corporate/property/ur_lits_ot_ognya_go_14.02.23.pdf",
             "https://reso.ru/about/rules/corporate/raschodov-likvidacii-tehnogennyh-01022021.pdf",
@@ -363,7 +364,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-11-24T16:15+03:00",
+      "verified_at": "2026-11-25T15:04+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -387,8 +388,7 @@
         {
           "file": "ingos/technical.pdf",
           "url": "https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf",
-          "status": "unavailable",
-          "reason": "сайт не ответил"
+          "status": "unchanged"
         },
         {
           "file": "ingos/supporting/ingos-gap-2025.pdf",
@@ -400,9 +400,10 @@
       "pages": [
         {
           "url": "https://www.ingos.ru/",
-          "status": "unavailable",
-          "reason": "сайт не ответил",
+          "status": "unchanged",
+          "new_documents": [],
           "known_links": [
+            "https://www.ingos.ru/docs/informatsiya-postradavshim-Dagestan-v2.pdf",
             "https://www.ingos.ru/docs/politika-cookie.pdf"
           ]
         }
@@ -410,7 +411,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-24T16:15+03:00",
+      "verified_at": "2026-11-25T15:04+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -450,7 +451,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-24T16:15+03:00",
+      "verified_at": "2026-11-25T15:04+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -511,7 +512,7 @@
     },
     "Росгосстрах": {
       "status": "ok",
-      "verified_at": "2026-11-24T16:15+03:00",
+      "verified_at": "2026-11-25T15:04+03:00",
       "files": [
         {
           "file": "rgs/technical.pdf",
@@ -1187,7 +1188,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-24T16:15+03:00",
+      "verified_at": "2026-11-25T15:04+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1215,7 +1216,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-24T16:15+03:00",
+      "verified_at": "2026-11-25T15:04+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1767,7 +1768,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-24T16:15+03:00",
+      "verified_at": "2026-11-25T15:04+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
