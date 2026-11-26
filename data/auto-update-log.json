@@ -11,6 +11,10 @@
     "yugoria/technical.pdf@7610af1b1977116fb24ccb4713b8bd22d62cf9fae885782854b0e9f6db22e37e": {
       "result": "updated",
       "at": "2026-10-22T14:03+03:00"
+    },
+    "rgs/technical.pdf@f234abc20e12c7451cee99eee0875ee088ee40ac486d4cd933656ab2c5cd56ad": {
+      "result": "manual",
+      "at": "2026-11-26T14:56+03:00"
     }
   }
 }
