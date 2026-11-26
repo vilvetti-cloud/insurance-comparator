@@ -23,9 +23,14 @@ import logging
 
 app = Flask(__name__)
 
-urllib3.disable_warnings(
-    urllib3.exceptions.InsecureRequestWarning
-)
+VERIFY_SSL = os.environ.get("VERIFY_SSL", "true").lower() not in ("0", "false", "no")
+
+if not VERIFY_SSL:
+    # Явный opt-out: отключение проверки сертификатов включается ТОЛЬКО
+    # через переменную окружения, по умолчанию SSL-проверка активна.
+    urllib3.disable_warnings(
+        urllib3.exceptions.InsecureRequestWarning
+    )
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,7 +72,18 @@ MAX_GROQ_TEXT_LENGTH = 6000
 # ФАЙЛ ДАННЫХ
 # ============================================================
 
-DATA_FILE = "insurance_data.json"
+DATA_FILE = os.environ.get(
+    "DATA_FILE",
+    # По умолчанию пишем в постоянный том (если примонтирован), иначе —
+    # в текущую директорию. Это снимает проблему «данные теряются при
+    # рестарте контейнера» на Render/Fly/Railway с volume'ами.
+    os.path.join(os.environ.get("PERSISTENT_DIR", "."), "insurance_data.json"),
+)
+
+# Максимальный возраст кэша: если данные свежее — полный цикл сбора
+# при старте пропускается (защита от «каждый холодный старт = 10+ минут
+# скрейпинга + расходы на LLM»).
+MAX_DATA_AGE_HOURS = int(os.environ.get("MAX_DATA_AGE_HOURS", "24"))
 
 # Автоматический сбор при запуске
 UPDATE_ON_START = True
@@ -246,7 +262,7 @@ def fetch_url(url: str, retries: int = HTTP_RETRIES, timeout: Optional[int] = No
                 url,
                 headers=get_headers(),
                 timeout=(connect_timeout, read_timeout),
-                verify=False,
+                verify=VERIFY_SSL,
                 allow_redirects=True
             )
 
@@ -478,7 +494,19 @@ def groq_ask(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> Opt
 def extract_field_from_text(text: str, company: str, field: str) -> Optional[str]:
     """Groq извлекает одно поле из текста"""
     if len(text) > MAX_GROQ_TEXT_LENGTH:
-        text = text[:MAX_GROQ_TEXT_LENGTH]
+        # Обрезка по границам предложений вместо грубого усечения по символам:
+        # так LLM не получает «обрубок» посреди фразы и реже галлюцинирует.
+        head = text[:MAX_GROQ_TEXT_LENGTH]
+        cut = max(
+            head.rfind(". "),
+            head.rfind("! "),
+            head.rfind("? "),
+            head.rfind("\n"),
+        )
+        if cut > MAX_GROQ_TEXT_LENGTH // 2:
+            text = head[:cut + 1]
+        else:
+            text = head
 
     system_prompt = """Ты — эксперт по страхованию. Извлекай информацию ТОЛЬКО из текста. 
 Если информации нет — отвечай "Не найдено". Отвечай кратко, только по существу."""
@@ -750,7 +778,9 @@ def collect_all_data() -> Dict[str, Any]:
 # FLASK ROUTES
 # ============================================================
 
-app = Flask(__name__)
+# NOTE: объект `app` уже создан в начале файла — повторно создавать его
+# здесь не нужно (раньше это приводило к двум экземплярам Flask и
+# потере настроек/корней первого).
 
 @app.route("/")
 def index():
@@ -809,13 +839,30 @@ def compare():
 
 @app.route("/update")
 def update():
-    global UPDATE_RUNNING
+    # Потокобезопасная проверка/запуск обновления (UPDATE_LOCK уже
+    # защищает collect_all_data от параллельных запусков).
     if UPDATE_RUNNING:
         return "⏳ Обновление уже выполняется. Попробуйте позже."
 
-    import threading
-    threading.Thread(target=lambda: collect_all_data()).start()
+    thread = threading.Thread(
+        target=collect_all_data,
+        name="manual-update",
+        daemon=True,
+    )
+    thread.start()
     return "🔄 Обновление запущено! Страница обновится через несколько минут."
+
+
+@app.route("/health")
+def health():
+    """Лёгкий endpoint для мониторинга/оркестратора (Railway, k8s и т.п.)."""
+    data = load_data()
+    return {
+        "status": "ok",
+        "update_running": UPDATE_RUNNING,
+        "last_updated": data.get("_last_updated"),
+        "groq_key_present": bool(GROQ_API_KEY),
+    }
 
 
 # ============================================================
@@ -1029,9 +1076,31 @@ def startup_update_worker():
         logger.exception("🔥 Ошибка автоматического обновления: %s", exc)
 
 
+def is_data_fresh() -> bool:
+    """True, если кэш существует и не старше MAX_DATA_AGE_HOURS."""
+    data = load_data()
+    stamp = data.get("_last_updated")
+    if not stamp:
+        return False
+    try:
+        dt = datetime.strptime(stamp, "%d.%m.%Y %H:%M:%S")
+    except (ValueError, TypeError):
+        return False
+    age_hours = (datetime.now() - dt).total_seconds() / 3600.0
+    return age_hours < MAX_DATA_AGE_HOURS
+
+
 def start_startup_update():
     if not UPDATE_ON_START:
         return
+
+    # Не запускаем полный цикл сбора, если свежий кэш уже есть —
+    # это экономит время холодного старта и токены Groq.
+    if is_data_fresh():
+        logger.info("✅ Кэш свежий (моложе %s ч) — автоматический сбор пропущен",
+                    MAX_DATA_AGE_HOURS)
+        return
+
     logger.info("🚀 Планируем автоматическое обновление...")
     thread = threading.Thread(target=startup_update_worker, name="startup-update", daemon=True)
     thread.start()
