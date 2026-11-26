@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from core.exceptions import DatabaseConnectionError, DatabaseQueryError
+
 logger = logging.getLogger(__name__)
 
 FIELD_LABELS = {
@@ -50,9 +52,12 @@ def _connect():
     try:
         import psycopg
         return psycopg.connect(url, connect_timeout=8)
-    except Exception as exc:
-        logger.exception("❌ Не удалось подключиться к PostgreSQL: %s", exc)
-        return None
+    except psycopg.OperationalError as exc:
+        logger.exception("Не удалось подключиться к PostgreSQL: %s", exc)
+        raise DatabaseConnectionError(str(exc)) from exc
+    except psycopg.ProgrammingError as exc:
+        logger.exception("Ошибка конфигурации подключения к PostgreSQL: %s", exc)
+        raise DatabaseConnectionError(str(exc)) from exc
 
 
 def _schema_path() -> Path:
@@ -69,11 +74,13 @@ def init_db() -> bool:
         with conn.cursor() as cur:
             cur.execute(schema)
         conn.commit()
-        logger.info("✅ PostgreSQL schema initialized")
+        logger.info("PostgreSQL schema initialized")
         return True
-    except Exception as exc:
+    except DatabaseQueryError:
+        raise
+    except psycopg.Error as exc:
         conn.rollback()
-        logger.exception("❌ Ошибка инициализации PostgreSQL schema: %s", exc)
+        logger.exception("Ошибка инициализации PostgreSQL schema: %s", exc)
         return False
     finally:
         conn.close()
@@ -89,8 +96,11 @@ def _load_json_fallback() -> Dict[str, Any]:
         return {}
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        logger.warning("⚠️ Не удалось прочитать локальные данные: %s", exc)
+    except json.JSONDecodeError as exc:
+        logger.warning("Не удалось прочитать локальные данные (JSON decode): %s", exc)
+        return {}
+    except OSError as exc:
+        logger.warning("Не удалось прочитать локальные данные (OS): %s", exc)
         return {}
 
 
@@ -99,8 +109,8 @@ def _save_json_fallback(data: Dict[str, Any]) -> bool:
     try:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return True
-    except Exception as exc:
-        logger.warning("⚠️ Не удалось сохранить локальные данные: %s", exc)
+    except OSError as exc:
+        logger.warning("Не удалось сохранить локальные данные (OS): %s", exc)
         return False
 
 
@@ -267,9 +277,11 @@ def save_data(data: Dict[str, Any]) -> bool:
                     _save_condition(cur, field_id, value, source_id, now)
         conn.commit()
         return True
-    except Exception as exc:
+    except DatabaseQueryError:
+        raise
+    except psycopg.Error as exc:
         conn.rollback()
-        logger.exception("❌ Ошибка сохранения данных в PostgreSQL: %s", exc)
+        logger.exception("Ошибка сохранения данных в PostgreSQL: %s", exc)
         return False
     finally:
         conn.close()
@@ -288,8 +300,10 @@ def load_data() -> Dict[str, Any]:
             row = cur.fetchone()
             if row and row[0]:
                 return dict(row[0])
-    except Exception as exc:
-        logger.exception("❌ Ошибка чтения данных из PostgreSQL: %s", exc)
+    except DatabaseQueryError:
+        raise
+    except psycopg.Error as exc:
+        logger.exception("Ошибка чтения данных из PostgreSQL: %s", exc)
     finally:
         conn.close()
     return _load_json_fallback()
