@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "checked_at": "2026-11-26T14:51+03:00",
+  "checked_at": "2026-11-27T14:43+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "unavailable",
@@ -365,7 +365,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-11-26T14:51+03:00",
+      "verified_at": "2026-11-27T14:43+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -389,8 +389,7 @@
         {
           "file": "ingos/technical.pdf",
           "url": "https://www.ingos.ru/docs/prav_strakh_ts-13-05-2025.pdf",
-          "status": "unavailable",
-          "reason": "сайт не ответил"
+          "status": "unchanged"
         },
         {
           "file": "ingos/supporting/ingos-gap-2025.pdf",
@@ -402,8 +401,8 @@
       "pages": [
         {
           "url": "https://www.ingos.ru/",
-          "status": "unavailable",
-          "reason": "сайт не ответил",
+          "status": "unchanged",
+          "new_documents": [],
           "known_links": [
             "https://www.ingos.ru/docs/informatsiya-postradavshim-Dagestan-v2.pdf",
             "https://www.ingos.ru/docs/politika-cookie.pdf"
@@ -413,7 +412,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-26T14:51+03:00",
+      "verified_at": "2026-11-27T14:43+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -453,7 +452,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-26T14:51+03:00",
+      "verified_at": "2026-11-27T14:43+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -1196,7 +1195,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-26T14:51+03:00",
+      "verified_at": "2026-11-27T14:43+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1224,7 +1223,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-26T14:51+03:00",
+      "verified_at": "2026-11-27T14:43+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1742,6 +1741,7 @@
             "https://sberbankins.ru/upload/iblock/f79/6ulov18zm6b37rkest1ixludin7tjx6h/OSBU-s-AZ_2022.pdf",
             "https://sberbankins.ru/upload/iblock/f79/Pravila-_104.pdf",
             "https://sberbankins.ru/upload/iblock/f86/djvtx1llx1w0unv1yoc9ylhymroj6wz3/Pravila-_130_2_548.pdf",
+            "https://sberbankins.ru/upload/iblock/fa5/f0hkzzf29kv86cu6j7nbhk6ud854t3by/Kompleksnye-pravila-imushchestvennogo-strakhovaniya-_-139.pdf",
             "https://sberbankins.ru/upload/iblock/fa6/y2e40a89s9pu2r7hb2n92nmr9fq77o8p/pravila_31_6.pdf",
             "https://sberbankins.ru/upload/iblock/fac/Pravilo-strakhovaniya-_-68.pdf",
             "https://sberbankins.ru/upload/iblock/fb2/ynw4gtja2z3pt4ofd0tw10jckqaz3g5y/AZ_Sber_2024.pdf",
@@ -1776,7 +1776,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-26T14:51+03:00",
+      "verified_at": "2026-11-27T14:43+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
