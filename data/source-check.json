@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "checked_at": "2026-11-27T14:43+03:00",
+  "checked_at": "2026-11-28T14:19+03:00",
   "companies": {
     "РЕСО-Гарантия": {
       "status": "unavailable",
@@ -365,7 +365,7 @@
     },
     "ВСК": {
       "status": "ok",
-      "verified_at": "2026-11-27T14:43+03:00",
+      "verified_at": "2026-11-28T14:19+03:00",
       "files": [
         {
           "file": "vsk/technical.pdf",
@@ -412,7 +412,7 @@
     },
     "Ренессанс Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-27T14:43+03:00",
+      "verified_at": "2026-11-28T14:19+03:00",
       "files": [
         {
           "file": "renins/technical.pdf",
@@ -452,7 +452,7 @@
     },
     "АльфаСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-27T14:43+03:00",
+      "verified_at": "2026-11-28T14:19+03:00",
       "files": [
         {
           "file": "alfa/supporting/alfa-gap.pdf",
@@ -1195,7 +1195,7 @@
     },
     "Т-Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-27T14:43+03:00",
+      "verified_at": "2026-11-28T14:19+03:00",
       "files": [
         {
           "file": "t-insurance/technical.pdf",
@@ -1223,7 +1223,7 @@
     },
     "СберСтрахование": {
       "status": "ok",
-      "verified_at": "2026-11-27T14:43+03:00",
+      "verified_at": "2026-11-28T14:19+03:00",
       "files": [
         {
           "file": "sber/technical.pdf",
@@ -1776,7 +1776,7 @@
     },
     "Совкомбанк Страхование": {
       "status": "ok",
-      "verified_at": "2026-11-27T14:43+03:00",
+      "verified_at": "2026-11-28T14:19+03:00",
       "files": [
         {
           "file": "sovcom/technical.pdf",
